@@ -1,3 +1,4 @@
+import { nombreCompletoDe } from "@/lib/supabase/mapeo";
 import type { Cotizacion, CotizacionConcepto, VisitaReporte } from "@/lib/types";
 
 // Mapeos de base de datos a modelos de TypeScript
@@ -27,7 +28,7 @@ export function aCotizacion(fila: any): Cotizacion {
         ? `${empresaNombreCompleto} (At'n: ${nombreContacto})`
         : empresaNombreCompleto;
     } else {
-      nombreMostrado = nombreContacto || pros?.nombre || "Cliente";
+      nombreMostrado = nombreContacto || nombreCompletoDe(pros) || "Cliente";
     }
   }
 

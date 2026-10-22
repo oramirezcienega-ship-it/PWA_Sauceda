@@ -1,5 +1,6 @@
 "use server";
 
+import { nombreCompletoDe } from "@/lib/supabase/mapeo";
 import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
@@ -91,7 +92,7 @@ async function armarDatosBase(sb: any, ordenId: string): Promise<{
 
   const clienteId = ot.prospecto_id || cot.prospecto_id || null;
   const { data: pros } = clienteId
-    ? await sb.from("prospectos").select("id, nombre, telefono, correo, direccion").eq("id", clienteId).maybeSingle()
+    ? await sb.from("prospectos").select("id, nombre, primer_apellido, segundo_apellido, telefono, correo, direccion").eq("id", clienteId).maybeSingle()
     : { data: null };
 
   const { data: conceptos } = await sb
@@ -146,7 +147,7 @@ async function armarDatosBase(sb: any, ordenId: string): Promise<{
         domicilio: pl["prestador_domicilio"] || "",
       },
       cliente: {
-        nombre: (cot.cliente_nombre_personalizado as string) || pros?.nombre || "",
+        nombre: (cot.cliente_nombre_personalizado as string) || nombreCompletoDe(pros) || "",
         domicilio: pros?.direccion || "",
         telefono: pros?.telefono || "",
         correo: pros?.correo || "",

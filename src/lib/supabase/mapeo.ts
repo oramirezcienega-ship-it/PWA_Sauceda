@@ -29,6 +29,14 @@ export function nombreCompleto(
     .join(" ");
 }
 
+/** Nombre completo de una fila de prospecto (nombre + apellidos); "" si no hay. */
+export function nombreCompletoDe(
+  p: { nombre?: string | null; primer_apellido?: string | null; segundo_apellido?: string | null } | null | undefined,
+): string {
+  if (!p) return "";
+  return nombreCompleto(p.nombre ?? "", p.primer_apellido ?? "", p.segundo_apellido ?? "");
+}
+
 /**
  * Fila tal como vive en la tabla `expedientes` de Supabase (snake_case).
  * Aquí se traduce entre la base de datos y el modelo que usa la app.

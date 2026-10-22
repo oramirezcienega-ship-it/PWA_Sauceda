@@ -1,5 +1,6 @@
 "use server";
 
+import { nombreCompletoDe } from "@/lib/supabase/mapeo";
 import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
@@ -109,7 +110,7 @@ export async function crearCotizacion(datos: {
       cita_id: citaId,
       notas_internas: datos.notasInternas || ""
     })
-    .select("*, prospectos(nombre, telefono)")
+    .select("*, prospectos(nombre, primer_apellido, segundo_apellido, telefono)")
     .single();
 
   if (error) throw new Error(error.message);
@@ -551,7 +552,7 @@ export async function obtenerReporteVisitaPorToken(
     .from("cotizaciones")
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre)
     `)
     .eq("token", token)
@@ -789,7 +790,7 @@ export async function actualizarRequerimientoVisita(
     .eq("id", cotizacionId)
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -1041,7 +1042,7 @@ export async function aprobarCotizacionComercial(
     .eq("id", id)
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -1102,7 +1103,7 @@ export async function aprobarCotizacionOperativa(
     .eq("id", id)
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -1153,7 +1154,7 @@ export async function marcarComoEnviada(id: string): Promise<Cotizacion> {
     .eq("id", id)
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -1316,12 +1317,12 @@ export async function aceptarCotizacionCliente(
       if (resOT.ok && resOT.id) {
         const { data: prospecto } = await sb
           .from("prospectos")
-          .select("nombre, telefono, correo, direccion, fraccionamiento")
+          .select("nombre, primer_apellido, segundo_apellido, telefono, correo, direccion, fraccionamiento")
           .eq("id", cot.prospecto_id)
           .maybeSingle();
 
         await inicializarPartesOTInfonavit(resOT.id, {
-          compradorNombre: firmaNombre || prospecto?.nombre || "Comprador",
+          compradorNombre: firmaNombre || nombreCompletoDe(prospecto) || "Comprador",
           compradorTelefono: prospecto?.telefono || "",
           compradorEmail: prospecto?.correo || undefined,
           vendedorNombre: "Propietario / Vendedor",
@@ -1570,7 +1571,7 @@ export async function obtenerCotizacionesDeExpediente(
     .from("cotizaciones")
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -1597,7 +1598,7 @@ export async function obtenerCotizacionesDeProspecto(
     .from("cotizaciones")
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -1810,7 +1811,7 @@ export async function guardarCondicionesCotizacion(
     .eq("id", id)
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -2103,7 +2104,7 @@ export async function prepararGarantiaPorDefecto(
     .select(`
       *,
       prospectos (
-        nombre,
+        nombre, primer_apellido, segundo_apellido,
         telefono
       )
     `)
@@ -2119,7 +2120,7 @@ export async function prepararGarantiaPorDefecto(
     .maybeSingle();
 
   // 2. Definir fecha y domicilio
-  const nombreCliente = cot.prospectos?.nombre || "Cliente Sin Nombre";
+  const nombreCliente = nombreCompletoDe(cot.prospectos) || "Cliente Sin Nombre";
   const domicilioCompleto = remision?.datos_documento?.direccionEntrega || "Domicilio en Sitio";
   
   const ahora = new Date();
@@ -2301,7 +2302,7 @@ export async function obtenerGarantiaPorToken(
     .select(`
       *,
       prospectos (
-        nombre,
+        nombre, primer_apellido, segundo_apellido,
         telefono
       )
     `)
@@ -2323,7 +2324,7 @@ export async function obtenerGarantiaPorToken(
       id: cot.id,
       prospectoId: cot.prospecto_id,
       expedienteId: cot.expediente_id,
-      prospectoNombre: cot.prospectos?.nombre || "",
+      prospectoNombre: nombreCompletoDe(cot.prospectos) || "",
       prospectoTelefono: cot.prospectos?.telefono || "",
       servicioTipo: cot.servicio_tipo,
       estatus: cot.estatus,
@@ -2365,7 +2366,7 @@ export async function obtenerRemisionPorToken(
     .select(`
       *,
       prospectos (
-        nombre,
+        nombre, primer_apellido, segundo_apellido,
         telefono
       )
     `)
@@ -2415,7 +2416,7 @@ export async function obtenerRemisionPorToken(
       id: cot.id,
       prospectoId: cot.prospecto_id,
       expedienteId: cot.expediente_id,
-      prospectoNombre: cot.prospectos?.nombre || "",
+      prospectoNombre: nombreCompletoDe(cot.prospectos) || "",
       prospectoTelefono: cot.prospectos?.telefono || "",
       servicioTipo: cot.servicio_tipo,
       estatus: cot.estatus,

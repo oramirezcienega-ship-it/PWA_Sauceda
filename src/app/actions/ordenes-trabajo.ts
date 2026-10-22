@@ -1,5 +1,6 @@
 "use server";
 
+import { nombreCompletoDe } from "@/lib/supabase/mapeo";
 import { generarFolioOT } from "@/lib/folio-ot";
 import { revalidatePath } from "next/cache";
 import crypto from "crypto";
@@ -186,7 +187,7 @@ export async function crearOrdenTrabajo(datos: {
     if (cotizacionId && (!prospectoId || !expedienteId)) {
       const { data: cot } = await sb
         .from("cotizaciones")
-        .select("prospecto_id, expediente_id, servicio_tipo, precio_final, prospectos(nombre)")
+        .select("prospecto_id, expediente_id, servicio_tipo, precio_final, prospectos(nombre, primer_apellido, segundo_apellido)")
         .eq("id", cotizacionId)
         .maybeSingle();
 
@@ -297,10 +298,10 @@ export async function crearOrdenTrabajo(datos: {
       if (prospectoId) {
         const { data: prospecto } = await sb
           .from("prospectos")
-          .select("nombre, direccion, fraccionamiento")
+          .select("nombre, primer_apellido, segundo_apellido, direccion, fraccionamiento")
           .eq("id", prospectoId)
           .maybeSingle();
-        if (prospecto?.nombre) clienteNombre = prospecto.nombre;
+        if (nombreCompletoDe(prospecto)) clienteNombre = nombreCompletoDe(prospecto);
         direccionClienteOT = prospecto?.direccion || prospecto?.fraccionamiento || null;
       }
       await generarDocumentosAutomaticosOT(sb, {
@@ -383,7 +384,7 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         *,
         asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
         asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre),
-        prospectos(id, nombre, telefono, correo, direccion),
+        prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, correo, direccion),
         cotizaciones(id, precio_final, condiciones_pago, token, expediente_id, prospecto_id),
         proveedores:proveedor_id(id, nombre)
       `)
@@ -515,7 +516,7 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         cantidadServicio: d.cantidad_servicio !== null && d.cantidad_servicio !== undefined ? Number(d.cantidad_servicio) : null,
         asesorEjecutorNombre: d.asesor_ejecutor?.nombre || "Sin asignar",
         asesorResponsableNombre: d.asesor_responsable?.nombre || "",
-        clienteNombre: d.prospectos?.nombre || "Cliente General",
+        clienteNombre: nombreCompletoDe(d.prospectos) || "Cliente General",
         clienteTelefono: d.prospectos?.telefono || "",
         clienteCorreo: d.prospectos?.correo || "",
         clienteDireccion: d.prospectos?.direccion || "",
@@ -560,7 +561,7 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
         *,
         asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
         asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre),
-        prospectos(id, nombre, telefono, correo, direccion),
+        prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, correo, direccion),
         cotizaciones(id, precio_final, condiciones_pago, token, expediente_id, prospecto_id),
         proveedores:proveedor_id(id, nombre)
       `)
@@ -726,7 +727,7 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
         cantidadServicio: d.cantidad_servicio !== null && d.cantidad_servicio !== undefined ? Number(d.cantidad_servicio) : null,
       asesorEjecutorNombre: d.asesor_ejecutor?.nombre || "Sin asignar",
       asesorResponsableNombre: d.asesor_responsable?.nombre || "",
-      clienteNombre: d.prospectos?.nombre || "Cliente General",
+      clienteNombre: nombreCompletoDe(d.prospectos) || "Cliente General",
       clienteTelefono: d.prospectos?.telefono || "",
       clienteCorreo: d.prospectos?.correo || "",
       clienteDireccion: d.prospectos?.direccion || "",
@@ -1152,7 +1153,7 @@ export async function crearReciboPago(datos: {
 
     const [prospectoRes, cotizacionRes, recibosPreviosRes] = await Promise.all([
       ot.prospecto_id
-        ? sb.from("prospectos").select("nombre, telefono").eq("id", ot.prospecto_id).maybeSingle()
+        ? sb.from("prospectos").select("nombre, primer_apellido, segundo_apellido, telefono").eq("id", ot.prospecto_id).maybeSingle()
         : Promise.resolve({ data: null }),
       ot.cotizacion_id
         ? sb.from("cotizaciones").select("precio_final").eq("id", ot.cotizacion_id).maybeSingle()
@@ -1202,7 +1203,7 @@ export async function crearReciboPago(datos: {
         orden_trabajo_id: datos.ordenTrabajoId,
         expediente_id: ot.expediente_id,
         cotizacion_id: ot.cotizacion_id,
-        cliente_nombre: datos.clienteNombre?.trim() || prospecto?.nombre || "Cliente Sauceda",
+        cliente_nombre: datos.clienteNombre?.trim() || nombreCompletoDe(prospecto) || "Cliente Sauceda",
         cliente_telefono: prospecto?.telefono || null,
         cliente_direccion: null,
         monto,
@@ -1760,7 +1761,7 @@ export async function obtenerGarantiaOTPorToken(
       .select(`
         *,
         asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
-        prospectos(nombre, telefono)
+        prospectos(nombre, primer_apellido, segundo_apellido, telefono)
       `)
       .eq("id", gar.orden_trabajo_id)
       .maybeSingle();
@@ -1804,7 +1805,7 @@ export async function obtenerGarantiaOTPorToken(
         createdAt: ot.created_at,
         updatedAt: ot.updated_at,
         asesorEjecutorNombre: ot.asesor_ejecutor?.nombre || "Sauceda Construye",
-        clienteNombre: ot.prospectos?.nombre || "Cliente Sauceda",
+        clienteNombre: nombreCompletoDe(ot.prospectos) || "Cliente Sauceda",
         clienteTelefono: ot.prospectos?.telefono || "",
         proveedorId: ot.proveedor_id ?? null,
         costoProveedor: ot.costo_proveedor !== null && ot.costo_proveedor !== undefined ? Number(ot.costo_proveedor) : null,
@@ -1946,7 +1947,7 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
         fecha_programada,
         costo_proveedor,
         comision_bancaria_pct,
-        prospectos(nombre, telefono, direccion),
+        prospectos(nombre, primer_apellido, segundo_apellido, telefono, direccion),
         cotizaciones(id, precio_final, token, expediente_id)
       `)
       .eq("id", datos.ordenTrabajoId)
@@ -1994,15 +1995,15 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
       datos.tipo === "factura"
         ? {
             rfc: datos.rfc?.trim().toUpperCase() || "XAXX010101000",
-            razonSocial: datos.razonSocial?.trim() || ot.prospectos?.nombre || "Público en General",
+            razonSocial: datos.razonSocial?.trim() || nombreCompletoDe(ot.prospectos as any) || "Público en General",
             regimenFiscal: datos.regimenFiscal || "601",
             usoCfdi: datos.usoCfdi || "G03",
           }
         : {
             direccionEntrega:
               datos.direccionEntrega?.trim() || ot.prospectos?.direccion || "León, Guanajuato",
-            nombreCliente: datos.nombreCliente?.trim() || (ot.prospectos as any)?.nombre || "",
-            personaRecibe: datos.personaRecibe?.trim() || ot.prospectos?.nombre || "",
+            nombreCliente: datos.nombreCliente?.trim() || nombreCompletoDe(ot.prospectos as any) || "",
+            personaRecibe: datos.personaRecibe?.trim() || nombreCompletoDe(ot.prospectos as any) || "",
             fechaInstalacion:
               datos.fecha ||
               ot.fecha_conclusion ||
@@ -2141,10 +2142,10 @@ export async function regenerarGarantiaDesdeProducto(
     if (ot.prospecto_id) {
       const { data: pros } = await sb
         .from("prospectos")
-        .select("nombre, direccion, fraccionamiento")
+        .select("nombre, primer_apellido, segundo_apellido, direccion, fraccionamiento")
         .eq("id", ot.prospecto_id)
         .maybeSingle();
-      if (pros?.nombre) clienteNombre = pros.nombre;
+      if (nombreCompletoDe(pros)) clienteNombre = nombreCompletoDe(pros);
       direccion = pros?.direccion || pros?.fraccionamiento || direccion;
     }
 
@@ -2348,7 +2349,7 @@ export async function asegurarOrdenTrabajoParaCotizacion(cotizacionId: string): 
     // 2. Obtener datos de la cotización
     const { data: cot, error: errCot } = await sb
       .from("cotizaciones")
-      .select("id, prospecto_id, expediente_id, servicio_tipo, precio_final, prospectos(nombre)")
+      .select("id, prospecto_id, expediente_id, servicio_tipo, precio_final, prospectos(nombre, primer_apellido, segundo_apellido)")
       .eq("id", cotizacionId)
       .maybeSingle();
 
@@ -2358,7 +2359,7 @@ export async function asegurarOrdenTrabajoParaCotizacion(cotizacionId: string): 
 
     const folio = await generarFolioOT(sb);
     const token = crypto.randomBytes(16).toString("hex");
-    const clienteNombre = (cot.prospectos as any)?.nombre || "Cliente";
+    const clienteNombre = nombreCompletoDe(cot.prospectos as any) || "Cliente";
 
     const { data: nuevaOT, error: errIns } = await sb
       .from("ordenes_trabajo")
@@ -2414,7 +2415,7 @@ export async function obtenerEntregaOrdenTrabajoPorToken(token: string): Promise
         *,
         asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre, telefono),
         asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre, telefono),
-        prospectos(id, nombre, telefono, correo, direccion),
+        prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, correo, direccion),
         cotizaciones(id, precio_final, condiciones_pago, token)
       `)
       .eq("token", token)
@@ -2545,7 +2546,7 @@ export async function obtenerEntregaOrdenTrabajoPorToken(token: string): Promise
       proveedorConcepto: d.proveedor_concepto ?? null,
       asesorEjecutorNombre: d.asesor_ejecutor?.nombre || "Técnico Asignado",
       asesorResponsableNombre: d.asesor_responsable?.nombre || "",
-      clienteNombre: d.prospectos?.nombre || "Cliente General",
+      clienteNombre: nombreCompletoDe(d.prospectos) || "Cliente General",
       clienteTelefono: d.prospectos?.telefono || "",
       clienteCorreo: d.prospectos?.correo || "",
       clienteDireccion: d.prospectos?.direccion || "",
@@ -2586,7 +2587,7 @@ export async function obtenerRemisionOrdenTrabajoPorToken(token: string): Promis
 
     const { data: ot, error } = await sb
       .from("ordenes_trabajo")
-      .select("id, folio, titulo, prospectos(nombre, telefono)")
+      .select("id, folio, titulo, prospectos(nombre, primer_apellido, segundo_apellido, telefono)")
       .eq("token", token)
       .maybeSingle();
 
@@ -2611,7 +2612,7 @@ export async function obtenerRemisionOrdenTrabajoPorToken(token: string): Promis
       orden: {
         folio: ot.folio,
         titulo: ot.titulo,
-        clienteNombre: (ot.prospectos as any)?.nombre || "Cliente General",
+        clienteNombre: nombreCompletoDe(ot.prospectos as any) || "Cliente General",
         clienteTelefono: (ot.prospectos as any)?.telefono || "",
       },
       remision: {
