@@ -1080,6 +1080,14 @@ function describirImagen(f: FilaMsg, express: CotizacionExpressEnviada[]): strin
     const detalle = reg ? reg.titulo.replace(/^Cotización Express\s*·\s*/i, "") : cot[1];
     return `(Le enviamos al cliente su COTIZACIÓN EXPRESS en imagen: ${detalle}. El cliente YA TIENE su cotización con precio: no le digas que un asesor le va a compartir el precio; retoma desde ahí y resuelve sus dudas o avanza al siguiente paso.)`;
   }
+  // Impermeabilización: comparativa de Sofía o propuesta de la calculadora del asesor (precios solo en la imagen)
+  const imper = pie.match(/^(?:Comparativa|Propuesta) de impermeabilización para ([\d.,]+)\s*m²/i);
+  if (f.direccion === "out" && imper) {
+    return `(Le enviamos al cliente su COTIZACIÓN DE IMPERMEABILIZACIÓN en imagen para ${imper[1]} m², con la inversión estimada de las opciones. El cliente YA TIENE su cotización con precios: no le digas que un asesor le va a compartir el precio ni le vuelvas a pedir los m²; remítelo a la imagen sin repetir cifras, resuelve sus dudas y avanza al siguiente paso.)`;
+  }
+  if (f.direccion === "out" && /\[plantilla:\s*[^\]]*(comparativa|cotizacion)[^\]]*\]/i.test(pie)) {
+    return "(Le enviamos al cliente por campaña la imagen con los precios de nuestras opciones de impermeabilización. Ya conoce los precios de referencia: no le digas que un asesor le va a compartir precios; si quiere su cotización exacta, pídele los m² de su azotea.)";
+  }
   if (f.direccion === "out") return pie ? `(imagen enviada al cliente) ${pie}` : "(imagen enviada al cliente)";
   return pie ? `(el cliente envió una imagen) ${pie}` : "(el cliente envió una imagen)";
 }
