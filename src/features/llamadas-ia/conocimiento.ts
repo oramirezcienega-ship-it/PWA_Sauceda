@@ -21,7 +21,7 @@ export const PREGUNTAS_IMPER: PreguntaFrecuente[] = [
   {
     pregunta: "¿Cuál es la diferencia entre las opciones? / ¿Cuál me recomiendas? / Explícame cada una",
     respuesta:
-      "Acrílica: la más económica, es líquida, con garantía por escrito. Estándar 3.5: la más solicitada, rollo con gravilla, 5 años, para azoteas en buen estado. Premium 4.0 poliéster: rollo con gravilla, 10 años, la de mayor durabilidad. Para recomendar: azotea en buen estado, la estándar; si ya tiene filtraciones, la han reparado antes o quiere olvidarse por más tiempo, la Premium.",
+      "Acrílica: la más económica, es líquida, garantía de 2 años. Estándar 3.5: la más solicitada, rollo con gravilla, 5 años, para azoteas en buen estado. Premium 4.0 poliéster: rollo con gravilla, 10 años, la de mayor durabilidad. Para recomendar: azotea en buen estado, la estándar; si ya tiene filtraciones, la han reparado antes o quiere olvidarse por más tiempo, la Premium.",
   },
   {
     pregunta: "¿El precio incluye IVA? / Con IVA cuánto sería / Si no necesito factura…",
@@ -49,7 +49,7 @@ export const PREGUNTAS_IMPER: PreguntaFrecuente[] = [
   },
   {
     pregunta: "¿Tiene garantía? / ¿Me garantizan que se acaba la gotera?",
-    respuesta: "Sí, la garantía es por escrito: 5 años la estándar y 10 años la Premium; la de la acrílica se la confirma el asesor.",
+    respuesta: "Sí, la garantía es por escrito: 2, 5 o 10 años según la opción.",
   },
   {
     pregunta: "¿Aceptan tarjeta? / ¿Hay meses sin intereses?",
