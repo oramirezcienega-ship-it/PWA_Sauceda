@@ -147,7 +147,7 @@ export async function generarImagenComparativaImper(paquetes: PaqueteInfo[], m2:
       h(
         "div",
         { justifyContent: "center", marginTop: 14, color: "#64748B", fontSize: 13 },
-        "Precios más IVA · Diagnóstico técnico gratuito en sitio"
+        "Precios sin factura (con factura se agrega IVA) · Diagnóstico técnico gratuito en sitio"
       ),
     ]
   );

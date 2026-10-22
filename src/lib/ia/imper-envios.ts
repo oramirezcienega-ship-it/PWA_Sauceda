@@ -92,7 +92,7 @@ export async function enviarComparativaImper(
 
     const paquetes = await paquetesConPreciosVigentes(sb);
     const png = await generarImagenComparativaImper(paquetes, ctx.metros);
-    const ok = await enviarYRegistrar(sb, ctx, png, "image/png", `Comparativa-${ctx.metros}m2.png`, `${marca}. Precios más IVA.`);
+    const ok = await enviarYRegistrar(sb, ctx, png, "image/png", `Comparativa-${ctx.metros}m2.png`, `${marca}. Precios sin factura (con factura se agrega IVA).`);
     if (ok && ctx.expedienteId) {
       await registrarActividad(sb, {
         expedienteId: ctx.expedienteId,

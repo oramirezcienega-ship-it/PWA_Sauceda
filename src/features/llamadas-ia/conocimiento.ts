@@ -21,7 +21,7 @@ export const PREGUNTAS_IMPER: PreguntaFrecuente[] = [
   {
     pregunta: "¿Cuál es la diferencia entre las opciones? / ¿Cuál me recomiendas? / Explícame cada una",
     respuesta:
-      "Usa la línea de cada opción de DATOS OFICIALES. Para recomendar: azotea en buen estado, la estándar; si ya tiene filtraciones, la han reparado antes o quiere olvidarse por más tiempo, la Premium de 10 años.",
+      "Acrílica: la más económica, es líquida, con garantía por escrito. Estándar 3.5: la más solicitada, rollo con gravilla, 5 años, para azoteas en buen estado. Premium 4.0 poliéster: rollo con gravilla, 10 años, la de mayor durabilidad. Para recomendar: azotea en buen estado, la estándar; si ya tiene filtraciones, la han reparado antes o quiere olvidarse por más tiempo, la Premium.",
   },
   {
     pregunta: "¿El precio incluye IVA? / Con IVA cuánto sería / Si no necesito factura…",
@@ -49,7 +49,7 @@ export const PREGUNTAS_IMPER: PreguntaFrecuente[] = [
   },
   {
     pregunta: "¿Tiene garantía? / ¿Me garantizan que se acaba la gotera?",
-    respuesta: "Sí, la garantía es por escrito: 3, 5 o 10 años según la opción.",
+    respuesta: "Sí, la garantía es por escrito: 5 años la estándar y 10 años la Premium; la de la acrílica se la confirma el asesor.",
   },
   {
     pregunta: "¿Aceptan tarjeta? / ¿Hay meses sin intereses?",
@@ -152,15 +152,23 @@ export const SENALES_COMPRA = [
   "da su dirección o pide que vayan a medir",
 ];
 
-/** Bloque para el prompt de Sofía. */
-export function conocimientoParaPrompt(): string {
+/**
+ * Preguntas frecuentes y temas pendientes: la misma base para la llamada y para
+ * Sofía en WhatsApp, para que ambos canales respondan igual.
+ */
+export function preguntasImperParaPrompt(): string {
   const faq = PREGUNTAS_IMPER.map((p) => `- ${p.pregunta} → ${p.respuesta}`).join("\n");
-  const obj = OBJECIONES_IMPER.map((o) => `- ${o.cuando} → ${o.respuesta}`).join("\n");
   return `PREGUNTAS FRECUENTES (respuestas confirmadas):
 ${faq}
 
 TEMAS SIN RESPUESTA CONFIRMADA (no los respondas; pásalos al asesor):
-${PENDIENTES_DE_CONFIRMAR.map((p) => `- ${p}`).join("\n")}
+${PENDIENTES_DE_CONFIRMAR.map((p) => `- ${p}`).join("\n")}`;
+}
+
+/** Bloque para el prompt de Sofía en llamada. */
+export function conocimientoParaPrompt(): string {
+  const obj = OBJECIONES_IMPER.map((o) => `- ${o.cuando} → ${o.respuesta}`).join("\n");
+  return `${preguntasImperParaPrompt()}
 
 OBJECIONES REALES Y CÓMO RESPONDER:
 ${obj}
