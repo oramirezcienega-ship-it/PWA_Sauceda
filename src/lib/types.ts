@@ -1,4 +1,5 @@
 import type { CostoVolumen } from "@/lib/costos-volumen";
+import type { PrecioVolumen } from "@/lib/precios-volumen";
 /**
  * Tipos del dominio de traspasos INFONAVIT.
  * Incremento 1: solo lo necesario para el tablero de expedientes.
@@ -39,6 +40,7 @@ export type TipoNegocioId =
   | "traspaso_compra"
   | "promocion_venta"
   | "solo_tramite"
+  | "asesoria_compra"
   | "construccion"
   | "construccion-impermeabilizacion"
   | "construccion-remodelacion"
@@ -46,7 +48,9 @@ export type TipoNegocioId =
   | "construccion-mantenimiento-postventa"
   | "construccion-mantenimiento-cisternas"
   | "construccion-mantenimiento-tinacos"
+  | "construccion-mantenimiento-calentadores"
   | "construccion-herreria"
+  | "seguridad"
   | "otro";
 
 export function labelTipoNegocio(tipo: string): string {
@@ -57,6 +61,8 @@ export function labelTipoNegocio(tipo: string): string {
       return "Promoción Venta";
     case "solo_tramite":
       return "Solo Trámite";
+    case "asesoria_compra":
+      return "Asesoría de Compra";
     case "construccion":
       return "Sauceda Construye (General)";
     case "construccion-impermeabilizacion":
@@ -71,8 +77,12 @@ export function labelTipoNegocio(tipo: string): string {
       return "Sauceda Construye (Mantenimiento Cisternas)";
     case "construccion-mantenimiento-tinacos":
       return "Sauceda Construye (Mantenimiento Tinacos)";
+    case "construccion-mantenimiento-calentadores":
+      return "Sauceda Construye (Mantenimiento Calentadores Solares)";
     case "construccion-herreria":
       return "Sauceda Construye (Herrería)";
+    case "seguridad":
+      return "Seguridad";
     case "otro":
       return "Otro";
     default:
@@ -93,6 +103,20 @@ export function detectarTipoNegocio(
   const metadataAd = [campaignName, adsetName, adName].filter(Boolean).join(" ");
   const texto = `${mensaje} ${metadataAd}`.toLowerCase();
   const campLower = metadataAd.toLowerCase();
+
+  // 0. Seguridad / Videovigilancia / Cámaras / Alarmas (Campaña de Meta o palabras clave)
+  const esHerreriaExpl = /herreri|port[oó]n|barandal|techumbre|saguan|zagu[aá]n|protecci[oó]n/i.test(texto);
+  const esSeguridadSocial = /seguridad\s+social|nss/i.test(texto);
+  const campSeguridad = /seguridad|c[aá]mara|cctv|alarma|videovigilancia/i.test(campLower);
+  const textoSeguridadDispositivos = /cctv|videovigilancia|videoportero|interf[oó]n|cerco\s+el[eé]ctrico|cerca\s+el[eé]ctrica|malla\s+electrificada|c[aá]maras?|alarmas?/i.test(texto);
+
+  if (
+    campSeguridad ||
+    textoSeguridadDispositivos ||
+    (!esSeguridadSocial && !esHerreriaExpl && /\bseguridad\b/i.test(texto))
+  ) {
+    return "seguridad";
+  }
 
   // 1. Herrería (Campaña de Facebook/Meta o palabras clave de Herrería)
   if (
@@ -121,6 +145,15 @@ export function detectarTipoNegocio(
     texto.includes("estampado")
   ) {
     return "construccion-piso-estampado";
+  }
+
+  // 3a. Mantenimiento de Calentadores Solares (campaña de Meta o lo que escribe el cliente).
+  // Va antes de Postventa: la campaña suele decir "mantenimiento" y caería ahí.
+  if (
+    /calentador|boiler|b[oó]iler|termotanque/.test(texto) ||
+    (/solar/.test(campLower) && !/imperme/.test(texto))
+  ) {
+    return "construccion-mantenimiento-calentadores";
   }
 
   // 3. Mantenimiento de Tinacos vs. Cisternas/Aljibes (alta prioridad por Campaña de Meta / palabras clave).
@@ -196,37 +229,65 @@ export function detectarTipoNegocio(
     texto.includes("amplia") ||
     texto.includes("ampliación") ||
     texto.includes("albañil") ||
-    texto.includes("obra")
+    /\bobra[s]?\b/i.test(texto)
   ) {
     return "construccion";
   }
 
-  // 4. Traspaso / Compra Directa de Casa (requiere palabras clave explícitas)
+  // 5. Trámite, Acompañamiento y Asesoría INFONAVIT / Compra
+  // (Debe evaluarse ANTES de traspaso_compra para que las campañas y consultas de crédito/trámite no caigan en traspaso)
   if (
-    texto.includes("traspaso") ||
-    texto.includes("infonavit") ||
-    texto.includes("fovissste") ||
-    texto.includes("comprar casa") ||
-    texto.includes("vender casa") ||
-    texto.includes("compra de casa") ||
-    texto.includes("traspaso de casa") ||
-    texto.includes("deuda de casa")
-  ) {
-    return "traspaso_compra";
-  }
-
-  // 5. Solo Trámite
-  if (
+    campLower.includes("tramite") ||
+    campLower.includes("trámite") ||
+    campLower.includes("acompañamiento") ||
+    campLower.includes("acompanamiento") ||
+    campLower.includes("asesoria") ||
+    campLower.includes("asesoría") ||
     texto.includes("tramite") ||
     texto.includes("trámite") ||
+    texto.includes("tramitar") ||
+    texto.includes("acompañamiento") ||
+    texto.includes("acompanamiento") ||
+    texto.includes("asesoria") ||
+    texto.includes("asesoría") ||
     texto.includes("gesti") ||
     texto.includes("armado") ||
-    texto.includes("expediente")
+    texto.includes("expediente") ||
+    texto.includes("precalificaci") ||
+    texto.includes("puntos infonavit") ||
+    texto.includes("mis puntos") ||
+    texto.includes("credito infonavit") ||
+    texto.includes("crédito infonavit") ||
+    texto.includes("mi credito") ||
+    texto.includes("mi crédito") ||
+    texto.includes("subcuenta") ||
+    texto.includes("comprar casa") ||
+    texto.includes("compra de casa")
   ) {
     return "solo_tramite";
   }
 
-  // 6. Promoción de Venta
+  // 6. Traspaso / Compra Directa de Casa con Deuda
+  if (
+    campLower.includes("traspaso") ||
+    texto.includes("traspaso") ||
+    texto.includes("traspasar") ||
+    texto.includes("compramos tu casa") ||
+    texto.includes("compran casa") ||
+    texto.includes("vender casa") ||
+    texto.includes("vender mi casa") ||
+    texto.includes("deuda de casa") ||
+    texto.includes("debo mi casa") ||
+    texto.includes("liquidar deuda") ||
+    texto.includes("adeudo") ||
+    (texto.includes("deuda") && texto.includes("casa")) ||
+    texto.includes("infonavit") ||
+    texto.includes("fovissste")
+  ) {
+    return "traspaso_compra";
+  }
+
+  // 7. Promoción de Venta
   if (
     texto.includes("promocion") ||
     texto.includes("promoción") ||
@@ -254,6 +315,10 @@ export interface Expediente {
   primerApellido: string;
   /** Segundo apellido del cliente. */
   segundoApellido: string;
+  /** Apodo / nombre corto; se comparte con el prospecto enlazado. */
+  nickname?: string;
+  /** Correo electrónico; se comparte con el prospecto enlazado. */
+  correo?: string;
   /** Nombre completo armado (solo lectura). */
   nombreCompleto: string;
   /** Fraccionamiento / zona en León, Gto. */
@@ -384,6 +449,8 @@ export interface Prospecto {
   primerApellido: string;
   /** Segundo apellido. */
   segundoApellido: string;
+  /** Apodo / nombre corto; se comparte con sus expedientes. */
+  nickname?: string;
   /** Nombre completo armado (solo lectura). */
   nombreCompleto: string;
   telefono: string;
@@ -960,6 +1027,15 @@ export interface FotoProducto {
   descripcion?: string;
 }
 
+/** Video de trabajo realizado, ya optimizado para WhatsApp (MP4 H.264, ≤16 MB). */
+export interface VideoProducto {
+  url: string;
+  titulo?: string;
+  descripcion?: string;
+  duracionSeg?: number | null;
+  pesoBytes?: number | null;
+}
+
 export interface Insumo {
   id: string;
   codigo?: string | null;
@@ -1137,8 +1213,12 @@ export interface ProductoServicio {
   centroCostoNombre?: string | null;
   /** Subcuenta de marketing / especialidad (ej. 601-01-001 Pub. Impermeabilización). */
   codigoSubcuenta?: string | null;
+  /** Modelo de negocio al que pertenece (liga el producto con los leads y el guion de Sofía). */
+  tipoNegocio?: TipoNegocioId | null;
   categoria?: string;
   fotos?: FotoProducto[];
+  /** Videos de trabajos realizados (Sofía los envía cuando el cliente pide videos). */
+  videos?: VideoProducto[];
   descripcionValor?: string;
   especificaciones?: string;
   gama?: 'economica' | 'media' | 'premium' | 'estandar';
@@ -1149,10 +1229,24 @@ export interface ProductoServicio {
   fichaTecnicaNombre?: string | null;
   /** Precio por escalón de capacidad (litros), para servicios como limpieza de tinacos/cisternas. */
   tarifasCapacidad?: TarifaCapacidad[];
+  /** Medida de los escalones de tarifasCapacidad: litros (tinacos, aljibes) o tubos (calentadores solares). */
+  tarifaMedida?: "litros" | "tubos";
   /** Cantidad mínima de cobro, en la unidad del producto (0 = sin mínimo). */
   cantidadMinima?: number;
   /** Costo del proveedor por rango de cantidad (interno). */
   costosVolumen?: CostoVolumen[];
+  /** Precio de venta a partir de cierta cantidad (aplica a toda la cantidad). */
+  preciosVolumen?: PrecioVolumen[];
+  /** Estándar Sauceda del servicio: lo cumplen todos los proveedores (migración 0155). */
+  estandarProceso?: string;
+  estandarIncluye?: string;
+  estandarGarantiaAnios?: number;
+  estandarGarantia?: string;
+  estandarTiempo?: string;
+  /** "Servicio especial" de una línea: plantilla para peticiones fuera de catálogo (migración 0158). */
+  esServicioEspecial?: boolean;
+  /** Margen objetivo (%) para preparar estimaciones de servicios especiales. */
+  margenObjetivoPct?: number | null;
   composicionApu?: ConceptoApuComposicion[];
   createdAt: string;
 }
@@ -1260,6 +1354,15 @@ export interface Proveedor {
   activo: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Condiciones comerciales: aplican a todos sus servicios (migración 0160). */
+  anticipoPct?: number;
+  condicionesPago?: string;
+  zonasCobertura?: string[];
+  vigenciaPrecios?: string | null;
+  /** Por dónde recibe cotizaciones especiales y solicitudes de fecha (migración 0162). */
+  canalPreferido?: "whatsapp" | "telegram";
+  /** Tiene Telegram ligado. Solo lectura. */
+  telegramLigado?: boolean;
   /** Total acumulado de documentos (facturas/remisiones) registrados. Solo lectura, vía join. */
   totalDocumentos?: number;
   /** Suma de montos de todos los documentos registrados. Solo lectura, vía join. */
@@ -1270,6 +1373,99 @@ export type DatosProveedor = Omit<
   Proveedor,
   "id" | "createdAt" | "updatedAt" | "totalDocumentos" | "montoTotal"
 >;
+
+/** Foto de un trabajo del proveedor para un producto que ofrece. */
+export interface FotoOfertaProveedor {
+  url: string;
+  titulo: string;
+}
+
+/**
+ * Oferta de un proveedor para un producto del catálogo (tabla proveedor_productos):
+ * su costo, mínimos, garantía y proceso. El precio de venta al cliente vive en el producto.
+ */
+export interface OfertaProveedorProducto {
+  id: string;
+  proveedorId: string;
+  proveedorNombre: string;
+  proveedorActivo: boolean;
+  productoId: string;
+  productoNombre: string;
+  productoUnidad: string;
+  /** Precio de venta del producto al cliente (solo lectura, vía join). */
+  productoPrecioUnitario: number;
+  productoCategoria: string;
+  /** Tarifas por capacidad del producto (precio de venta por escalón; solo lectura, vía join). */
+  productoTarifasCapacidad: TarifaCapacidad[];
+  /** Medida de los escalones del producto (litros o tubos). */
+  productoTarifaMedida: "litros" | "tubos";
+  costoUnitario: number;
+  costosVolumen: { hasta: number; costo: number }[];
+  /** Costo del proveedor por capacidad en litros (tinacos, aljibes). */
+  tarifasCapacidad: { hastaLitros: number; costo: number }[];
+  cantidadMinima: number;
+  montoMinimo: number;
+  descripcionProceso: string;
+  garantiaAnios: number;
+  garantiaCondiciones: string;
+  tiempoEjecucion: string;
+  anticipoPct: number;
+  condicionesPago: string;
+  zonasCobertura: string;
+  fotos: FotoOfertaProveedor[];
+  fichaTecnicaUrl: string | null;
+  fichaTecnicaNombre: string | null;
+  vigenciaPrecio: string | null;
+  preferido: boolean;
+  activo: boolean;
+  notas: string;
+  /** El proveedor la actualizó desde su link y falta revisarla en el CRM. */
+  pendienteRevision: boolean;
+  actualizadoPorProveedorAt: string | null;
+  updatedAt: string;
+  /** El proveedor confirmó que trabaja con el estándar Sauceda del servicio. */
+  cumpleEstandar: boolean;
+  /** Excepciones o mejoras que anotó el proveedor sobre el estándar. */
+  excepcionesEstandar: string;
+  /** Estándar Sauceda del servicio (solo lectura, vía join); null si el servicio aún no lo define. */
+  productoEstandar: EstandarServicio | null;
+}
+
+/** Proceso, alcance, garantía y tiempo que Sauceda exige en un servicio, sin importar el proveedor. */
+export interface EstandarServicio {
+  proceso: string;
+  incluye: string;
+  garantiaAnios: number;
+  garantia: string;
+  tiempo: string;
+}
+
+export type DatosOfertaProveedorProducto = Omit<
+  OfertaProveedorProducto,
+  | "id"
+  | "proveedorNombre"
+  | "proveedorActivo"
+  | "productoNombre"
+  | "productoUnidad"
+  | "productoPrecioUnitario"
+  | "productoCategoria"
+  | "productoTarifasCapacidad"
+  | "productoTarifaMedida"
+  | "pendienteRevision"
+  | "actualizadoPorProveedorAt"
+  | "updatedAt"
+  | "cumpleEstandar"
+  | "excepcionesEstandar"
+  | "productoEstandar"
+>;
+
+export interface HistorialOfertaProveedor {
+  id: string;
+  costoAnterior: number;
+  costoNuevo: number;
+  fecha: string;
+  motivo: string | null;
+}
 
 export type TipoDocumentoProveedor = "remision" | "factura";
 

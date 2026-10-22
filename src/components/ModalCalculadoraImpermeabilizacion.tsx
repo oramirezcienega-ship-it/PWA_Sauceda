@@ -69,6 +69,7 @@ export function ModalCalculadoraImpermeabilizacion({
               ...pkg,
               precioM2: precioCatalogo && precioCatalogo > 0 ? precioCatalogo : pkg.precioM2,
               minimoM2: precios.minimos?.[pkg.id] || 0,
+              preciosVolumen: precios.volumen?.[pkg.id] || [],
             };
           })
         );
@@ -84,6 +85,8 @@ export function ModalCalculadoraImpermeabilizacion({
   const totalAcrilico = cotizarPaquete(paquetes[0], m2Val).total;
   const totalEstandar = cotizarPaquete(paquetes[1], m2Val).total;
   const totalPremium = cotizarPaquete(paquetes[2], m2Val).total;
+  /** Precio por m² que aplica a esta superficie (con precio por volumen). */
+  const precioM2De = (pkg: PaqueteInfo) => cotizarPaquete(pkg, m2Val).precioM2;
 
   /** Aviso de mínimo de cobro para el texto de WhatsApp ("" si no aplica). */
   function notaMinimoTexto(pkg: PaqueteInfo): string {
@@ -133,21 +136,21 @@ Metros a impermeabilizar: *${m2Val} m²*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🟢 *1. PAQUETE ACRÍLICO*
-• Precio: *$${paquetes[0].precioM2} / m²* ➔ *Total: ${formatearDinero(totalAcrilico)} MXN*${notaMinimoTexto(paquetes[0])}${bloqueMeses(totalAcrilico)}
+• Precio: *$${precioM2De(paquetes[0])} / m²* ➔ *Total: ${formatearDinero(totalAcrilico)} MXN*${notaMinimoTexto(paquetes[0])}${bloqueMeses(totalAcrilico)}
 • Garantía: 2 años
 • Incluye: Acrílico elastomérico con malla de refuerzo, sellado de grietas y limpieza final.
 • Ideal para: Mantenimiento preventivo y azoteas con poco tráfico.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🌿 *2. PAQUETE ESTÁNDAR (3.5)*
-• Precio: *$${paquetes[1].precioM2} / m²* ➔ *Total: ${formatearDinero(totalEstandar)} MXN*${notaMinimoTexto(paquetes[1])}${bloqueMeses(totalEstandar)}
+• Precio: *$${precioM2De(paquetes[1])} / m²* ➔ *Total: ${formatearDinero(totalEstandar)} MXN*${notaMinimoTexto(paquetes[1])}${bloqueMeses(totalEstandar)}
 • Garantía: 5 años
 • Incluye: Impermeabilizante 3.5 con gravilla (roja/gris), sellado de bordes y boquillas.
 • Ideal para: Solución eficaz y económica para azoteas en buen estado.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⭐ *3. PAQUETE PREMIUM (4.0 POLIÉSTER)* — 🏆 *10 Años Garantía*
-• Precio: *$${paquetes[2].precioM2} / m²* ➔ *Total: ${formatearDinero(totalPremium)} MXN*${notaMinimoTexto(paquetes[2])}${bloqueMeses(totalPremium)}
+• Precio: *$${precioM2De(paquetes[2])} / m²* ➔ *Total: ${formatearDinero(totalPremium)} MXN*${notaMinimoTexto(paquetes[2])}${bloqueMeses(totalPremium)}
 • Garantía: 10 años por escrito
 • Incluye: Impermeabilizante 4.0 poliéster con gravilla, sellado reforzado y reporte fotográfico.
 • Ideal para: Máxima durabilidad y tranquilidad a largo plazo.
@@ -169,7 +172,7 @@ ${notaMesesTexto ? `${notaMesesTexto.trimStart()}\n\n` : ""}¿Te gustaría que a
 🏠 *${paquete.titulo.toUpperCase()}* — *${paquete.badge}*
 ${paquete.subtitulo}
 
-💰 *Inversión:* ${formatearDinero(total)} MXN (*$${paquete.precioM2} / m²*)${notaMinimoTexto(paquete)}${bloqueMeses(total)}${notaMesesTexto ? `${notaMesesTexto}\n` : ""}
+💰 *Inversión:* ${formatearDinero(total)} MXN (*$${precioM2De(paquete)} / m²*)${notaMinimoTexto(paquete)}${bloqueMeses(total)}${notaMesesTexto ? `${notaMesesTexto}\n` : ""}
 🛡️ *Garantía:* ${paquete.garantia}
 
 📋 *¿Qué incluye tu servicio?*
@@ -285,7 +288,7 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
     paquetes.forEach((pkg, index) => {
       const x = startX + index * (cardWidth + gap);
       const y = startY;
-      const { total, m2Cobrados, aplicaMinimo } = cotizarPaquete(pkg, m2Val);
+      const { total, m2Cobrados, precioM2, aplicaMinimo } = cotizarPaquete(pkg, m2Val);
       const esPremium = !!pkg.destacado;
 
       // 1. Fondo y borde de tarjeta
@@ -359,8 +362,8 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
       ctx.font = aplicaMinimo ? "bold 12px sans-serif" : "12px sans-serif";
       ctx.fillText(
         aplicaMinimo
-          ? `Mínimo de cobro: ${m2Cobrados} m²  ·  $${pkg.precioM2} por m²`
-          : `$${pkg.precioM2} por m²  ·  (Superficie: ${m2Val} m²)`,
+          ? `Mínimo de cobro: ${m2Cobrados} m²  ·  $${precioM2} por m²`
+          : `$${precioM2} por m²  ·  (Superficie: ${m2Val} m²)`,
         x + 22,
         priceY + 38
       );
@@ -749,7 +752,7 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 items-stretch">
             
             {paquetes.map((pkg) => {
-              const { total, m2Cobrados, aplicaMinimo } = cotizarPaquete(pkg, m2Val);
+              const { total, m2Cobrados, precioM2, aplicaMinimo, aplicaVolumen } = cotizarPaquete(pkg, m2Val);
               const esPremium = pkg.destacado;
 
               return (
@@ -808,8 +811,13 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
                       {/* Precio m² más pequeño debajo */}
                       <div className="mt-1 flex items-center gap-1.5 text-xs text-carbon/70 font-semibold">
                         <span className="px-1.5 py-0.5 rounded bg-carbon/5 text-carbon/80 font-mono font-bold">
-                          ${pkg.precioM2} / m²
+                          ${precioM2} / m²
                         </span>
+                        {aplicaVolumen && (
+                          <span className="px-1.5 py-0.5 rounded bg-verde-profundo/10 text-verde-profundo text-[10px] font-bold">
+                            Precio por volumen
+                          </span>
+                        )}
                         <span className="text-[11px] text-carbon/50">
                           (Superficie: {m2Val} m²)
                         </span>

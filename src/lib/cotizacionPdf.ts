@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import type { Cotizacion, CotizacionConcepto, VisitaReporte, ServicioConstruccionTipo } from "@/lib/types";
 
+import { dibujarLogoPdf } from "@/lib/marca-pdf";
 // Paleta de colores oficial Sauceda
 const VERDE_PROFUNDO = [45, 74, 43]; // #2D4A2B
 const SAUCE = [92, 122, 82]; // #5C7A52
@@ -13,6 +14,8 @@ const BORDE_CARD = [226, 232, 240]; // slate-200 (#E2E8F0)
 const AMBER_BG = [255, 253, 245]; // amber-50/50 (#FFFDF5)
 const AMBER_BORDER = [254, 240, 138]; // amber-200 (#FEF08A)
 const AMBER_TEXT = [180, 83, 9]; // amber-700 (#B45309)
+const ROSA = [225, 29, 72]; // rose-600 (#E11D48)
+const ROSA_BG = [255, 241, 242]; // rose-50 (#FFF1F2)
 
 function formatMoneda(val: number): string {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2 }).format(val || 0);
@@ -98,21 +101,7 @@ export function generarPdfCotizacion(
   doc.text(nombreCliente, margin + 41, y);
 
   // LOGO DERECHO (SAUCEDA Construye)
-  const logoX = pageWidth - margin - 22;
-  doc.setFillColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.circle(logoX + 11, y - 6.5, 6, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.text("S", logoX + 11, y - 4.2, { align: "center" });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.text("SAUCEDA", logoX + 11, y + 2.5, { align: "center" });
-  doc.setFontSize(5.5);
-  doc.setTextColor(DORADO[0], DORADO[1], DORADO[2]);
-  doc.text("CONSTRUYE", logoX + 11, y + 5.2, { align: "center" });
+  dibujarLogoPdf(doc, pageWidth - margin, y - 11, 10, "color", "derecha");
 
   y += 7.5;
 
@@ -238,18 +227,43 @@ export function generarPdfCotizacion(
   doc.setFontSize(6.5);
   doc.setTextColor(CARBON_LIGHT[0], CARBON_LIGHT[1], CARBON_LIGHT[2]);
 
-  const colX = {
-    desc: margin + 3,
-    cant: margin + 105,
-    unit: margin + 124,
-    precio: margin + 148,
-    importe: margin + contentWidth - 3,
-  };
+  // Precio base, descuento y total (para mostrarlos claramente al cliente)
+  const tieneDescuento = conceptos.some((c) => (c.descuento || 0) > 0);
+  const subtotalBase = conceptos.reduce((acc, c) => acc + (c.cantidad || 0) * (c.precioUnitario || 0), 0);
+  const totalConceptos = conceptos.reduce((acc, c) => acc + (c.importe || 0), 0);
+  const montoDescuento = Math.max(0, subtotalBase - totalConceptos);
+  const pctDescuento = subtotalBase > 0 ? (montoDescuento / subtotalBase) * 100 : 0;
+  const hayDescuento = montoDescuento > 0.005;
+  const pctTexto = `${Number(pctDescuento.toFixed(1))}%`;
+
+  const colX = tieneDescuento
+    ? {
+        desc: margin + 3,
+        cant: margin + 80,
+        unit: margin + 94,
+        precio: margin + 120,
+        base: margin + 142,
+        descuento: margin + 155,
+        importe: margin + contentWidth - 3,
+      }
+    : {
+        desc: margin + 3,
+        cant: margin + 105,
+        unit: margin + 124,
+        precio: margin + 148,
+        base: 0,
+        descuento: 0,
+        importe: margin + contentWidth - 3,
+      };
 
   doc.text("Descripción del Concepto / Insumo", colX.desc, y + 4);
   doc.text("Cantidad", colX.cant, y + 4, { align: "center" });
   doc.text("Unidad", colX.unit, y + 4, { align: "center" });
   doc.text("P. Unitario", colX.precio, y + 4, { align: "right" });
+  if (tieneDescuento) {
+    doc.text("Precio base", colX.base, y + 4, { align: "right" });
+    doc.text("Descuento", colX.descuento, y + 4, { align: "center" });
+  }
   doc.text("Importe", colX.importe, y + 4, { align: "right" });
 
   y += tableHeaderHeight;
@@ -262,7 +276,7 @@ export function generarPdfCotizacion(
     doc.setFont("helvetica", "normal");
     doc.setTextColor(CARBON[0], CARBON[1], CARBON[2]);
 
-    const desc = doc.splitTextToSize(c.descripcion, 98)[0] || c.descripcion;
+    const desc = doc.splitTextToSize(c.descripcion, tieneDescuento ? 74 : 98)[0] || c.descripcion;
     doc.text(desc, colX.desc, y + 4.8);
 
     doc.setFont("helvetica", "bold");
@@ -272,7 +286,32 @@ export function generarPdfCotizacion(
     doc.text(c.unidad || "pza", colX.unit, y + 4.8, { align: "center" });
     doc.text(formatMoneda(c.precioUnitario || 0), colX.precio, y + 4.8, { align: "right" });
 
+    if (tieneDescuento) {
+      const baseFila = (c.cantidad || 0) * (c.precioUnitario || 0);
+      const descFila = Math.max(0, baseFila - (c.importe || 0));
+      if (c.descuento) {
+        // Precio base tachado
+        const baseTxt = formatMoneda(baseFila);
+        doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
+        doc.text(baseTxt, colX.base, y + 4.8, { align: "right" });
+        doc.setDrawColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
+        doc.line(colX.base - doc.getTextWidth(baseTxt), y + 3.9, colX.base, y + 3.9);
+
+        doc.setTextColor(ROSA[0], ROSA[1], ROSA[2]);
+        doc.setFont("helvetica", "bold");
+        doc.text(`-${c.descuento}%`, colX.descuento, y + 3.6, { align: "center" });
+        doc.setFontSize(5.5);
+        doc.text(`-${formatMoneda(descFila)}`, colX.descuento, y + 6.2, { align: "center" });
+        doc.setFontSize(7.5);
+      } else {
+        doc.text(formatMoneda(baseFila), colX.base, y + 4.8, { align: "right" });
+        doc.text("—", colX.descuento, y + 4.8, { align: "center" });
+      }
+      doc.setTextColor(CARBON[0], CARBON[1], CARBON[2]);
+    }
+
     doc.setFont("helvetica", "bold");
+    doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
     doc.text(formatMoneda(c.importe || 0), colX.importe, y + 4.8, { align: "right" });
 
     y += 7;
@@ -280,12 +319,71 @@ export function generarPdfCotizacion(
 
   y += 4;
 
-  // TARJETA DE PRESUPUESTO CERRADO LLAVE EN MANO & TOTAL
   const montoTotal = cotizacion.precioFinal || cotizacion.costoEstimado || 0;
+
+  // RESUMEN: PRECIO BASE · DESCUENTO · TOTAL (solo si hay descuento)
+  if (hayDescuento) {
+    const altoResumen = 18;
+    const anchoCelda = contentWidth / 3;
+    const cx = (i: number) => margin + anchoCelda * i + anchoCelda / 2;
+
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(margin, y, contentWidth, altoResumen, 2, 2, "F");
+    doc.setFillColor(ROSA_BG[0], ROSA_BG[1], ROSA_BG[2]);
+    doc.rect(margin + anchoCelda, y, anchoCelda, altoResumen, "F");
+    doc.setFillColor(240, 244, 239);
+    doc.rect(margin + anchoCelda * 2, y, anchoCelda - 2, altoResumen, "F");
+    doc.roundedRect(margin + anchoCelda * 2 + 2, y, anchoCelda - 2, altoResumen, 2, 2, "F");
+    doc.setLineWidth(0.5);
+    doc.setDrawColor(SAUCE[0], SAUCE[1], SAUCE[2]);
+    doc.roundedRect(margin, y, contentWidth, altoResumen, 2, 2, "D");
+    doc.setLineWidth(0.2);
+
+    // Precio base (tachado)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
+    doc.text("PRECIO BASE", cx(0), y + 5.5, { align: "center" });
+    doc.setFontSize(12);
+    const baseTxt = formatMoneda(subtotalBase);
+    doc.text(baseTxt, cx(0), y + 12.5, { align: "center" });
+    const anchoBaseTxt = doc.getTextWidth(baseTxt);
+    doc.setDrawColor(ROSA[0], ROSA[1], ROSA[2]);
+    doc.setLineWidth(0.35);
+    doc.line(cx(0) - anchoBaseTxt / 2, y + 11.3, cx(0) + anchoBaseTxt / 2, y + 11.3);
+    doc.setLineWidth(0.2);
+
+    // Descuento (% y monto)
+    doc.setFontSize(6.5);
+    doc.setTextColor(ROSA[0], ROSA[1], ROSA[2]);
+    doc.text(`DESCUENTO APLICADO (-${pctTexto})`, cx(1), y + 5.5, { align: "center" });
+    doc.setFontSize(12);
+    doc.text(`-${formatMoneda(montoDescuento)}`, cx(1), y + 12.5, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6);
+    doc.text("Ahorro para ti", cx(1), y + 16, { align: "center" });
+
+    // Total con descuento
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
+    doc.text("TOTAL CON DESCUENTO", cx(2), y + 5.5, { align: "center" });
+    doc.setFontSize(12);
+    doc.text(formatMoneda(montoTotal), cx(2), y + 12.5, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6);
+    doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
+    doc.text("+ IVA", cx(2), y + 16, { align: "center" });
+
+    y += altoResumen + 4;
+  }
+
+  // TARJETA DE PRESUPUESTO CERRADO LLAVE EN MANO & TOTAL
+  const altoTotal = hayDescuento ? 25 : 22;
   doc.setFillColor(BG_CARD[0], BG_CARD[1], BG_CARD[2]);
-  doc.roundedRect(margin, y, contentWidth, 22, 2, 2, "F");
+  doc.roundedRect(margin, y, contentWidth, altoTotal, 2, 2, "F");
   doc.setDrawColor(BORDE_CARD[0], BORDE_CARD[1], BORDE_CARD[2]);
-  doc.roundedRect(margin, y, contentWidth, 22, 2, 2, "D");
+  doc.roundedRect(margin, y, contentWidth, altoTotal, 2, 2, "D");
 
   // Lado Izquierdo
   doc.setFont("helvetica", "bold");
@@ -314,9 +412,20 @@ export function generarPdfCotizacion(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6);
   doc.setTextColor(CARBON_LIGHT[0], CARBON_LIGHT[1], CARBON_LIGHT[2]);
-  doc.text("+ IVA (Antes de Impuestos)", totalDerX, y + 17.5, { align: "right" });
+  if (hayDescuento) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(ROSA[0], ROSA[1], ROSA[2]);
+    doc.text(`Ahorras ${formatMoneda(montoDescuento)} (${pctTexto})`, totalDerX, y + 17.5, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6);
+    doc.setTextColor(CARBON_LIGHT[0], CARBON_LIGHT[1], CARBON_LIGHT[2]);
+    doc.text("+ IVA (Antes de Impuestos)", totalDerX, y + 21.5, { align: "right" });
+  } else {
+    doc.text("+ IVA (Antes de Impuestos)", totalDerX, y + 17.5, { align: "right" });
+  }
 
-  y += 26;
+  y += altoTotal + 4;
 
   // NOTA IMPORTANTE (CAJA ÁMBAR IDÉNTICA AL PORTAL - Solo si AÚN NO se cuenta con inspección técnica realizada)
   if ((cotizacion.servicioTipo === "impermeabilizacion" || cotizacion.requiereVisita) && !tieneReporteVisita) {
@@ -548,21 +657,7 @@ export function generarPdfReporteVisita(
   doc.text(`${servicioLabel}  ·  Cliente: ${nombreCliente}`, margin + 14, y);
 
   // Logo a la derecha
-  const logoX = pageWidth - margin - 22;
-  doc.setFillColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.circle(logoX + 11, y - 6.5, 6, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.text("S", logoX + 11, y - 4.2, { align: "center" });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.text("SAUCEDA", logoX + 11, y + 2.5, { align: "center" });
-  doc.setFontSize(5.5);
-  doc.setTextColor(DORADO[0], DORADO[1], DORADO[2]);
-  doc.text("CONSTRUYE", logoX + 11, y + 5.2, { align: "center" });
+  dibujarLogoPdf(doc, pageWidth - margin, y - 11, 10, "color", "derecha");
 
   y += 7.5;
   doc.setDrawColor(BORDE_CARD[0], BORDE_CARD[1], BORDE_CARD[2]);

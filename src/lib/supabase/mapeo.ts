@@ -29,6 +29,14 @@ export function nombreCompleto(
     .join(" ");
 }
 
+/** Nombre completo de una fila de prospecto (nombre + apellidos); "" si no hay. */
+export function nombreCompletoDe(
+  p: { nombre?: string | null; primer_apellido?: string | null; segundo_apellido?: string | null } | null | undefined,
+): string {
+  if (!p) return "";
+  return nombreCompleto(p.nombre ?? "", p.primer_apellido ?? "", p.segundo_apellido ?? "");
+}
+
 /**
  * Fila tal como vive en la tabla `expedientes` de Supabase (snake_case).
  * Aquí se traduce entre la base de datos y el modelo que usa la app.
@@ -38,6 +46,8 @@ export interface FilaExpediente {
   cliente: string;
   primer_apellido: string;
   segundo_apellido: string;
+  nickname?: string | null;
+  correo?: string | null;
   fraccionamiento: string;
   etapa: EtapaId;
   situacion: string;
@@ -92,6 +102,8 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     cliente: fila.cliente,
     primerApellido: fila.primer_apellido ?? "",
     segundoApellido: fila.segundo_apellido ?? "",
+    nickname: fila.nickname ?? "",
+    correo: fila.correo || fila.prospectos?.correo || "",
     nombreCompleto: nombreCompleto(
       fila.cliente,
       fila.primer_apellido ?? "",
@@ -111,7 +123,7 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     ultimoMovimiento: fila.ultimo_movimiento,
     prospectoId: fila.prospecto_id,
     origenProspecto: fila.prospectos?.origen || (fila as any).origen || null,
-    prospectoCorreo: fila.prospectos?.correo ?? null,
+    prospectoCorreo: fila.correo || fila.prospectos?.correo || null,
     prospectoDireccion: fila.prospectos?.direccion ?? null,
     tipoCredito: fila.tipo_credito ?? "",
     direccionPropiedad: fila.direccion_propiedad ?? "",
@@ -143,6 +155,8 @@ export function aFila(datos: DatosExpediente) {
     cliente: datos.cliente || "",
     primer_apellido: datos.primerApellido || "",
     segundo_apellido: datos.segundoApellido || "",
+    nickname: (datos.nickname || "").trim(),
+    ...(datos.correo !== undefined ? { correo: datos.correo.trim() } : {}),
     fraccionamiento: datos.fraccionamiento || "",
     etapa: datos.etapa,
     situacion: datos.situacion || "",
@@ -180,6 +194,7 @@ export interface FilaProspecto {
   nombre: string;
   primer_apellido: string;
   segundo_apellido: string;
+  nickname?: string | null;
   telefono: string;
   correo: string;
   direccion: string;
@@ -217,6 +232,7 @@ export function aProspecto(fila: FilaProspecto): Prospecto {
     nombre: fila.nombre,
     primerApellido: fila.primer_apellido ?? "",
     segundoApellido: fila.segundo_apellido ?? "",
+    nickname: fila.nickname ?? "",
     nombreCompleto: nombreCompleto(
       fila.nombre,
       fila.primer_apellido ?? "",
@@ -254,6 +270,7 @@ export function aFilaProspecto(datos: DatosProspecto) {
     nombre: datos.nombre || "",
     primer_apellido: datos.primerApellido || "",
     segundo_apellido: datos.segundoApellido || "",
+    nickname: (datos.nickname || "").trim(),
     telefono: datos.telefono || "",
     correo: datos.correo || "",
     direccion: datos.direccion || "",
@@ -351,6 +368,12 @@ export interface FilaProveedor {
   activo: boolean;
   created_at: string;
   updated_at: string;
+  anticipo_pct?: number | null;
+  condiciones_pago?: string | null;
+  zonas_cobertura?: string[] | null;
+  vigencia_precios?: string | null;
+  canal_preferido?: string | null;
+  telegram_chat_id?: string | null;
 }
 
 export function aProveedor(
@@ -371,6 +394,12 @@ export function aProveedor(
     activo: fila.activo ?? true,
     createdAt: fila.created_at ?? "",
     updatedAt: fila.updated_at ?? "",
+    anticipoPct: Number(fila.anticipo_pct || 0),
+    condicionesPago: fila.condiciones_pago ?? "",
+    zonasCobertura: Array.isArray(fila.zonas_cobertura) ? fila.zonas_cobertura : [],
+    vigenciaPrecios: fila.vigencia_precios ?? null,
+    canalPreferido: fila.canal_preferido === "telegram" ? "telegram" : "whatsapp",
+    telegramLigado: !!fila.telegram_chat_id,
     totalDocumentos: metricas?.totalDocumentos ?? 0,
     montoTotal: metricas?.montoTotal ?? 0,
   };

@@ -4,6 +4,7 @@ import { PolizaHoja } from "@/components/PolizaHoja";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { MembreteMarca } from "@/components/marca/Logo";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -42,10 +43,7 @@ export default async function GarantiaPublicPage({ params }: GarantiaPageProps) 
       >
         {/* Encabezado Opcional/Identidad */}
         <div className="poliza-encabezado border-b-2 border-sauce pb-6 mb-8 flex justify-between items-end">
-          <div>
-            <h1 className="font-titular text-2xl font-bold tracking-tight text-verde-profundo uppercase">SAUCEDA</h1>
-            <p className="font-titular text-xs font-semibold tracking-wider text-sauce uppercase mt-0.5">Construye</p>
-          </div>
+          <MembreteMarca />
           <div className="text-right text-[10px] text-carbon/50 uppercase leading-normal font-medium">
             <div>Tradición con tecnología</div>
             <div>+52 477 465 4700</div>

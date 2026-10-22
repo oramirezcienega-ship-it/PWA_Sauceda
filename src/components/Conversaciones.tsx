@@ -18,12 +18,15 @@ import {
   eliminarMensajeIndividual,
   editarMensajeIndividual,
   enviarStickerConversacion,
+  listarVideosCatalogoChat,
+  enviarVideoCatalogoConversacion,
   prepararSubidaAdjuntoConversacion,
   enviarAdjuntoSubidoConversacion,
   actualizarTipoNegocioConversacion,
   corregirOrtografiaMensaje,
   alternarPausaIA,
   invocarSofia,
+  reanudarSofiaAlSalir,
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { obtenerUltimosDocumentosDeProspecto } from "@/app/actions/cotizaciones";
@@ -36,9 +39,12 @@ import type { EtapaId } from "@/lib/types";
 import { DocumentosVentas } from "./DocumentosVentas";
 import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
 import { ModalCalculadoraImpermeabilizacion } from "./ModalCalculadoraImpermeabilizacion";
+import { ModalCotizacionExpress } from "./ModalCotizacionExpress";
 import { ModalCoordinarInspeccion } from "./ModalCoordinarInspeccion";
 import { ModalPasarLeadTelegram } from "./ModalPasarLeadTelegram";
 import { ModalCatalogoPlantillas } from "./ModalCatalogoPlantillas";
+import { ModalRescateMovil } from "./ModalRescateMovil";
+import { ModalBorradorSofia } from "./conversaciones/ModalBorradorSofia";
 import {
   obtenerEnvioLeadTelegramAction,
   marcarLeadRevisadoManualAction,
@@ -58,8 +64,12 @@ import {
   agruparPlantillasParaChat,
   clasificarPlantilla,
 } from "@/lib/plantillas-whatsapp";
+import { CotizacionesEspecialesConversacion } from "@/components/conversaciones/CotizacionesEspecialesConversacion";
+import { CoordinacionInstalacionConversacion } from "@/components/conversaciones/CoordinacionInstalacionConversacion";
+import { ModalCoordinarServicioProveedor } from "@/components/conversaciones/ModalCoordinarServicioProveedor";
+import { ConversacionesProveedores } from "@/components/conversaciones/ConversacionesProveedores";
 
-type TabPrincipal = "bandeja" | "documentos" | "respuestas";
+type TabPrincipal = "bandeja" | "proveedores" | "documentos" | "respuestas";
 
 const INPUT =
   "w-full rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-carbon outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30";
@@ -621,11 +631,13 @@ function renderizarContenidoMensaje(
       if (match) {
         const mediaId = match[1];
         const caption = match[2];
+        // Los videos del catálogo se envían por link público; el resto por media_id de Meta.
+        const src = /^https?:\/\//i.test(mediaId) ? mediaId : `/api/conversaciones/media?mediaId=${mediaId}`;
         return (
           <div className="space-y-1 max-w-[280px]">
             <div className="overflow-hidden rounded-lg border border-carbon/10 bg-carbon/5 shadow-sm">
               <video
-                src={`/api/conversaciones/media?mediaId=${mediaId}`}
+                src={src}
                 controls
                 className="max-h-[220px] w-full object-contain mx-auto"
                 preload="metadata"
@@ -671,7 +683,22 @@ function renderizarContenidoMensaje(
     }
 
   }
-  return <span>{texto}</span>;
+  return <span>{formatoWhatsApp(texto)}</span>;
+}
+
+/**
+ * Muestra las negritas (*texto*) y tachados (~texto~) como los ve el cliente en
+ * WhatsApp. También acepta **texto** de mensajes viejos de la IA.
+ */
+function formatoWhatsApp(texto: string): React.ReactNode {
+  const partes = texto.split(/(\*\*[^*\n]+\*\*|\*[^*\s][^*\n]*\*|~[^~\s][^~\n]*~)/g);
+  if (partes.length === 1) return texto;
+  return partes.map((p, i) => {
+    if (p.startsWith("**") && p.endsWith("**") && p.length > 4) return <strong key={i}>{p.slice(2, -2)}</strong>;
+    if (p.startsWith("*") && p.endsWith("*") && p.length > 2) return <strong key={i}>{p.slice(1, -1)}</strong>;
+    if (p.startsWith("~") && p.endsWith("~") && p.length > 2) return <s key={i}>{p.slice(1, -1)}</s>;
+    return p;
+  });
 }
 
 function humanizarError(error: any): string {
@@ -695,12 +722,66 @@ function humanizarError(error: any): string {
  */
 export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } = {}) {
   const [tab, setTab] = useState<TabPrincipal>("bandeja");
+  // ?proveedor=<id> (link del aviso de Telegram) abre la pestaña Proveedores en ese chat.
+  const [proveedorInicial, setProveedorInicial] = useState<string | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("proveedor");
+    if (id) {
+      setProveedorInicial(id);
+      setTab("proveedores");
+    }
+  }, []);
   const [conversaciones, setConversaciones] = useState<ConversacionResumen[]>(inicial ?? []);
   const [listaCargada, setListaCargada] = useState(inicial !== undefined);
   const [filtro, setFiltro] = useState<"abiertas" | "terminadas">("abiertas");
   const [subFiltro, setSubFiltro] = useState<"todas" | "mias" | "ia" | "nuevas">("todas");
+  // Filtro por tipo de negocio: "" = todos, "sin_clasificar" = sin tipo. Se guarda
+  // en localStorage para que sobreviva a recargas de la página.
+  const [filtroNegocio, setFiltroNegocioEstado] = useState("");
+  useEffect(() => {
+    try {
+      const guardado = localStorage.getItem("sauceda_conv_filtro_negocio");
+      if (guardado) setFiltroNegocioEstado(guardado);
+    } catch {}
+  }, []);
+  function setFiltroNegocio(valor: string) {
+    setFiltroNegocioEstado(valor);
+    try {
+      if (valor) localStorage.setItem("sauceda_conv_filtro_negocio", valor);
+      else localStorage.removeItem("sauceda_conv_filtro_negocio");
+    } catch {}
+  }
   const [usuario, setUsuario] = useState<{ id: string; nombre: string; email: string; rol: "admin" | "asesor" | "operaciones" } | null>(null);
-  const [sel, setSel] = useState<string | null>(null);
+  const [sel, setSelEstado] = useState<string | null>(null);
+  // Cada cambio de conversación hecho por el usuario sube esta versión. Las
+  // cargas asíncronas (sondeo, refrescos tras enviar, abrir) la capturan al
+  // iniciar y descartan su resultado si el usuario ya cambió de chat; si no,
+  // una respuesta tardía regresaba a la conversación anterior.
+  const versionSelRef = useRef(0);
+  const setSel = useCallback((tel: string | null) => {
+    versionSelRef.current += 1;
+    setSelEstado(tel);
+  }, []);
+
+  // Al salir de un chat (cambiar a otro, cerrarlo, salir de la página o cerrar
+  // la pestaña) Sofía se reactiva si solo estaba pausada porque el asesor escribió.
+  // Se usa una clave normalizada: refrescar() puede re-seleccionar el mismo
+  // número con otro formato (521… / 52…) y eso no cuenta como salir del chat.
+  const selRef = useRef(sel);
+  selRef.current = sel;
+  const selClave = sel ? sel.replace(/\D/g, "").slice(-10) || sel : null;
+  useEffect(() => {
+    if (!selClave || !selRef.current) return;
+    const tel = selRef.current;
+    const alSalirDePagina = () => {
+      reanudarSofiaAlSalir(tel).catch(() => {});
+    };
+    window.addEventListener("pagehide", alSalirDePagina);
+    return () => {
+      window.removeEventListener("pagehide", alSalirDePagina);
+      reanudarSofiaAlSalir(tel).catch(() => {});
+    };
+  }, [selClave]);
 
   // En celular el hilo abierto se muestra a pantalla completa: evitar que la
   // página de fondo se desplace mientras se escribe.
@@ -728,7 +809,7 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [filtroPlantillasModo, setFiltroPlantillasModo] = useState<"recomendadas" | "todas">("recomendadas");
   const [busquedaPlantilla, setBusquedaPlantilla] = useState<string>("");
   const [modalCatalogoAbierto, setModalCatalogoAbierto] = useState(false);
-  const [modoVistaPlantillas, setModoVistaPlantillas] = useState<"tarjetas" | "select">("tarjetas");
+  const [plantillasColapsadas, setPlantillasColapsadas] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [cambiandoTipoNegocio, setCambiandoTipoNegocio] = useState(false);
@@ -781,6 +862,7 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [asignando, setAsignando] = useState(false);
   const [alternandoIA, setAlternandoIA] = useState(false);
   const [invocandoSofia, setInvocandoSofia] = useState(false);
+  const [borradorSofiaTel, setBorradorSofiaTel] = useState<string | null>(null);
   const [esAdmin, setEsAdmin] = useState(false);
   const [mostrarAtajos, setMostrarAtajos] = useState(false);
   const [filtroAtajos, setFiltroAtajos] = useState("");
@@ -795,11 +877,18 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [progresoVideo, setProgresoVideo] = useState<number | null>(null);
   const [mostrarStickers, setMostrarStickers] = useState(false);
   const [enviandoSticker, setEnviandoSticker] = useState(false);
+  const [mostrarVideosCatalogo, setMostrarVideosCatalogo] = useState(false);
+  const [videosCatalogo, setVideosCatalogo] = useState<Awaited<ReturnType<typeof listarVideosCatalogoChat>> | null>(null);
+  const [enviandoVideoUrl, setEnviandoVideoUrl] = useState<string | null>(null);
   const [corrigiendoOrtografia, setCorrigiendoOrtografia] = useState(false);
   const [exitoOrtografia, setExitoOrtografia] = useState(false);
   const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
+  const [mostrarCotizacionExpress, setMostrarCotizacionExpress] = useState(false);
+  const [menuCotizador, setMenuCotizador] = useState(false);
   const [mostrarCoordinacion, setMostrarCoordinacion] = useState(false);
+  const [mostrarServicioProveedor, setMostrarServicioProveedor] = useState(false);
   const [mostrarPasarLead, setMostrarPasarLead] = useState(false);
+  const [mostrarRescateMovil, setMostrarRescateMovil] = useState(false);
   const [cambiandoEtapa, setCambiandoEtapa] = useState(false);
   // Formulario para posponer (etapa "En pausa"): fecha para retomar y motivo
   const [posponer, setPosponer] = useState<{ fecha: string; motivo: string } | null>(null);
@@ -886,15 +975,18 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   }, [telefonoDetalle]);
 
   const refrescar = useCallback(async (telefonoPreseleccionado: string | null) => {
+    const version = versionSelRef.current;
     try {
       const lista = await listarConversaciones();
       setConversaciones(lista);
       setListaCargada(true);
       if (telefonoPreseleccionado) {
+        if (versionSelRef.current !== version) return; // el usuario ya cambió de chat
         const coincidencia = lista.find((c) => coincidenTelefonos(c.telefono, telefonoPreseleccionado));
         const telReal = coincidencia ? coincidencia.telefono : telefonoPreseleccionado;
-        setSel(telReal);
+        setSelEstado(telReal);
         const d = await obtenerConversacion(telReal);
+        if (versionSelRef.current !== version) return;
         setDetalle(d);
       }
     } catch {
@@ -902,13 +994,14 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
     }
   }, []);
 
-  /** Botón "Que responda Sofía": la vuelve a invocar leyendo todo el hilo. */
-  const pedirRespuestaSofia = async (telefono: string) => {
-    const indicacion = window.prompt(
-      "Sofía leerá la conversación y responderá al cliente.\n\nIndicación opcional para Sofía (deja vacío si no hay):",
-      "",
-    );
-    if (indicacion === null) return; // canceló
+  /** Botón "Que responda Sofía": abre la propuesta para revisarla antes de enviar. */
+  const pedirRespuestaSofia = (telefono: string) => {
+    setAviso(null);
+    setBorradorSofiaTel(telefono);
+  };
+
+  /** Sofía responde y envía ella misma (con links y fotos) y queda encendida. */
+  const sofiaRespondeSola = async (telefono: string, indicacion: string) => {
     setInvocandoSofia(true);
     setAviso(null);
     try {
@@ -1003,8 +1096,10 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
     setTexto("");
     setPlantillaSel("");
     setParams([]);
+    const version = versionSelRef.current;
     try {
       const d = await obtenerConversacion(telefono);
+      if (versionSelRef.current !== version) return; // ya se abrió otro chat
       setDetalle(d);
       marcarComoLeida(telefono, d?.ultimoInboundFecha);
     } catch (err: any) {
@@ -1013,17 +1108,20 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
     }
   }
 
-  async function enviarTexto() {
-    if (!sel || !texto.trim() || enviando) return;
+  async function enviarTexto(textoDirecto?: string): Promise<boolean> {
+    const contenido = (textoDirecto ?? texto).trim();
+    if (!sel || !contenido || enviando) return false;
     setEnviando(true);
     setAviso(null);
+    let ok = false;
     try {
       const firma = agenteFirma?.trim() || usuario?.nombre || undefined;
-      const r = await responderConversacion(sel, texto.trim(), firma);
+      const r = await responderConversacion(sel, contenido, firma);
       if (!r.ok) {
         setAviso(humanizarError(r.error ?? "No se pudo enviar el mensaje."));
       } else {
-        setTexto("");
+        ok = true;
+        if (textoDirecto === undefined) setTexto("");
         marcarComoLeida(sel, new Date().toISOString());
       }
       await refrescar(sel);
@@ -1033,6 +1131,7 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
     } finally {
       setEnviando(false);
     }
+    return ok;
   }
 
   async function borrarConversacion() {
@@ -1186,11 +1285,14 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
   }
 
   const plantilla = plantillas.find((p) => p.nombre === plantillaSel);
+  // Fuera de la ventana de 24h de WhatsApp solo se puede enviar plantilla: se oculta el editor de texto.
+  const ventanaCerradaWA = !!detalle && !detalle.ventanaAbierta && canalDe(detalle.telefono) === "whatsapp";
 
   // Al cambiar de cliente, restablecer a vista de recomendadas
   useEffect(() => {
     setFiltroPlantillasModo("recomendadas");
     setBusquedaPlantilla("");
+    setPlantillasColapsadas(false);
   }, [detalle?.telefono]);
 
   const {
@@ -1251,12 +1353,36 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
     }
   }
 
+  const coincideNegocio = (c: ConversacionResumen) =>
+    !filtroNegocio ||
+    (filtroNegocio === "sin_clasificar" ? !c.tipoNegocio : c.tipoNegocio === filtroNegocio);
+  // Conversaciones del tipo de negocio elegido; base de los contadores de las pestañas.
+  const porNegocio = conversaciones.filter(coincideNegocio);
+  // Opciones del filtro: los tipos presentes en la pestaña actual, con su conteo.
+  const conteoNegocios = new Map<string, number>();
+  for (const c of conversaciones) {
+    const enPestana = filtro === "abiertas" ? !c.finalizado && c.ventanaAbierta : c.finalizado || !c.ventanaAbierta;
+    if (!enPestana) continue;
+    const clave = c.tipoNegocio || "sin_clasificar";
+    conteoNegocios.set(clave, (conteoNegocios.get(clave) ?? 0) + 1);
+  }
+  if (filtroNegocio && !conteoNegocios.has(filtroNegocio)) conteoNegocios.set(filtroNegocio, 0);
+  const opcionesNegocio = Array.from(conteoNegocios.entries())
+    .map(([clave, n]) => ({
+      clave,
+      n,
+      vis: visualNegocio(clave === "sin_clasificar" ? null : clave),
+    }))
+    .sort((a, b) => a.vis.nombre.localeCompare(b.vis.nombre, "es"));
+
   const conversacionesFiltradas = conversaciones.filter((c) => {
     if (soloTel) {
       return coincidenTelefonos(c.telefono, soloTel);
     }
 
     if (sel && coincidenTelefonos(c.telefono, sel)) return true;
+
+    if (!coincideNegocio(c)) return false;
 
     if (filtro === "abiertas") {
       if (!c.finalizado && c.ventanaAbierta) {
@@ -1420,6 +1546,32 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
     }
   }
 
+  async function abrirVideosCatalogo() {
+    const abrir = !mostrarVideosCatalogo;
+    setMostrarVideosCatalogo(abrir);
+    // Se recarga cada vez para ver los videos recién subidos al catálogo.
+    if (abrir) setVideosCatalogo(await listarVideosCatalogoChat().catch(() => []));
+  }
+
+  async function handleEnviarVideoCatalogo(productoId: string, url: string) {
+    if (!sel || enviandoVideoUrl) return;
+    setEnviandoVideoUrl(url);
+    setAviso(null);
+    try {
+      const r = await enviarVideoCatalogoConversacion(sel, productoId, url);
+      if (!r.ok) {
+        setAviso(humanizarError(r.error ?? "No se pudo enviar el video."));
+      } else {
+        setMostrarVideosCatalogo(false);
+        await refrescar(sel);
+      }
+    } catch (err: any) {
+      setAviso(humanizarError(err));
+    } finally {
+      setEnviandoVideoUrl(null);
+    }
+  }
+
   async function handleEnviarArchivoDirecto(file: File, caption?: string): Promise<boolean> {
     if (!sel) return false;
     setEnviandoArchivoDirecto(true);
@@ -1525,14 +1677,16 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
     <div className="flex flex-col gap-1.5 sm:gap-3">
       {/* Navegación de tabs (en móvil: una fila delgada con nombres cortos) */}
       <div className="flex items-center gap-0.5 sm:gap-1 border-b border-carbon/10 pb-0">
-        {(["bandeja", "documentos", "respuestas"] as TabPrincipal[]).map((t) => {
+        {(["bandeja", "proveedores", "documentos", "respuestas"] as TabPrincipal[]).map((t) => {
           const labels: Record<TabPrincipal, string> = {
             bandeja: "💬 Bandeja",
+            proveedores: "🧰 Proveedores",
             documentos: "📂 Documentos",
             respuestas: "⚡ Respuestas Rápidas",
           };
           const labelsCortos: Record<TabPrincipal, string> = {
             bandeja: "💬 Bandeja",
+            proveedores: "🧰 Prov.",
             documentos: "📂 Docs",
             respuestas: "⚡ Rápidas",
           };
@@ -1570,6 +1724,9 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
           </button>
         )}
       </div>
+
+      {/* Tab: Proveedores (línea oficial, sin Sofía) */}
+      {tab === "proveedores" && <ConversacionesProveedores proveedorInicial={proveedorInicial} />}
 
       {/* Tab: Documentos */}
       {tab === "documentos" && (
@@ -1726,7 +1883,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                   : "text-carbon/60 hover:text-carbon"
               }`}
             >
-              Abiertas ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta).length})
+              Abiertas ({porNegocio.filter((c) => !c.finalizado && c.ventanaAbierta).length})
             </button>
             <button
               type="button"
@@ -1739,7 +1896,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
             >
               <span className={filtro === "abiertas" ? "sm:hidden" : "hidden"}>Term.</span>
               <span className={filtro === "abiertas" ? "hidden sm:inline" : ""}>Terminadas</span>
-              {" "}({conversaciones.filter((c) => c.finalizado || !c.ventanaAbierta).length})
+              {" "}({porNegocio.filter((c) => c.finalizado || !c.ventanaAbierta).length})
             </button>
           </div>
 
@@ -1754,7 +1911,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Todas ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta).length})
+                Todas ({porNegocio.filter((c) => !c.finalizado && c.ventanaAbierta).length})
               </button>
               <button
                 type="button"
@@ -1765,7 +1922,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Mías ({conversaciones.filter((c) => {
+                Mías ({porNegocio.filter((c) => {
                   if (c.finalizado || !c.ventanaAbierta) return false;
                   const nomUser = usuario?.nombre?.toLowerCase() || "";
                   const emailUser = usuario?.email?.toLowerCase() || "";
@@ -1782,7 +1939,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                <span className="hidden sm:inline">De la </span>IA ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta && c.atiende?.toLowerCase() === "ia").length})
+                <span className="hidden sm:inline">De la </span>IA ({porNegocio.filter((c) => !c.finalizado && c.ventanaAbierta && c.atiende?.toLowerCase() === "ia").length})
               </button>
               <button
                 type="button"
@@ -1793,11 +1950,42 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Nuevas ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta && (!c.atiende || c.atiende === "")).length})
+                Nuevas ({porNegocio.filter((c) => !c.finalizado && c.ventanaAbierta && (!c.atiende || c.atiende === "")).length})
               </button>
             </div>
           )}
 
+          </div>
+
+          {/* Filtro por tipo de negocio (persistente entre recargas) */}
+          <div className="flex items-center gap-1 mb-1 sm:mb-2 shrink-0">
+            <select
+              value={filtroNegocio}
+              onChange={(e) => setFiltroNegocio(e.target.value)}
+              className={`flex-1 min-w-0 rounded-lg border px-2 py-1 text-[11px] sm:text-xs font-semibold focus:outline-none focus:border-sauce cursor-pointer ${
+                filtroNegocio
+                  ? visualNegocio(filtroNegocio === "sin_clasificar" ? null : filtroNegocio).clases
+                  : "bg-white border-carbon/15 text-carbon/70"
+              }`}
+              title="Filtrar conversaciones por tipo de negocio"
+            >
+              <option value="">🏷️ Todos los tipos de negocio</option>
+              {opcionesNegocio.map((o) => (
+                <option key={o.clave} value={o.clave}>
+                  {o.vis.icono} {o.vis.nombre} ({o.n})
+                </option>
+              ))}
+            </select>
+            {filtroNegocio && (
+              <button
+                type="button"
+                onClick={() => setFiltroNegocio("")}
+                className="shrink-0 rounded-lg border border-carbon/15 bg-white px-2 py-1 text-[11px] font-bold text-carbon/60 hover:text-carbon"
+                title="Quitar filtro de tipo de negocio"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-1">
@@ -2188,12 +2376,15 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       <option value="construccion-mantenimiento-postventa">Mantenimiento Postventa</option>
                       <option value="construccion-mantenimiento-cisternas">Mantenimiento Cisternas</option>
                       <option value="construccion-mantenimiento-tinacos">Mantenimiento Tinacos</option>
+                      <option value="construccion-mantenimiento-calentadores">Mantenimiento Calentadores Solares</option>
                       <option value="construccion-herreria">Herrería</option>
+                      <option value="seguridad">Seguridad</option>
                       <option value="construccion-remodelacion">Remodelación</option>
                       <option value="construccion">Construcción General</option>
                       <option value="traspaso_compra">Traspaso / Compra</option>
                       <option value="promocion_venta">Promoción Venta</option>
                       <option value="solo_tramite">Solo Trámite</option>
+                      <option value="asesoria_compra">Asesoría de Compra</option>
                       <option value="otro">Otro</option>
                     </select>
                   </div>
@@ -2301,9 +2492,9 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     {/* Volver a invocar a Sofía */}
                     <button
                       type="button"
-                      onClick={() => void pedirRespuestaSofia(detalle.telefono)}
+                      onClick={() => pedirRespuestaSofia(detalle.telefono)}
                       disabled={invocandoSofia || alternandoIA || enviando}
-                      title="Sofía lee la conversación y le responde al cliente ahora (y queda encendida)."
+                      title="Sofía lee la conversación y te propone una respuesta; tú decides si la mandas."
                       className="text-[8px] font-bold px-2 py-0.5 rounded shadow-xs transition disabled:opacity-50 flex items-center gap-1 shrink-0 border cursor-pointer bg-violet-100 hover:bg-violet-200 text-violet-900 border-violet-400"
                     >
                       {invocandoSofia ? "⏳ Sofía escribiendo…" : "✨ Que responda Sofía"}
@@ -2384,6 +2575,28 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     📞 Contactar por Llamada
                   </a>
                 </div>
+              )}
+
+              {/* Coordinar instalación de cotizaciones aceptadas con el proveedor (Telegram) */}
+              {!detalle.telefono.startsWith("messenger:") && (
+                <CoordinacionInstalacionConversacion
+                  telefono={detalle.telefono}
+                  prospectoId={detalle.prospectoId}
+                  expedienteId={detalle.expedienteId}
+                  onEnviada={() => refrescar(detalle.telefono)}
+                />
+              )}
+
+              {/* Cotizaciones especiales (fuera de catálogo) con proveedores por Telegram */}
+              {!detalle.telefono.startsWith("messenger:") && (
+                <CotizacionesEspecialesConversacion
+                  telefono={detalle.telefono}
+                  tipoNegocio={detalle.tipoNegocio}
+                  prospectoId={detalle.prospectoId}
+                  expedienteId={detalle.expedienteId}
+                  mensajes={detalle.mensajes}
+                  onEnviada={() => refrescar(detalle.telefono)}
+                />
               )}
 
               {/* Mensajes */}
@@ -2537,302 +2750,233 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                 )}
 
                 <div className="space-y-1.5 relative">
-                  {/* Advertencia de ventana de 24h expirada (solo WhatsApp) */}
-                  {!detalle.ventanaAbierta && canalDe(detalle.telefono) === "whatsapp" && (
-                    <div className="rounded-xl border border-sauce/20 bg-sauce/5 p-4 space-y-3">
-                      <div className="flex items-start gap-1.5 text-xs text-verde-profundo font-semibold leading-relaxed">
-                        <span className="shrink-0">⚠️</span>
-                        <div>
-                          <p><strong>Ventana de 24h cerrada:</strong> Para reactivar este chat, debes enviar una plantilla aprobada por Meta.</p>
-                        </div>
-                      </div>
-                      
-                      {plantillas.length === 0 ? (
-                        <p className="text-xs text-carbon/50">No hay plantillas de WhatsApp aprobadas disponibles en este momento.</p>
-                      ) : (
-                        <div className="space-y-3">
-                          {/* Barra de Filtros Rápidos, Modos de Vista y Búsqueda */}
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-carbon/10 pb-2">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {infoNegocioPlantillas ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => setFiltroPlantillasModo("recomendadas")}
-                                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
-                                      filtroPlantillasModo === "recomendadas"
-                                        ? "bg-sauce text-crema shadow-xs"
-                                        : "bg-white border border-carbon/15 text-carbon/70 hover:bg-carbon/5"
-                                    }`}
-                                    title={`Mostrar plantillas específicas de ${infoNegocioPlantillas.nombreLegible} y operativas`}
-                                  >
-                                    <span>{infoNegocioPlantillas.icono}</span>
-                                    <span>Recomendadas ({totalPlantillasRecomendadas})</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setFiltroPlantillasModo("todas")}
-                                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
-                                      filtroPlantillasModo === "todas"
-                                        ? "bg-sauce text-crema shadow-xs"
-                                        : "bg-white border border-carbon/15 text-carbon/70 hover:bg-carbon/5"
-                                    }`}
-                                    title="Mostrar todas las plantillas registradas"
-                                  >
-                                    <span>🌐</span>
-                                    <span>Todas las líneas ({plantillas.length})</span>
-                                  </button>
-                                </>
-                              ) : (
-                                <span className="text-[11px] font-bold text-verde-profundo flex items-center gap-1">
-                                  <span>📝</span>
-                                  <span>{plantillas.length} plantillas disponibles</span>
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {/* Buscador de plantillas */}
-                              <div className="relative">
-                                <input
-                                  type="text"
-                                  value={busquedaPlantilla}
-                                  onChange={(e) => setBusquedaPlantilla(e.target.value)}
-                                  placeholder="🔍 Buscar..."
-                                  className="bg-white border border-carbon/15 rounded-md px-2 py-1 text-xs text-carbon placeholder:text-carbon/40 focus:outline-none focus:border-sauce w-28 sm:w-36"
-                                />
-                                {busquedaPlantilla && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setBusquedaPlantilla("")}
-                                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-carbon/40 hover:text-carbon p-0.5 cursor-pointer"
-                                    title="Limpiar búsqueda"
-                                  >
-                                    ✕
-                                  </button>
-                                )}
-                              </div>
-
-                              {/* Selector de modo de vista: Tarjetas vs Dropdown */}
-                              <div className="inline-flex rounded-md border border-carbon/15 bg-white p-0.5 shadow-2xs">
-                                <button
-                                  type="button"
-                                  onClick={() => setModoVistaPlantillas("tarjetas")}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
-                                    modoVistaPlantillas === "tarjetas"
-                                      ? "bg-sauce text-crema"
-                                      : "text-carbon/60 hover:text-carbon"
-                                  }`}
-                                  title="Ver plantillas en tarjetas visuales con texto completo"
-                                >
-                                  <span>🎨</span>
-                                  <span>Tarjetas</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setModoVistaPlantillas("select")}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
-                                    modoVistaPlantillas === "select"
-                                      ? "bg-sauce text-crema"
-                                      : "text-carbon/60 hover:text-carbon"
-                                  }`}
-                                  title="Ver como lista desplegable compacta"
-                                >
-                                  <span>📋</span>
-                                  <span>Lista</span>
-                                </button>
-                              </div>
-
-                              {/* Botón Catálogo Visual Completo */}
-                              <button
-                                type="button"
-                                onClick={() => setModalCatalogoAbierto(true)}
-                                className="px-2 py-1 rounded text-[10px] font-bold bg-sauce/15 hover:bg-sauce/25 text-verde-profundo border border-sauce/30 transition flex items-center gap-1 cursor-pointer shadow-2xs"
-                                title="Abrir ventana con catálogo visual grande de todas las plantillas"
-                              >
-                                <span>🔍</span>
-                                <span>Catálogo Completo</span>
-                              </button>
-                            </div>
+                  {/* Ventana de 24h cerrada (solo WhatsApp): selector compacto de plantilla en dos paneles */}
+                  {ventanaCerradaWA && (
+                    <div className="rounded-xl border border-amber-300/70 bg-amber-50/40 overflow-hidden">
+                      {/* Encabezado */}
+                      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-amber-200/80 bg-amber-50">
+                        <span className="text-sm shrink-0">🔒</span>
+                        <p className="text-[11px] leading-snug text-amber-900 flex-1 min-w-[180px]">
+                          <strong>Ventana de 24h cerrada.</strong>{" "}
+                          <span className="text-amber-900/80">Solo puedes reactivar el chat con una plantilla aprobada por Meta.</span>
+                        </p>
+                        {plantillas.length > 0 && (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setModalCatalogoAbierto(true)}
+                              className="px-2 py-1 rounded-md text-[10px] font-bold bg-white hover:bg-sauce/10 text-verde-profundo border border-carbon/15 transition cursor-pointer"
+                              title="Abrir catálogo visual grande de todas las plantillas"
+                            >
+                              ⤢ Catálogo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPlantillasColapsadas((v) => !v)}
+                              className="px-2 py-1 rounded-md text-[10px] font-bold bg-sauce hover:bg-verde-profundo text-crema transition cursor-pointer"
+                              title={plantillasColapsadas ? "Mostrar plantillas" : "Ocultar plantillas para leer la conversación"}
+                            >
+                              {plantillasColapsadas ? "▴ Elegir plantilla" : "▾ Ocultar"}
+                            </button>
                           </div>
+                        )}
+                      </div>
 
-                          {/* Vista en Tarjetas Visuales (por defecto) */}
-                          {modoVistaPlantillas === "tarjetas" ? (
-                            <div className="space-y-3 max-h-80 overflow-y-auto p-1 scrollbar-sutil">
-                              {gruposPlantillas.length === 0 ? (
-                                <p className="text-center py-6 text-xs text-carbon/40">
-                                  No hay plantillas con ese criterio de búsqueda.
-                                </p>
-                              ) : (
-                                gruposPlantillas.map((grupo) => (
-                                  <div key={grupo.id} className="space-y-1.5">
-                                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-verde-profundo uppercase tracking-wider bg-carbon/5 px-2.5 py-1 rounded-md">
-                                      <span>{grupo.icono}</span>
-                                      <span>{grupo.label}</span>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                      {grupo.plantillas.map((p) => {
-                                        const esSel = p.nombre === plantillaSel;
-                                        return (
-                                          <div
-                                            key={p.nombre}
-                                            onClick={() => seleccionarPlantilla(p.nombre)}
-                                            className={`rounded-xl border p-3 transition-all duration-150 cursor-pointer text-left flex flex-col justify-between ${
-                                              esSel
-                                                ? "border-sauce bg-sauce/10 ring-2 ring-sauce shadow-sm"
-                                                : "border-carbon/15 bg-white hover:border-sauce/60 hover:shadow-xs"
-                                            }`}
-                                          >
-                                            <div className="space-y-1.5">
-                                              <div className="flex items-center justify-between gap-1 flex-wrap">
-                                                <span className="font-mono text-xs font-bold text-carbon">
-                                                  {p.nombre}
-                                                </span>
-                                                <div className="flex items-center gap-1">
-                                                  <span className="text-[9px] bg-carbon/5 text-carbon/60 px-1.5 py-0.5 rounded font-mono font-bold">
-                                                    {p.idioma}
-                                                  </span>
-                                                  <span className="text-[9px] bg-sauce/10 text-verde-profundo px-1.5 py-0.5 rounded font-bold">
-                                                    {p.categoria}
-                                                  </span>
-                                                </div>
-                                              </div>
-                                              <p className="text-xs text-carbon/80 whitespace-pre-line font-sans line-clamp-3 bg-crema/25 p-2 rounded-md border border-carbon/5 leading-relaxed">
-                                                {p.cuerpo}
-                                              </p>
-                                            </div>
-                                            <div className="mt-2 pt-1.5 border-t border-carbon/10 flex items-center justify-between text-[10px]">
-                                              <span className="text-carbon/50 font-mono">
-                                                {p.parametros > 0 ? `${p.parametros} variable${p.parametros === 1 ? "" : "s"}` : "Sin variables"}
-                                              </span>
-                                              <span className={`font-bold transition-colors ${esSel ? "text-sauce font-extrabold" : "text-carbon/60 group-hover:text-sauce"}`}>
-                                                {esSel ? "✓ Seleccionada" : "Elegir →"}
-                                              </span>
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
+                      {plantillas.length === 0 ? (
+                        <p className="px-3 py-3 text-xs text-carbon/50">No hay plantillas de WhatsApp aprobadas disponibles en este momento.</p>
+                      ) : (
+                        !plantillasColapsadas && (
+                          <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] h-[min(360px,46vh)] bg-white">
+                            {/* Panel izquierdo: filtros + lista */}
+                            <div className={`${plantilla ? "hidden md:flex" : "flex"} flex-col min-h-0 border-r border-carbon/10`}>
+                              <div className="shrink-0 flex items-center gap-1.5 p-2 border-b border-carbon/10">
+                                {infoNegocioPlantillas && (
+                                  <div className="inline-flex shrink-0 rounded-md border border-carbon/15 bg-carbon/5 p-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setFiltroPlantillasModo("recomendadas")}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                                        filtroPlantillasModo === "recomendadas" ? "bg-white text-verde-profundo shadow-2xs" : "text-carbon/55 hover:text-carbon"
+                                      }`}
+                                      title={`Plantillas de ${infoNegocioPlantillas.nombreLegible} y operativas`}
+                                    >
+                                      {infoNegocioPlantillas.icono} Sugeridas {totalPlantillasRecomendadas}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setFiltroPlantillasModo("todas")}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                                        filtroPlantillasModo === "todas" ? "bg-white text-verde-profundo shadow-2xs" : "text-carbon/55 hover:text-carbon"
+                                      }`}
+                                      title="Todas las plantillas registradas"
+                                    >
+                                      Todas {plantillas.length}
+                                    </button>
                                   </div>
-                                ))
-                              )}
-                            </div>
-                          ) : (
-                            /* Vista en Lista Desplegable (<select>) */
-                            <div>
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="block text-[10px] font-bold text-carbon/60 uppercase tracking-wider">
-                                  Seleccionar Plantilla:
-                                </label>
-                                <span className="text-[10px] text-carbon/40 font-medium">
-                                  {totalPlantillasFiltradas} {totalPlantillasFiltradas === 1 ? "opción" : "opciones"} en el listado
-                                </span>
-                              </div>
-                              <select
-                                value={plantillaSel}
-                                onChange={(e) => seleccionarPlantilla(e.target.value)}
-                                className="w-full bg-white border border-carbon/15 rounded-lg px-3 py-2 text-xs text-carbon/80 focus:outline-none focus:border-sauce cursor-pointer font-medium"
-                              >
-                                <option value="">— selecciona una plantilla —</option>
-                                {gruposPlantillas.map((grupo) => (
-                                  <optgroup key={grupo.id} label={`${grupo.icono} ${grupo.label}`}>
-                                    {grupo.plantillas.map((p) => {
-                                      const snippet = p.cuerpo
-                                        ? ` - "${p.cuerpo.replace(/\n/g, " ").substring(0, 48)}${p.cuerpo.length > 48 ? "..." : ""}"`
-                                        : "";
-                                      return (
-                                        <option key={p.nombre} value={p.nombre}>
-                                          {p.nombre} ({p.categoria}){snippet}
-                                        </option>
-                                      );
-                                    })}
-                                  </optgroup>
-                                ))}
-                              </select>
-                            </div>
-                          )}
-
-                          {plantilla && (
-                            <div className="bg-white p-3 rounded-lg border border-carbon/10 space-y-2.5 shadow-2xs">
-                              <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-carbon/5 pb-1.5">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] font-bold text-verde-profundo uppercase tracking-wider">
-                                    Vista previa:
-                                  </span>
-                                  <span className="font-mono text-xs font-semibold text-carbon">
-                                    {plantilla.nombre}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[10px] bg-carbon/5 text-carbon/70 px-1.5 py-0.5 rounded font-mono font-bold">
-                                    {plantilla.idioma}
-                                  </span>
-                                  <span className="text-[10px] bg-sauce/10 text-verde-profundo px-1.5 py-0.5 rounded font-bold">
-                                    {plantilla.categoria}
-                                  </span>
-                                  {plantilla.parametros > 0 && (
-                                    <span className="text-[10px] bg-dorado/15 text-dorado px-1.5 py-0.5 rounded font-bold">
-                                      {plantilla.parametros} var{plantilla.parametros === 1 ? "" : "s"}
-                                    </span>
+                                )}
+                                <div className="relative flex-1 min-w-0">
+                                  <input
+                                    type="text"
+                                    value={busquedaPlantilla}
+                                    onChange={(e) => setBusquedaPlantilla(e.target.value)}
+                                    placeholder="🔍 Buscar plantilla…"
+                                    className="w-full bg-white border border-carbon/15 rounded-md pl-2 pr-6 py-1 text-xs text-carbon placeholder:text-carbon/40 focus:outline-none focus:border-sauce"
+                                  />
+                                  {busquedaPlantilla && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setBusquedaPlantilla("")}
+                                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-carbon/40 hover:text-carbon p-0.5 cursor-pointer"
+                                      title="Limpiar búsqueda"
+                                    >
+                                      ✕
+                                    </button>
                                   )}
                                 </div>
                               </div>
 
-                              <p className="text-xs text-carbon/80 whitespace-pre-line font-mono bg-crema/20 p-2.5 rounded-md border border-carbon/5 leading-relaxed">
-                                {plantilla.cuerpo}
-                              </p>
-                              
-                              {plantilla.parametros > 0 && (
-                                <div className="pt-2 border-t border-carbon/5 space-y-2">
-                                  <p className="text-[10px] font-bold text-carbon/50 uppercase tracking-wider">
-                                    Variables dinámicas del mensaje:
-                                  </p>
-                                  <div className="grid grid-cols-1 gap-2">
-                                    {Array.from({ length: plantilla.parametros }).map((_, i) => (
-                                      <div key={i} className="flex items-center gap-2">
-                                        <span className="text-[10px] font-mono text-carbon/60 font-bold shrink-0 w-8">
-                                          {"{{"}{i + 1}{"}}"}
-                                        </span>
-                                        <input
-                                          type="text"
-                                          placeholder={
-                                            i === 0
-                                              ? `Nombre del cliente (ej. ${detalle?.nombre?.split(" ")[0] || "Angel"})`
-                                              : i === 1
-                                              ? "Servicio / Detalle"
-                                              : `Valor para variable ${i + 1}`
-                                          }
-                                          value={params[i] || ""}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            setParams((prev) => {
-                                              const copy = [...prev];
-                                              copy[i] = val;
-                                              return copy;
-                                            });
-                                          }}
-                                          className="flex-1 bg-carbon/5 border border-carbon/15 rounded-md px-2.5 py-1 text-xs text-carbon outline-none focus:border-sauce focus:bg-white transition"
-                                        />
+                              <div className="flex-1 min-h-0 overflow-y-auto scrollbar-sutil">
+                                {gruposPlantillas.length === 0 ? (
+                                  <p className="text-center py-6 text-xs text-carbon/40">Sin resultados para esa búsqueda.</p>
+                                ) : (
+                                  gruposPlantillas.map((grupo) => (
+                                    <div key={grupo.id}>
+                                      <div className="sticky top-0 z-10 flex items-center gap-1.5 text-[9px] font-bold text-carbon/50 uppercase tracking-wider bg-slate-50/95 backdrop-blur px-3 py-1 border-b border-carbon/5">
+                                        <span>{grupo.icono}</span>
+                                        <span className="truncate">{grupo.label}</span>
                                       </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              
-                              <div className="pt-2 flex justify-end">
-                                <button
-                                  type="button"
-                                  onClick={enviarPlantilla}
-                                  disabled={enviando || (plantilla.parametros > 0 && params.filter(Boolean).length < plantilla.parametros)}
-                                  className="rounded-md bg-sauce hover:bg-verde-profundo text-crema text-xs font-bold px-3 py-1.5 transition disabled:opacity-50 cursor-pointer shadow-xs flex items-center gap-1.5"
-                                >
-                                  <span>⚡</span>
-                                  <span>{enviando ? "Enviando..." : "Enviar Plantilla"}</span>
-                                </button>
+                                      {grupo.plantillas.map((p) => {
+                                        const esSel = p.nombre === plantillaSel;
+                                        return (
+                                          <button
+                                            key={p.nombre}
+                                            type="button"
+                                            onClick={() => seleccionarPlantilla(p.nombre)}
+                                            className={`w-full text-left px-3 py-2 border-b border-carbon/5 border-l-2 transition cursor-pointer ${
+                                              esSel ? "bg-sauce/10 border-l-sauce" : "border-l-transparent hover:bg-carbon/[0.03]"
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-1.5">
+                                              <span className={`flex-1 min-w-0 truncate text-xs font-semibold ${esSel ? "text-verde-profundo" : "text-carbon"}`}>
+                                                {p.nombre.replace(/_/g, " ")}
+                                              </span>
+                                              {p.parametros > 0 && (
+                                                <span className="shrink-0 text-[9px] font-mono text-carbon/40" title={`${p.parametros} variable(s)`}>
+                                                  {`{${p.parametros}}`}
+                                                </span>
+                                              )}
+                                              <span className="shrink-0 text-[9px] uppercase tracking-wide text-carbon/40">
+                                                {p.categoria?.toLowerCase() === "marketing" ? "MKT" : p.categoria?.toLowerCase() === "utility" ? "UTIL" : p.categoria}
+                                              </span>
+                                            </div>
+                                            <p className="mt-0.5 text-[11px] text-carbon/55 truncate">{p.cuerpo?.replace(/\s+/g, " ")}</p>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  ))
+                                )}
                               </div>
                             </div>
-                          )}
-                        </div>
+
+                            {/* Panel derecho: vista previa + variables + enviar */}
+                            <div className={`${plantilla ? "flex" : "hidden md:flex"} flex-col min-h-0 bg-crema/20`}>
+                              {!plantilla ? (
+                                <div className="flex-1 flex flex-col items-center justify-center gap-1 p-6 text-center">
+                                  <span className="text-2xl opacity-40">💬</span>
+                                  <p className="text-xs font-semibold text-carbon/60">Elige una plantilla de la lista</p>
+                                  <p className="text-[11px] text-carbon/40">Verás aquí cómo le llegará al cliente antes de enviarla.</p>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-carbon/10 bg-white">
+                                    <button
+                                      type="button"
+                                      onClick={() => seleccionarPlantilla("")}
+                                      className="md:hidden text-xs text-carbon/60 hover:text-carbon px-1 cursor-pointer"
+                                      title="Volver a la lista"
+                                    >
+                                      ←
+                                    </button>
+                                    <span className="flex-1 min-w-0 truncate font-mono text-[11px] font-semibold text-carbon" title={plantilla.nombre}>
+                                      {plantilla.nombre}
+                                    </span>
+                                    <span className="shrink-0 text-[9px] bg-carbon/5 text-carbon/60 px-1.5 py-0.5 rounded font-mono font-bold">{plantilla.idioma}</span>
+                                    <span className="shrink-0 text-[9px] bg-sauce/10 text-verde-profundo px-1.5 py-0.5 rounded font-bold">{plantilla.categoria}</span>
+                                  </div>
+
+                                  <div className="flex-1 min-h-0 overflow-y-auto scrollbar-sutil p-3 space-y-3">
+                                    {/* Burbuja tal como la verá el cliente */}
+                                    <div className="flex justify-end">
+                                      <div className="max-w-[95%] rounded-2xl rounded-tr-sm bg-sauce text-crema px-3 py-2 text-xs leading-relaxed whitespace-pre-line shadow-2xs">
+                                        {(plantilla.cuerpo || "").split(/(\{\{\d+\}\})/g).map((trozo, i) => {
+                                          const m = trozo.match(/^\{\{(\d+)\}\}$/);
+                                          if (!m) return <span key={i}>{trozo}</span>;
+                                          const valor = params[Number(m[1]) - 1];
+                                          return valor ? (
+                                            <span key={i} className="font-semibold underline decoration-crema/40 underline-offset-2">{valor}</span>
+                                          ) : (
+                                            <span key={i} className="rounded bg-amber-300/90 text-amber-950 px-1 font-mono text-[10px]">{trozo}</span>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+
+                                    {plantilla.parametros > 0 && (
+                                      <div className="space-y-1.5">
+                                        <p className="text-[10px] font-bold text-carbon/50 uppercase tracking-wider">Completa las variables</p>
+                                        {Array.from({ length: plantilla.parametros }).map((_, i) => (
+                                          <label key={i} className="flex items-center gap-2">
+                                            <span className="text-[10px] font-mono text-carbon/50 font-bold shrink-0 w-9">{`{{${i + 1}}}`}</span>
+                                            <input
+                                              type="text"
+                                              placeholder={
+                                                i === 0
+                                                  ? `Nombre del cliente (ej. ${detalle?.nombre?.split(" ")[0] || "Angel"})`
+                                                  : i === 1
+                                                  ? "Servicio / Detalle"
+                                                  : `Valor para variable ${i + 1}`
+                                              }
+                                              value={params[i] || ""}
+                                              onChange={(e) => {
+                                                const val = e.target.value;
+                                                setParams((prev) => {
+                                                  const copy = [...prev];
+                                                  copy[i] = val;
+                                                  return copy;
+                                                });
+                                              }}
+                                              className={`flex-1 min-w-0 bg-white border rounded-md px-2.5 py-1 text-xs text-carbon outline-none focus:border-sauce transition ${
+                                                params[i] ? "border-carbon/15" : "border-amber-400"
+                                              }`}
+                                            />
+                                          </label>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 border-t border-carbon/10 bg-white">
+                                    <span className="text-[10px] text-carbon/45">
+                                      {plantilla.parametros > 0 && params.filter(Boolean).length < plantilla.parametros
+                                        ? `Faltan ${plantilla.parametros - params.filter(Boolean).length} variable(s)`
+                                        : "Lista para enviar"}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={enviarPlantilla}
+                                      disabled={enviando || (plantilla.parametros > 0 && params.filter(Boolean).length < plantilla.parametros)}
+                                      className="rounded-md bg-sauce hover:bg-verde-profundo text-crema text-xs font-bold px-4 py-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-xs flex items-center gap-1.5"
+                                    >
+                                      <span>➤</span>
+                                      <span>{enviando ? "Enviando..." : "Enviar plantilla"}</span>
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )
                       )}
                     </div>
                   )}
@@ -2867,7 +3011,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
 
                   {/* Fila de controles superiores (Atajos e información & Respuestas Rápidas) */}
                   <div className="flex flex-wrap items-center justify-between gap-y-1.5 text-[11px] text-carbon/40 px-1">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className={`flex flex-wrap items-center gap-2 ${ventanaCerradaWA ? "hidden" : ""}`}>
                       <span>Escribe <strong className="text-sauce">#</strong> para respuestas rápidas</span>
                       {asesores.length > 0 && (
                         <div className="inline-flex items-center gap-1 bg-carbon/5 px-2 py-0.5 rounded border border-carbon/10 text-[10px]">
@@ -2930,24 +3074,60 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       {/* Volver a invocar a Sofía */}
                       <button
                         type="button"
-                        onClick={() => void pedirRespuestaSofia(detalle.telefono)}
+                        onClick={() => pedirRespuestaSofia(detalle.telefono)}
                         disabled={invocandoSofia || alternandoIA || enviando}
-                        title="Sofía lee la conversación y le responde al cliente ahora (y queda encendida)."
-                        className="flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer disabled:opacity-50 bg-violet-100 hover:bg-violet-200 text-violet-900 border-violet-400"
+                        title="Sofía lee la conversación y te propone una respuesta; tú decides si la mandas."
+                        className={`${ventanaCerradaWA ? "hidden" : "flex"} items-center gap-1 rounded border px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer disabled:opacity-50 bg-violet-100 hover:bg-violet-200 text-violet-900 border-violet-400`}
                       >
                         {invocandoSofia ? "⏳ Sofía escribiendo…" : "✨ Que responda Sofía"}
                       </button>
 
-                      {/* Botón Calculadora Rápida de Impermeabilización */}
-                      <button
-                        type="button"
-                        onClick={() => setMostrarCalculadora(true)}
-                        title="Calcular costos y generar comparativa de impermeabilización (Acrílico, Estándar, Premium)"
-                        className="flex items-center gap-1 rounded bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
-                      >
-                        <span>🧮</span>
-                        <span>Cotizador Impermeabilización</span>
-                      </button>
+                      {/* Cotizador unificado: express (producto del catálogo) o comparativa de impermeabilización */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setMenuCotizador((v) => !v)}
+                          title="Generar una cotización rápida en imagen para enviar al chat"
+                          className="flex items-center gap-1 rounded bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
+                        >
+                          <span>🧮</span>
+                          <span>Cotizador</span>
+                          <span className="text-[9px]">▾</span>
+                        </button>
+                        {menuCotizador && (
+                          <>
+                            <div className="fixed inset-0 z-30" onClick={() => setMenuCotizador(false)} />
+                            <div className="absolute bottom-full left-0 mb-1 z-40 w-64 rounded-lg border border-carbon/15 bg-white shadow-lg p-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMenuCotizador(false);
+                                  setMostrarCotizacionExpress(true);
+                                }}
+                                className="w-full text-left px-2.5 py-2 rounded hover:bg-amber-50 cursor-pointer"
+                              >
+                                <span className="block text-xs font-bold text-carbon">⚡ Cotización Express</span>
+                                <span className="block text-[10px] text-carbon/60">
+                                  Un producto del catálogo con su precio y descripción, en imagen
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMenuCotizador(false);
+                                  setMostrarCalculadora(true);
+                                }}
+                                className="w-full text-left px-2.5 py-2 rounded hover:bg-amber-50 cursor-pointer"
+                              >
+                                <span className="block text-xs font-bold text-carbon">🏠 Impermeabilización</span>
+                                <span className="block text-[10px] text-carbon/60">
+                                  Comparativa por m²: Acrílico, Estándar y Premium
+                                </span>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
                       {/* Botón: Coordinar inspección con 2 asesores (Cabina de Coordinación) */}
                       {detalle?.prospectoId && (
                         <button
@@ -2960,11 +3140,35 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           <span>Coordinar Inspección</span>
                         </button>
                       )}
-                      {/* Pasar el lead a un asesor por Telegram (con vista previa y acuse) */}
+                      {/* Botón: Coordinar servicio/instalación con un proveedor (Sofía redacta el WhatsApp) */}
+                      {detalle?.telefono && (
+                        <button
+                          type="button"
+                          onClick={() => setMostrarServicioProveedor(true)}
+                          title="Sofía redacta el WhatsApp para el proveedor (p. ej. el plomero) con el trabajo, la fecha que pide el cliente y la dirección"
+                          className="flex items-center gap-1 rounded bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
+                        >
+                          <span>🔧</span>
+                          <span>Coordinar Servicio</span>
+                        </button>
+                      )}
+                      {/* Botón: Rescate Móvil (Estrategia de Doble Línea / Evolution API) */}
+                      {detalle?.telefono && canalDe(detalle.telefono) === "whatsapp" && (
+                        <button
+                          type="button"
+                          onClick={() => setMostrarRescateMovil(true)}
+                          title="Generar mensaje de rescate móvil desde la línea secundaria con enlace puente wa.me [EXP-XXX]"
+                          className="flex items-center gap-1 rounded bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
+                        >
+                          <span>📲</span>
+                          <span>Rescate Móvil</span>
+                        </button>
+                      )}
+                      {/* Pasar el lead a un asesor por WhatsApp o Telegram (con vista previa) */}
                       <button
                         type="button"
                         onClick={() => setMostrarPasarLead(true)}
-                        title="Asignar el lead a un asesor y enviarle por Telegram la ficha, el resumen, la conversación y las fotos"
+                        title="Asignar el lead a un asesor y enviarle la ficha y el resumen por tu WhatsApp o por Telegram"
                         className="flex items-center gap-1 rounded bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
                       >
                         <span>📨</span>
@@ -3005,6 +3209,8 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           )}
                         </span>
                       )}
+                      {!ventanaCerradaWA && (
+                      <>
                       {detalle?.prospectoId && (
                         <button
                           type="button"
@@ -3069,11 +3275,13 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       >
                         ⚡ Respuestas Rápidas
                       </button>
+                      </>
+                      )}
                     </div>
                   </div>
 
-                  {/* Caja de Texto + Botón de Enviar */}
-                  <div className="flex items-end gap-2">
+                  {/* Caja de Texto + Botón de Enviar (oculta si solo se puede enviar plantilla) */}
+                  <div className={`${ventanaCerradaWA ? "hidden" : "flex"} items-end gap-2`}>
                     <textarea
                       ref={textareaRef}
                       value={texto}
@@ -3155,6 +3363,77 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         </>
                       )}
                     </div>
+                    {/* Botón videos del catálogo (solo WhatsApp: se envían por link) */}
+                    {canalDe(detalle.telefono) === "whatsapp" && (
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => void abrirVideosCatalogo()}
+                        disabled={!!enviandoVideoUrl || !detalle.ventanaAbierta}
+                        title="Enviar videos de trabajos realizados del catálogo"
+                        className="flex h-[42px] w-[42px] items-center justify-center rounded-md border border-carbon/20 bg-white text-lg hover:bg-sauce/10 hover:border-sauce/40 transition disabled:opacity-50"
+                      >
+                        {enviandoVideoUrl ? <span className="text-sm animate-pulse">⏳</span> : "🎬"}
+                      </button>
+                      {mostrarVideosCatalogo && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40 bg-black/30 sm:hidden"
+                            onClick={() => setMostrarVideosCatalogo(false)}
+                          />
+                          <div className="fixed inset-x-3 bottom-20 sm:inset-auto sm:absolute sm:right-0 sm:bottom-full sm:mb-2 z-50 max-h-[75vh] sm:max-h-[420px] sm:w-80 overflow-y-auto rounded-xl border border-carbon/15 bg-white shadow-xl">
+                            <div className="sticky top-0 bg-white border-b border-carbon/10 px-3 py-2 flex items-center justify-between z-10">
+                              <span className="text-xs font-bold text-verde-profundo flex items-center gap-1">🎬 Videos del catálogo</span>
+                              <button
+                                type="button"
+                                onClick={() => setMostrarVideosCatalogo(false)}
+                                className="text-carbon/40 hover:text-carbon text-sm p-1 rounded hover:bg-carbon/5 transition cursor-pointer"
+                              >✕</button>
+                            </div>
+                            <div className="p-3 space-y-3">
+                              {videosCatalogo === null ? (
+                                <p className="text-xs text-carbon/50 text-center py-4 animate-pulse">Cargando videos…</p>
+                              ) : videosCatalogo.length === 0 ? (
+                                <p className="text-xs text-carbon/60 text-center py-4 leading-relaxed">
+                                  Aún no hay videos en el catálogo. Súbelos desde Productos y Servicios.
+                                </p>
+                              ) : (
+                                videosCatalogo.map((p) => (
+                                  <div key={p.id} className="space-y-1.5">
+                                    <p className="text-[10px] uppercase font-bold text-carbon/50 tracking-wider">{p.nombre}</p>
+                                    {p.videos.map((v) => (
+                                      <div key={v.url} className="flex items-center gap-2 rounded-lg border border-carbon/10 p-2 hover:bg-sauce/10 hover:border-sauce/40 transition">
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleEnviarVideoCatalogo(p.id, v.url)}
+                                          disabled={!!enviandoVideoUrl}
+                                          title="Enviar este video al cliente"
+                                          className="min-w-0 flex-1 flex items-center gap-2 text-left disabled:opacity-50 cursor-pointer"
+                                        >
+                                          <span className="text-lg shrink-0">{enviandoVideoUrl === v.url ? "⏳" : "▶️"}</span>
+                                          <span className="min-w-0 flex-1">
+                                            <span className="block text-xs font-semibold text-verde-profundo truncate">{v.titulo || p.nombre}</span>
+                                            {v.descripcion && <span className="block text-[10px] text-carbon/60 truncate">{v.descripcion}</span>}
+                                          </span>
+                                        </button>
+                                        <a
+                                          href={v.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="shrink-0 text-[10px] text-carbon/50 hover:text-sauce underline"
+                                          title="Ver el video antes de enviarlo"
+                                        >Ver</a>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    )}
                     {/* Botón enviar sticker */}
                     <div className="relative shrink-0">
                       <button
@@ -3215,7 +3494,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     </div>
                     <button
                       type="button"
-                      onClick={enviarTexto}
+                      onClick={() => void enviarTexto()}
                       disabled={enviando || !texto.trim() || (!detalle.ventanaAbierta && canalDe(detalle.telefono) === "whatsapp")}
                       className="shrink-0 rounded-md bg-sauce px-4 py-2.5 text-sm font-medium text-crema transition hover:bg-verde-profundo disabled:opacity-50"
                     >
@@ -3236,6 +3515,11 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
           prospectoId={detalle.prospectoId}
           alCerrar={() => setMostrarCoordinacion(false)}
         />
+      )}
+
+      {/* Modal: coordinar servicio/instalación con un proveedor (desde el chat) */}
+      {mostrarServicioProveedor && detalle?.telefono && (
+        <ModalCoordinarServicioProveedor telefono={detalle.telefono} onCerrar={() => setMostrarServicioProveedor(false)} />
       )}
 
       {/* Modal: pasar el lead a un asesor por Telegram */}
@@ -3268,6 +3552,20 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         }}
       />
 
+      {/* Modal de Cotización Express (producto del catálogo) */}
+      <ModalCotizacionExpress
+        abierto={mostrarCotizacionExpress}
+        onCerrar={() => setMostrarCotizacionExpress(false)}
+        nombreCliente={detalle?.nombre || "Cliente"}
+        tipoNegocio={detalle?.tipoNegocio}
+        telefono={detalle?.telefono}
+        onEnviarImagenDirecta={handleEnviarArchivoDirecto}
+        onInsertarTexto={(textoCotizacion) => {
+          setTexto((prev) => (prev.trim() ? `${prev}\n\n${textoCotizacion}` : textoCotizacion));
+          textareaRef.current?.focus();
+        }}
+      />
+
       {/* Modal de Catálogo Visual de Plantillas de WhatsApp */}
       <ModalCatalogoPlantillas
         abierto={modalCatalogoAbierto}
@@ -3278,6 +3576,38 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         tipoNegocio={detalle?.tipoNegocio}
         nombreCliente={detalle?.nombre}
       />
+
+      {/* Modal de Rescate Móvil (Doble Línea / Evolution API) */}
+      {mostrarRescateMovil && detalle && (
+        <ModalRescateMovil
+          abierto={mostrarRescateMovil}
+          onCerrar={() => setMostrarRescateMovil(false)}
+          telefono={detalle.telefono}
+          clienteNombre={detalle.nombre}
+          expedienteId={detalle.expedienteId || undefined}
+          prospectoId={detalle.prospectoId || undefined}
+          tipoNegocio={detalle.tipoNegocio}
+          proyecto={detalle.tipoNegocio ? labelTipoNegocio(detalle.tipoNegocio as any) : "Remodelación"}
+          onEnviado={() => refrescar(detalle.telefono)}
+        />
+      )}
+
+      {borradorSofiaTel && (
+        <ModalBorradorSofia
+          telefono={borradorSofiaTel}
+          onEnviar={(t) => enviarTexto(t)}
+          onUsarEnCaja={(t) => {
+            setTexto(t);
+            setBorradorSofiaTel(null);
+          }}
+          onSofiaSola={(ind) => {
+            const tel = borradorSofiaTel;
+            setBorradorSofiaTel(null);
+            void sofiaRespondeSola(tel, ind);
+          }}
+          onCerrar={() => setBorradorSofiaTel(null)}
+        />
+      )}
 
       {/* Modal / Bottom Sheet de Catálogo de Respuestas Rápidas */}
       {mostrarDropdownMenu && (

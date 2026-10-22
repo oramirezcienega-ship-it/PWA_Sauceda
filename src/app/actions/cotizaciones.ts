@@ -1,5 +1,6 @@
 "use server";
 
+import { nombreCompletoDe } from "@/lib/supabase/mapeo";
 import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
@@ -72,7 +73,16 @@ export async function crearCotizacion(datos: {
   if (errLista) throw new Error(errLista.message);
   const id = siguienteId((existentes ?? []).map((r) => r.id as string));
 
-  const estatus: CotizacionEstatus = requiereVisita ? "esperando_visita" : "calculando_costo";
+  // Si la inspección técnica ya fue completada/realizada, no debe quedar en 'esperando_visita'
+  let citaCompletadaPrevia = false;
+  if (datos.citaId) {
+    const { data: cData } = await sb.from("agenda_citas").select("estado").eq("id", datos.citaId).maybeSingle();
+    if (cData && (cData.estado === "completada" || cData.estado === "realizada")) {
+      citaCompletadaPrevia = true;
+    }
+  }
+
+  const estatus: CotizacionEstatus = (requiereVisita && !citaCompletadaPrevia) ? "esperando_visita" : "calculando_costo";
 
   let resolvedExpedienteId = datos.expedienteId || null;
   if (!resolvedExpedienteId && datos.prospectoId) {
@@ -100,10 +110,27 @@ export async function crearCotizacion(datos: {
       cita_id: citaId,
       notas_internas: datos.notasInternas || ""
     })
-    .select("*, prospectos(nombre, telefono)")
+    .select("*, prospectos(nombre, primer_apellido, segundo_apellido, telefono)")
     .single();
 
   if (error) throw new Error(error.message);
+
+  // Si la cita de inspección ya estaba completada, auto-generar y vincular el reporte de visita técnica
+  if (citaId && citaCompletadaPrevia) {
+    try {
+      const { sincronizarInspeccionConCotizaciones } = await import("@/lib/inspeccion-cotizacion");
+      await sincronizarInspeccionConCotizaciones(sb, {
+        citaId,
+        cotizacionId: id,
+        prospectoId: datos.prospectoId,
+        expedienteId: resolvedExpedienteId,
+        perfilId: inspectorId,
+        soloProgramar: false,
+      });
+    } catch (errSync) {
+      console.warn("Aviso al vincular inspección completada en nueva cotización:", errSync);
+    }
+  }
 
   await registrarActividad(sb, {
     prospectoId: datos.prospectoId,
@@ -273,6 +300,26 @@ export async function obtenerCotizacionPorId(
   if (errRep) throw new Error(errRep.message);
 
   const cotizacion = aCotizacion(filaCot);
+
+  // Si no tiene reporte técnico registrado pero ya se realizó la inspección o está en etapa avanzada, auto-vincularlo
+  let filaReporteFinal = filaReporte;
+  if (!filaReporteFinal) {
+    try {
+      const { asegurarReporteVisitaParaCotizacion } = await import("@/lib/inspeccion-cotizacion");
+      filaReporteFinal = await asegurarReporteVisitaParaCotizacion(sb, {
+        id: cotizacion.id,
+        prospectoId: cotizacion.prospectoId,
+        expedienteId: cotizacion.expedienteId,
+        fechaVisita: cotizacion.fechaVisita,
+        inspectorId: cotizacion.inspectorId,
+        inspectorNombre: cotizacion.inspectorNombre,
+        estatus: cotizacion.estatus,
+      });
+    } catch (errAutoRep) {
+      console.warn("Aviso al auto-vincular reporte de visita técnica:", errAutoRep);
+    }
+  }
+
   const conceptos = (filasConceptos ?? []).map(aCotizacionConcepto);
   const totalConceptos = conceptos.reduce((sum, c) => sum + Number(c.importe || 0), 0);
   if (totalConceptos > 0 && cotizacion.precioFinal !== totalConceptos) {
@@ -282,7 +329,7 @@ export async function obtenerCotizacionPorId(
   return {
     cotizacion,
     conceptos,
-    reporteVisita: filaReporte ? aVisitaReporte(filaReporte) : null
+    reporteVisita: filaReporteFinal ? aVisitaReporte(filaReporteFinal) : null
   };
 }
 
@@ -398,6 +445,24 @@ export async function obtenerCotizacionPorToken(
 
   if (errRep) throw new Error(errRep.message);
 
+  let filaReporteFinal = filaReporte;
+  if (!filaReporteFinal) {
+    try {
+      const { asegurarReporteVisitaParaCotizacion } = await import("@/lib/inspeccion-cotizacion");
+      filaReporteFinal = await asegurarReporteVisitaParaCotizacion(sb, {
+        id: cot.id,
+        prospectoId: cot.prospectoId,
+        expedienteId: (cot as any).expedienteId,
+        fechaVisita: cot.fechaVisita,
+        inspectorId: cot.inspectorId,
+        inspectorNombre: cot.inspectorNombre,
+        estatus: cot.estatus,
+      });
+    } catch (errAutoRep) {
+      console.warn("Aviso al auto-vincular reporte en obtenerCotizacionPorToken:", errAutoRep);
+    }
+  }
+
   const conceptos = (filasConceptos ?? []).map(f => ({
     id: f.id,
     cotizacionId: f.cotizacion_id,
@@ -463,16 +528,16 @@ export async function obtenerCotizacionPorToken(
     conceptos,
     partidas,
     espacios,
-    reporteVisita: filaReporte ? {
-      id: filaReporte.id,
-      cotizacionId: filaReporte.cotizacion_id,
-      inspectorNombre: (filaReporte as any).perfiles?.nombre || "",
-      fechaInspeccion: filaReporte.fecha_inspeccion,
-      observacionesTecnicas: filaReporte.observaciones_tecnicas || "",
-      condicionesSitio: filaReporte.condiciones_sitio || "",
-      medidas: filaReporte.medidas || {},
-      fotos: filaReporte.fotos || [],
-      createdAt: filaReporte.created_at
+    reporteVisita: filaReporteFinal ? {
+      id: filaReporteFinal.id,
+      cotizacionId: filaReporteFinal.cotizacion_id,
+      inspectorNombre: (filaReporteFinal as any).perfiles?.nombre || "",
+      fechaInspeccion: filaReporteFinal.fecha_inspeccion,
+      observacionesTecnicas: filaReporteFinal.observaciones_tecnicas || "",
+      condicionesSitio: filaReporteFinal.condiciones_sitio || "",
+      medidas: filaReporteFinal.medidas || {},
+      fotos: filaReporteFinal.fotos || [],
+      createdAt: filaReporteFinal.created_at
     } : null
   };
 }
@@ -487,7 +552,7 @@ export async function obtenerReporteVisitaPorToken(
     .from("cotizaciones")
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre)
     `)
     .eq("token", token)
@@ -504,6 +569,24 @@ export async function obtenerReporteVisitaPorToken(
     .maybeSingle();
 
   if (errRep) throw new Error(errRep.message);
+
+  let filaReporteFinal = filaReporte;
+  if (!filaReporteFinal) {
+    try {
+      const { asegurarReporteVisitaParaCotizacion } = await import("@/lib/inspeccion-cotizacion");
+      filaReporteFinal = await asegurarReporteVisitaParaCotizacion(sb, {
+        id: cot.id,
+        prospectoId: cot.prospectoId,
+        expedienteId: cot.expedienteId,
+        fechaVisita: cot.fechaVisita,
+        inspectorId: cot.inspectorId,
+        inspectorNombre: cot.inspectorNombre,
+        estatus: cot.estatus,
+      });
+    } catch (errAutoRep) {
+      console.warn("Aviso al auto-vincular reporte en obtenerReporteVisitaPorToken:", errAutoRep);
+    }
+  }
 
   return {
     cotizacion: {
@@ -528,7 +611,7 @@ export async function obtenerReporteVisitaPorToken(
       createdAt: cot.createdAt,
       updatedAt: cot.updatedAt
     },
-    reporteVisita: filaReporte ? aVisitaReporte(filaReporte) : null
+    reporteVisita: filaReporteFinal ? aVisitaReporte(filaReporteFinal) : null
   };
 }
 
@@ -707,7 +790,7 @@ export async function actualizarRequerimientoVisita(
     .eq("id", cotizacionId)
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -724,6 +807,21 @@ export async function actualizarRequerimientoVisita(
     titulo: `Requerimiento de visita actualizado (${cotizacionId})`,
     detalle: `Cambio: requiere visita = ${requiereVisita}. Estatus pasa a: ${nuevoEstatus}.`
   });
+
+  if (requiereVisita && fechaVisita) {
+    try {
+      const { sincronizarInspeccionConCotizaciones } = await import("@/lib/inspeccion-cotizacion");
+      await sincronizarInspeccionConCotizaciones(sb, {
+        cotizacionId,
+        prospectoId: cot.prospecto_id,
+        fecha: fechaVisita,
+        perfilId: inspectorId,
+        soloProgramar: true,
+      });
+    } catch (errSync) {
+      console.warn("Aviso al sincronizar cita desde requerimiento de visita:", errSync);
+    }
+  }
 
   return aCotizacion(data);
 }
@@ -944,7 +1042,7 @@ export async function aprobarCotizacionComercial(
     .eq("id", id)
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -1005,7 +1103,7 @@ export async function aprobarCotizacionOperativa(
     .eq("id", id)
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -1056,7 +1154,7 @@ export async function marcarComoEnviada(id: string): Promise<Cotizacion> {
     .eq("id", id)
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -1219,12 +1317,12 @@ export async function aceptarCotizacionCliente(
       if (resOT.ok && resOT.id) {
         const { data: prospecto } = await sb
           .from("prospectos")
-          .select("nombre, telefono, correo, direccion, fraccionamiento")
+          .select("nombre, primer_apellido, segundo_apellido, telefono, correo, direccion, fraccionamiento")
           .eq("id", cot.prospecto_id)
           .maybeSingle();
 
         await inicializarPartesOTInfonavit(resOT.id, {
-          compradorNombre: firmaNombre || prospecto?.nombre || "Comprador",
+          compradorNombre: firmaNombre || nombreCompletoDe(prospecto) || "Comprador",
           compradorTelefono: prospecto?.telefono || "",
           compradorEmail: prospecto?.correo || undefined,
           vendedorNombre: "Propietario / Vendedor",
@@ -1473,7 +1571,7 @@ export async function obtenerCotizacionesDeExpediente(
     .from("cotizaciones")
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -1500,7 +1598,7 @@ export async function obtenerCotizacionesDeProspecto(
     .from("cotizaciones")
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -1713,7 +1811,7 @@ export async function guardarCondicionesCotizacion(
     .eq("id", id)
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -2006,7 +2104,7 @@ export async function prepararGarantiaPorDefecto(
     .select(`
       *,
       prospectos (
-        nombre,
+        nombre, primer_apellido, segundo_apellido,
         telefono
       )
     `)
@@ -2022,7 +2120,7 @@ export async function prepararGarantiaPorDefecto(
     .maybeSingle();
 
   // 2. Definir fecha y domicilio
-  const nombreCliente = cot.prospectos?.nombre || "Cliente Sin Nombre";
+  const nombreCliente = nombreCompletoDe(cot.prospectos) || "Cliente Sin Nombre";
   const domicilioCompleto = remision?.datos_documento?.direccionEntrega || "Domicilio en Sitio";
   
   const ahora = new Date();
@@ -2204,7 +2302,7 @@ export async function obtenerGarantiaPorToken(
     .select(`
       *,
       prospectos (
-        nombre,
+        nombre, primer_apellido, segundo_apellido,
         telefono
       )
     `)
@@ -2226,7 +2324,7 @@ export async function obtenerGarantiaPorToken(
       id: cot.id,
       prospectoId: cot.prospecto_id,
       expedienteId: cot.expediente_id,
-      prospectoNombre: cot.prospectos?.nombre || "",
+      prospectoNombre: nombreCompletoDe(cot.prospectos) || "",
       prospectoTelefono: cot.prospectos?.telefono || "",
       servicioTipo: cot.servicio_tipo,
       estatus: cot.estatus,
@@ -2268,7 +2366,7 @@ export async function obtenerRemisionPorToken(
     .select(`
       *,
       prospectos (
-        nombre,
+        nombre, primer_apellido, segundo_apellido,
         telefono
       )
     `)
@@ -2318,7 +2416,7 @@ export async function obtenerRemisionPorToken(
       id: cot.id,
       prospectoId: cot.prospecto_id,
       expedienteId: cot.expediente_id,
-      prospectoNombre: cot.prospectos?.nombre || "",
+      prospectoNombre: nombreCompletoDe(cot.prospectos) || "",
       prospectoTelefono: cot.prospectos?.telefono || "",
       servicioTipo: cot.servicio_tipo,
       estatus: cot.estatus,

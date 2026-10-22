@@ -9,12 +9,14 @@ import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { variantesTelefono, normalizarTelefono } from "@/lib/telefono";
 import { diagnosticoIA } from "@/lib/ia/agente";
-import { esConversacionPausada, setConversacionPausada } from "@/lib/ia/control-pausa";
+import { cargarProductosConVideos, enviarUnVideoCatalogo, type ProductoConVideos } from "@/lib/ia/videos-catalogo";
+import { esConversacionPausada, esPausaAutomatica, setConversacionPausada } from "@/lib/ia/control-pausa";
 import type {
   ConversacionDetalle,
   ConversacionResumen,
   MensajeChat,
 } from "@/lib/types";
+import { modeloClaude, opcionesClaude, textoDeRespuesta } from "@/lib/ia/claude";
 
 /** Devuelve true si el identificador es un canal de red social (no es teléfono). */
 function esCanalSocial(telefono: string): boolean {
@@ -146,6 +148,19 @@ async function duenosPorTelefonos(
 }
 
 /** Lista las conversaciones (una por teléfono, con su último mensaje). */
+/** Últimos 10 dígitos de los WhatsApp de proveedores: sus chats van en la pestaña Proveedores. */
+async function telefonosProveedores(sb: ReturnType<typeof supabaseServidor>): Promise<Set<string>> {
+  const { data } = await sb.from("proveedores").select("whatsapp, telefono");
+  const set = new Set<string>();
+  for (const p of data || []) {
+    for (const t of [(p as any).whatsapp, (p as any).telefono]) {
+      const d = String(t || "").replace(/\D/g, "").slice(-10);
+      if (d.length === 10) set.add(d);
+    }
+  }
+  return set;
+}
+
 export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   // Una sola validación de sesión (getUser es una llamada de red a Supabase Auth).
   const usuario = await usuarioActual();
@@ -153,13 +168,15 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   const sb = supabaseServidor();
 
   // Rol y mensajes en paralelo; solo las columnas que usa la bandeja.
-  const [{ rol }, { data, error }] = await Promise.all([
+  const [{ rol }, { data, error }, telProveedores] = await Promise.all([
     rolDe(usuario.id),
     sb
       .from("mensajes_whatsapp")
       .select("expediente_id, prospecto_id, telefono, direccion, texto, agente, created_at, finalizado")
+      .is("proveedor_id", null)
       .order("created_at", { ascending: false })
       .limit(1000),
+    telefonosProveedores(sb),
   ]);
   if (error) throw new Error(error.message);
   let filas = (data as FilaMsg[]) ?? [];
@@ -277,6 +294,7 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
 
   const resumenes: ConversacionResumen[] = [];
   porTel.forEach((arr, telefono) => {
+    if (telProveedores.has(telefono)) return;
     const conExp = arr.find((f) => f.expediente_id);
     const conPros = arr.find((f) => f.prospecto_id);
     const expId = conExp?.expediente_id ?? null;
@@ -407,6 +425,7 @@ export async function obtenerConversacion(
     .from("mensajes_whatsapp")
     .select("*")
     .in("telefono", variantesId(telefono))
+    .is("proveedor_id", null)
     .order("created_at", { ascending: true })
     .limit(500);
   if (error) throw new Error(error.message);
@@ -658,24 +677,48 @@ export async function actualizarTipoNegocioConversacion(
     const sb = supabaseServidor();
     const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
 
-    if (prospectoId) {
-      await sb
-        .from("prospectos")
-        .update({ tipo_negocio: tipoNegocio })
-        .eq("id", prospectoId);
-    }
+    // Antes los errores se ignoraban: si la BD rechazaba el valor (check de tipo_negocio)
+    // el asesor veía "ok" pero la clasificación no cambiaba.
+    // La clasificación vive en `expedientes`; `prospectos.tipo_negocio` sólo existe
+    // a partir de la migración 0161, así que su ausencia no es error si ya se guardó
+    // en algún expediente.
+    const sinColumna = (e: { code?: string; message?: string }) =>
+      e.code === "PGRST204" || /tipo_negocio/.test(e.message ?? "");
+    let guardadoEnExpediente = false;
+
     if (expedienteId) {
-      await sb
+      const { error } = await sb
         .from("expedientes")
         .update({ tipo_negocio: tipoNegocio })
         .eq("id", expedienteId);
+      if (error) return { ok: false, error: `No se pudo cambiar el tipo del expediente: ${error.message}` };
+      guardadoEnExpediente = true;
+    }
+    if (prospectoId) {
+      // Expedientes del prospecto (p. ej. el chat quedó ligado sólo al prospecto).
+      const { data: exps, error: errExp } = await sb
+        .from("expedientes")
+        .update({ tipo_negocio: tipoNegocio })
+        .eq("prospecto_id", prospectoId)
+        .select("id");
+      if (errExp) return { ok: false, error: `No se pudo cambiar el tipo del expediente: ${errExp.message}` };
+      if (exps && exps.length > 0) guardadoEnExpediente = true;
+
+      const { error } = await sb
+        .from("prospectos")
+        .update({ tipo_negocio: tipoNegocio })
+        .eq("id", prospectoId);
+      if (error && !(guardadoEnExpediente && sinColumna(error))) {
+        return { ok: false, error: `No se pudo cambiar el tipo del prospecto: ${error.message}` };
+      }
     }
     if (!prospectoId && !expedienteId) {
       const v = variantesId(telefono);
-      await sb
+      const { error } = await sb
         .from("prospectos")
         .update({ tipo_negocio: tipoNegocio })
         .in("telefono", v);
+      if (error) return { ok: false, error: `No se pudo cambiar el tipo: ${error.message}` };
     }
     return { ok: true };
   } catch (err: any) {
@@ -817,7 +860,12 @@ export async function responderConversacion(
     if (r.ok) {
       // Cuando el asesor humano responde manualmente, pausar temporalmente a Sofía
       // para evitar que se cruce mientras el asesor atiende la conversación en vivo
-      await setConversacionPausada(sb, telefono, true, expedienteId, prospectoId);
+      // Si ya estaba pausada a mano, se respeta (no se vuelve automática).
+      const yaPausada = await esConversacionPausada(sb, telefono, expedienteId);
+      const manual = yaPausada && !(await esPausaAutomatica(sb, telefono));
+      if (!manual) {
+        await setConversacionPausada(sb, telefono, true, expedienteId, prospectoId, true);
+      }
 
       // Si se envía con un asesor humano específico, sincronizar también el prospecto/expediente
       if (agente && agente !== "IA") {
@@ -1043,6 +1091,27 @@ export async function alternarPausaIA(
   }
 }
 
+/**
+ * El asesor salió de la conversación (cambió de chat o cerró el panel).
+ * Si Sofía estaba pausada solo porque el asesor escribió, se reactiva sola.
+ * Las pausas puestas con el botón se respetan.
+ */
+export async function reanudarSofiaAlSalir(
+  telefono: string,
+): Promise<{ ok: boolean; reactivada: boolean }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    if (!(await esPausaAutomatica(sb, telefono))) return { ok: true, reactivada: false };
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+    await setConversacionPausada(sb, telefono, false, expedienteId, prospectoId);
+    await asignarAgente(telefono, "IA");
+    return { ok: true, reactivada: true };
+  } catch (err) {
+    console.error("Error al reactivar a Sofía al salir del chat:", err);
+    return { ok: false, reactivada: false };
+  }
+}
 
 /**
  * Botón "Que responda Sofía": el asesor vuelve a invocar a Sofía en cualquier
@@ -1087,6 +1156,36 @@ export async function invocarSofia(
   } catch (err: any) {
     console.error("Error al invocar a Sofía:", err);
     return { ok: false, error: err?.message || "No se pudo invocar a Sofía." };
+  }
+}
+
+/**
+ * Sofía propone una respuesta sin enviarla: el asesor la revisa, la edita y
+ * decide si la manda. No cambia la pausa ni el expediente.
+ */
+export async function borradorSofia(
+  telefono: string,
+  indicacion?: string | null,
+): Promise<{ ok: boolean; texto?: string; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { expedienteId } = await idsDeTelefono(sb, telefono);
+    const { responderConIA } = await import("@/lib/ia/agente");
+    const texto = await responderConIA(sb, {
+      telefono,
+      expedienteId,
+      forzar: true,
+      indicacion,
+      soloBorrador: true,
+    });
+    if (!texto) {
+      return { ok: false, error: "Sofía no generó propuesta (¿IA desactivada o conversación vacía?)." };
+    }
+    return { ok: true, texto };
+  } catch (err: any) {
+    console.error("Error al generar borrador de Sofía:", err);
+    return { ok: false, error: err?.message || "No se pudo generar la propuesta de Sofía." };
   }
 }
 
@@ -1263,11 +1362,15 @@ export async function contarConversacionesPendientes(): Promise<number> {
     const u = await usuarioActual();
     if (!u) return 0;
     const sb = supabaseServidor();
-    const { data } = await sb
-      .from("mensajes_whatsapp")
-      .select("telefono, direccion, finalizado, created_at")
-      .order("created_at", { ascending: false })
-      .limit(2000);
+    const [{ data }, telProveedores] = await Promise.all([
+      sb
+        .from("mensajes_whatsapp")
+        .select("telefono, direccion, finalizado, created_at")
+        .is("proveedor_id", null)
+        .order("created_at", { ascending: false })
+        .limit(2000),
+      telefonosProveedores(sb),
+    ]);
     if (!data) return 0;
     // Agrupar por clave de 10 dígitos (o canal social) para asociar respuestas 'out' con mensajes 'in'
     const porTel = new Map<string, { direccion: string; finalizado: boolean; creado: string; filas: any[] }>();
@@ -1275,7 +1378,7 @@ export async function contarConversacionesPendientes(): Promise<number> {
       const key = esCanalSocial(f.telefono)
         ? f.telefono
         : (f.telefono || "").replace(/\D/g, "").slice(-10);
-      if (!key) continue;
+      if (!key || telProveedores.has(key)) continue;
 
       if (!porTel.has(key)) {
         porTel.set(key, {
@@ -1547,7 +1650,7 @@ REGLAS ESTRICTAS:
       textoFinal = (json.choices?.[0]?.message?.content || "").trim();
     } else if (process.env.ANTHROPIC_API_KEY) {
       const apiKey = process.env.ANTHROPIC_API_KEY;
-      const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+      const model = modeloClaude();
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -1558,8 +1661,7 @@ REGLAS ESTRICTAS:
         },
         body: JSON.stringify({
           model,
-          max_tokens: 1000,
-          temperature: 0.1,
+          ...opcionesClaude(model, { maxTokens: 1000, temperature: 0.1 }),
           messages: [
             {
               role: "user",
@@ -1575,7 +1677,7 @@ REGLAS ESTRICTAS:
       }
 
       const json = await res.json();
-      textoFinal = (json.content?.[0]?.text || "").trim();
+      textoFinal = textoDeRespuesta(json).trim();
     } else {
       return {
         ok: false,
@@ -1598,3 +1700,51 @@ REGLAS ESTRICTAS:
   }
 }
 
+
+/** Productos del catálogo con videos de trabajos realizados, para el selector del chat. */
+export async function listarVideosCatalogoChat(): Promise<ProductoConVideos[]> {
+  await requireAdmin();
+  return cargarProductosConVideos(supabaseServidor(), { soloIA: false }).catch(() => []);
+}
+
+/** El asesor envía un video del catálogo (por link público, sin volver a subirlo). */
+export async function enviarVideoCatalogoConversacion(
+  telefono: string,
+  productoId: string,
+  url: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  if (!telefono) return { ok: false, error: "Falta el teléfono." };
+  if (esCanalSocial(telefono)) return { ok: false, error: "Los videos del catálogo solo se pueden enviar por WhatsApp." };
+
+  const sb = supabaseServidor();
+  try {
+    // Solo se envían videos que de verdad están en el catálogo.
+    const producto = (await cargarProductosConVideos(sb, { soloIA: false })).find((p) => p.id === productoId);
+    const video = producto?.videos.find((v) => v.url === url);
+    if (!producto || !video) return { ok: false, error: "Ese video ya no está en el catálogo." };
+
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+    const agente = await nombreAgenteActual(sb);
+    const r = await enviarUnVideoCatalogo(
+      sb,
+      { canal: telefono, telefono: normalizarTelefono(telefono), expedienteId, prospectoId, agente },
+      { ...video, producto: producto.nombre },
+    );
+    if (!r.ok) return { ok: false, error: r.error ?? "No se pudo enviar el video por WhatsApp." };
+
+    if (expedienteId) {
+      await registrarActividad(sb, {
+        expedienteId,
+        tipo: "mensaje",
+        titulo: "Video del catálogo enviado por WhatsApp",
+        detalle: `Se envió el video "${video.titulo || producto.nombre}" (${producto.nombre}).`,
+      });
+      await avanzarAContactoInicialPorRespuesta(sb, expedienteId, agente);
+    }
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al enviar video del catálogo:", err);
+    return { ok: false, error: err.message || "Error al enviar el video." };
+  }
+}

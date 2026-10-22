@@ -90,6 +90,8 @@ export function FormularioExpediente({
         cliente: datos.cliente.trim(),
         primerApellido: datos.primerApellido.trim(),
         segundoApellido: datos.segundoApellido.trim(),
+        nickname: (datos.nickname || "").trim(),
+        correo: (datos.correo || "").trim(),
         fraccionamiento: datos.fraccionamiento.trim(),
         calificacion: datos.calificacion || "frio",
         valorEstimado: Number(datos.valorEstimado) || 0,
@@ -148,6 +150,26 @@ export function FormularioExpediente({
           />
         </Campo>
       </div>
+
+      <Campo etiqueta="Nickname">
+        <input
+          type="text"
+          value={datos.nickname || ""}
+          onChange={(e) => actualizar("nickname", e.target.value)}
+          placeholder="Apodo o nombre corto (se comparte con el prospecto)"
+          className={INPUT}
+        />
+      </Campo>
+
+      <Campo etiqueta="Correo electrónico">
+        <input
+          type="email"
+          value={datos.correo || ""}
+          onChange={(e) => actualizar("correo", e.target.value)}
+          placeholder="cliente@correo.com (se comparte con el prospecto)"
+          className={INPUT}
+        />
+      </Campo>
 
       <Campo etiqueta="Fraccionamiento" requerido>
         <input
@@ -273,6 +295,7 @@ export function FormularioExpediente({
             <option value="traspaso_compra">Traspaso / Compra de casa</option>
             <option value="promocion_venta">Promoción de venta</option>
             <option value="solo_tramite">Solo trámite</option>
+            <option value="asesoria_compra">Asesoría de compra (comprador)</option>
             <option value="construccion">Sauceda Construye (General)</option>
             <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
             <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>
@@ -280,7 +303,9 @@ export function FormularioExpediente({
             <option value="construccion-mantenimiento-postventa">Sauceda Construye (Mantenimiento Postventa)</option>
             <option value="construccion-mantenimiento-cisternas">Sauceda Construye (Mantenimiento Cisternas)</option>
             <option value="construccion-mantenimiento-tinacos">Sauceda Construye (Mantenimiento Tinacos)</option>
+            <option value="construccion-mantenimiento-calentadores">Sauceda Construye (Mantenimiento Calentadores Solares)</option>
             <option value="construccion-herreria">Sauceda Construye (Herrería)</option>
+            <option value="seguridad">Seguridad</option>
             <option value="otro">Otro</option>
           </select>
         </Campo>

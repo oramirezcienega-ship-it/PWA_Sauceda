@@ -1,10 +1,12 @@
 "use server";
 
+import { parametroNombrePlantilla, plantillaPausada } from "@/lib/campanas-whatsapp";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { variantesTelefono, normalizarTelefono } from "@/lib/telefono";
 import { enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import { registrarActividad } from "@/lib/actividades";
+import { modeloClaude, opcionesClaude } from "@/lib/ia/claude";
 
 export interface AnalisisIA {
   telefono: string;
@@ -181,7 +183,7 @@ export async function analizarConversacionConIA(telefono: string, prospectoId?: 
     throw new Error("Falta la API Key de Anthropic (ANTHROPIC_API_KEY) en las variables de entorno.");
   }
 
-  const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+  const model = modeloClaude();
 
   const prompt = `Eres un analista de ventas para SAUCEDA Bienes Raíces, especialistas en traspasos INFONAVIT en León, Guanajuato.
 
@@ -210,7 +212,7 @@ Responde EXCLUSIVAMENTE con un objeto JSON válido. No incluyas explicaciones an
     },
     body: JSON.stringify({
       model: model,
-      max_tokens: 1000,
+      ...opcionesClaude(model, { maxTokens: 1000 }),
       messages: [{
         role: "user",
         content: prompt
@@ -380,7 +382,7 @@ export async function generarPlanMejoraConsolidado(): Promise<{
     throw new Error("Falta la API Key de Anthropic (ANTHROPIC_API_KEY) en las variables de entorno.");
   }
 
-  const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+  const model = modeloClaude();
 
   const prompt = `Eres un consultor experto en optimización de agentes conversacionales y prompts de sistema de IA para ventas en SAUCEDA Bienes Raíces.
 
@@ -425,7 +427,7 @@ Responde con el siguiente formato estructurado usando etiquetas delimitadoras (n
       },
       body: JSON.stringify({
         model: model,
-        max_tokens: 1500,
+        ...opcionesClaude(model, { maxTokens: 1500 }),
         messages: [{
           role: "user",
           content: prompt
@@ -501,7 +503,8 @@ export async function enviarPlantillaReactivacionManual(
     const sb = supabaseServidor();
     
     // 1. Mapear tipo de negocio a plantilla de Meta
-    let plantilla = "reactivacion_impermeabilizacio"; // Fallback por defecto
+    // Sin respaldo: un tipo sin plantilla propia no debe recibir la de impermeabilización.
+    let plantilla = "";
     const negocioNormalizado = (tipoNegocio || "").trim();
 
     if (negocioNormalizado === "construccion-impermeabilizacion") {
@@ -515,7 +518,14 @@ export async function enviarPlantillaReactivacionManual(
     }
 
     // Nombre limpio del cliente para el parámetro {{1}} de la plantilla
-    const primerNombre = (nombreCliente || "Cliente").split(" ")[0] || "Cliente";
+    if (!plantilla) {
+      return { ok: false, error: "No hay plantilla de reactivación para este tipo de negocio." };
+    }
+    if (plantillaPausada(plantilla)) {
+      return { ok: false, error: "La plantilla de reactivación de impermeabilización está pausada (ofrecía inspección gratuita)." };
+    }
+
+    const primerNombre = parametroNombrePlantilla(nombreCliente);
 
     // 2. Enviar por WhatsApp
     const resWa = await enviarWhatsAppPlantilla(

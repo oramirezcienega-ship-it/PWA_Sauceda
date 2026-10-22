@@ -663,6 +663,7 @@ export default function PaginaGerenteOperaciones() {
                         <option value="traspaso_compra">Traspaso / Compra</option>
                         <option value="promocion_venta">Promoción de Venta</option>
                         <option value="solo_tramite">Solo Trámite</option>
+                        <option value="asesoria_compra">Asesoría de Compra</option>
                         <option value="construccion">Sauceda Construye (General)</option>
                         <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
                         <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>
@@ -670,7 +671,9 @@ export default function PaginaGerenteOperaciones() {
                         <option value="construccion-mantenimiento-postventa">Sauceda Construye (Mantenimiento Postventa)</option>
                         <option value="construccion-mantenimiento-cisternas">Sauceda Construye (Mantenimiento Cisternas)</option>
                         <option value="construccion-mantenimiento-tinacos">Sauceda Construye (Mantenimiento Tinacos)</option>
+                        <option value="construccion-mantenimiento-calentadores">Sauceda Construye (Mantenimiento Calentadores Solares)</option>
                         <option value="construccion-herreria">Sauceda Construye (Herrería)</option>
+                        <option value="seguridad">Seguridad</option>
                         <option value="otro">Otro</option>
                       </select>
                     </div>
@@ -768,6 +771,8 @@ export default function PaginaGerenteOperaciones() {
                                     <option value="operaciones">Operaciones</option>
                                     <option value="tecnico">Técnico</option>
                                     <option value="admin">Administrador</option>
+                                    <option value="gestor">Gestor (trámite)</option>
+                                    <option value="sistema">Sistema (automático)</option>
                                   </select>
                                 </div>
                                 <div className="space-y-1">

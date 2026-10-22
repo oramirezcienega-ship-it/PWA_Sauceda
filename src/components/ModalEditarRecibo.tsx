@@ -22,6 +22,7 @@ export function ModalEditarRecibo({ recibo, alCerrar, alGuardado }: Props) {
       : "otro"
   );
   const [concepto, setConcepto] = useState(recibo.concepto || "");
+  const [aNombreDe, setANombreDe] = useState(recibo.clienteNombre || "");
   const [referencia, setReferencia] = useState(recibo.referenciaPago || "");
   const [fecha, setFecha] = useState((recibo.fechaPago || "").slice(0, 10));
   const [notas, setNotas] = useState(recibo.notas || "");
@@ -51,6 +52,7 @@ export function ModalEditarRecibo({ recibo, alCerrar, alGuardado }: Props) {
       fechaPago: fecha || undefined,
       notas,
       recibidoPorId: recibidoPorId || null,
+      clienteNombre: aNombreDe,
     });
     setGuardando(false);
     if (r.ok) alGuardado();
@@ -76,6 +78,17 @@ export function ModalEditarRecibo({ recibo, alCerrar, alGuardado }: Props) {
         {error && <div className="mb-3 rounded-xl bg-rojo/10 border border-rojo/20 p-3 text-xs text-rojo">⚠️ {error}</div>}
 
         <form onSubmit={enviar} className="space-y-3">
+          <div>
+            <label className={etiqueta}>Recibo a nombre de *</label>
+            <input
+              type="text"
+              required
+              value={aNombreDe}
+              onChange={(e) => setANombreDe(e.target.value)}
+              placeholder="Nombre de quien paga o titular del recibo"
+              className={campo}
+            />
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={etiqueta}>Monto ($ MXN) *</label>

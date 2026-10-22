@@ -4,6 +4,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { revalidatePath } from "next/cache";
 
+import { nombreTitularRemision } from "@/lib/remision-titular";
 export interface RemisionFacturaEnriquecida {
   id: string;
   cotizacionId: string | null;
@@ -38,7 +39,7 @@ export interface RemisionFacturaEnriquecida {
   comisionAsesorPorcentaje?: number;
   comisionId?: string;
   comisionEsAjusteManual?: boolean;
-  comisionAjusteModo?: "porcentaje" | "monto" | null;
+  comisionAjusteModo?: "porcentaje" | "monto" | "ninguna" | null;
   comisionMotivoAjuste?: string;
   comisionMontoPagado?: number;
 
@@ -239,6 +240,9 @@ export async function listarRemisionesFacturas(
       let nombreCliente = "Cliente General";
       if (r.tipo === "factura" && r.datos_documento?.razonSocial) {
         nombreCliente = r.datos_documento.razonSocial;
+      } else if (r.tipo !== "factura" && r.datos_documento?.nombreCliente) {
+        // Remisión a nombre de un titular distinto del contacto
+        nombreCliente = r.datos_documento.nombreCliente;
       } else if (r.datos_documento?.personaRecibe) {
         nombreCliente = r.datos_documento.personaRecibe;
       } else if (ot?.cliente_nombre) {
@@ -329,6 +333,8 @@ export async function listarRemisionesFacturas(
         comisionAjusteModo: comData?.es_ajuste_manual
           ? comData.detalles_calculo?.ajusteModo === "porcentaje"
             ? "porcentaje"
+            : comData.detalles_calculo?.ajusteModo === "ninguna"
+            ? "ninguna"
             : "monto"
           : null,
         comisionMotivoAjuste: comData?.motivo_ajuste || undefined,
@@ -435,7 +441,7 @@ export async function obtenerRemisionFacturaPorId(
         metodosPagoRecibos: [],
         tienePasarela: costoFinanciero > 0,
         baseGravableComision: Math.max(0, montoTotal - costoFinanciero - costoProveedor),
-        clienteNombre: rem.datos_documento?.razonSocial || rem.datos_documento?.personaRecibe || "Cliente General",
+        clienteNombre: nombreTitularRemision(rem.tipo, rem.datos_documento, rem.datos_documento?.personaRecibe || "Cliente General"),
         totalCobrado: 0,
         saldoRestante: montoTotal,
       },
@@ -545,6 +551,8 @@ export async function obtenerParametrosComisionRemision(remisionId: string): Pro
   tasasPasarela: TasaPasarela[];
   porcentajeRegla: number;
   reglaOrigen: string;
+  /** false cuando la venta no tiene asesor que comisione (no se tasa comisión). */
+  generaComision: boolean;
   /** Suma de los documentos (facturas/remisiones) del proveedor registrados para esta obra. */
   costoProveedorDocumentos: number;
   documentosProveedor: number;
@@ -581,7 +589,7 @@ export async function obtenerParametrosComisionRemision(remisionId: string): Pro
     // Resolver el % de la regla automática (asesor de la comisión o del prospecto)
     const { data: rem } = await sb
       .from("remisiones_facturas")
-      .select("id, cotizacion_id, orden_trabajo_id")
+      .select("id, cotizacion_id, orden_trabajo_id, expediente_id")
       .eq("id", remisionId)
       .maybeSingle();
 
@@ -594,6 +602,7 @@ export async function obtenerParametrosComisionRemision(remisionId: string): Pro
       .eq("remision_factura_id", remisionId)
       .maybeSingle();
     asesorId = com?.asesor_id || null;
+    const tieneComisionRegistrada = Boolean(com);
 
     if (rem?.cotizacion_id) {
       const { data: cot } = await sb
@@ -612,17 +621,40 @@ export async function obtenerParametrosComisionRemision(remisionId: string): Pro
       }
     }
 
+    if (!asesorId && rem?.expediente_id) {
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("asesor_id")
+        .eq("id", rem.expediente_id)
+        .maybeSingle();
+      asesorId = exp?.asesor_id || null;
+    }
+
+    // Mismo criterio que sincronizarComisionParaRemision: solo el responsable
+    // (vendedor) de la OT comisiona; el técnico ejecutor no.
     if (!asesorId && rem?.orden_trabajo_id) {
       const { data: ot } = await sb
         .from("ordenes_trabajo")
-        .select("asesor_responsable_id, asesor_ejecutor_id")
+        .select("asesor_responsable_id")
         .eq("id", rem.orden_trabajo_id)
         .maybeSingle();
-      asesorId = ot?.asesor_responsable_id || ot?.asesor_ejecutor_id || null;
+      asesorId = ot?.asesor_responsable_id || null;
     }
 
-    const { resolverPorcentajeComision } = await import("@/app/actions/comisiones");
-    const { porcentaje, reglaOrigen } = await resolverPorcentajeComision({ asesorId, servicioTipo });
+    const { resolverPorcentajeComision, asesorGeneraComisionesPorId } = await import("@/app/actions/comisiones");
+
+    // Sin asesor que comisione no hay comisión que tasar
+    const generaComision =
+      tieneComisionRegistrada || (asesorId ? await asesorGeneraComisionesPorId(asesorId) : false);
+
+    const { porcentaje, reglaOrigen } = generaComision
+      ? await resolverPorcentajeComision({ asesorId, servicioTipo })
+      : {
+          porcentaje: 0,
+          reglaOrigen: asesorId
+            ? "El asesor de esta venta no genera comisiones"
+            : "La venta no tiene asesor/vendedor asignado: no genera comisión",
+        };
 
     // Costo real del proveedor según sus documentos registrados para la obra
     const filtrosDocs: string[] = [];
@@ -645,6 +677,7 @@ export async function obtenerParametrosComisionRemision(remisionId: string): Pro
       tasasPasarela,
       porcentajeRegla: porcentaje,
       reglaOrigen,
+      generaComision,
       costoProveedorDocumentos,
       documentosProveedor,
     };
@@ -654,6 +687,7 @@ export async function obtenerParametrosComisionRemision(remisionId: string): Pro
       tasasPasarela: tasasPorDefecto,
       porcentajeRegla: 5,
       reglaOrigen: "Regla por defecto de contingencia (5.0%)",
+      generaComision: true,
       costoProveedorDocumentos: 0,
       documentosProveedor: 0,
       error: err?.message || "Error al cargar parámetros.",
@@ -666,11 +700,12 @@ export async function obtenerParametrosComisionRemision(remisionId: string): Pro
  * - automatica: quita el ajuste manual y vuelve a aplicar la regla configurada.
  * - porcentaje: fija un % propio para esta remisión (el monto sigue a la base gravable).
  * - monto: fija un monto de comisión exacto para esta remisión.
+ * - ninguna: el asesor no intervino; la comisión queda en $0.
  * No modifica el cobro, los recibos ni los montos del documento.
  */
 export async function ajustarComisionAsesorRemision(datos: {
   remisionId: string;
-  modo: "automatica" | "porcentaje" | "monto";
+  modo: "automatica" | "porcentaje" | "monto" | "ninguna";
   porcentaje?: number;
   monto?: number;
   motivo?: string;
@@ -698,7 +733,15 @@ export async function ajustarComisionAsesorRemision(datos: {
       com = creada;
     }
 
-    if (!com) return { ok: false, error: "No se encontró la comisión de la remisión." };
+    if (!com) {
+      // Sin asesor que comisione no hay comisión: "Según regla" o "Sin comisión"
+      // ya dejan la venta sin comisión, no hay nada que ajustar.
+      if (datos.modo === "automatica" || datos.modo === "ninguna") return { ok: true };
+      return {
+        ok: false,
+        error: "La venta no tiene un asesor que comisione. Asigne el vendedor en la orden o el prospecto para registrar comisión.",
+      };
+    }
 
     if (datos.modo === "automatica") {
       const detalles = { ...(com.detalles_calculo || {}) };
@@ -715,14 +758,19 @@ export async function ajustarComisionAsesorRemision(datos: {
       if (error) throw new Error(error.message);
       await sincronizarComisionParaRemision(datos.remisionId);
     } else {
-      const motivo = (datos.motivo || "").trim();
+      const motivo =
+        (datos.motivo || "").trim() ||
+        (datos.modo === "ninguna" ? "El asesor no intervino en esta venta" : "");
       if (!motivo) return { ok: false, error: "Indique el motivo del ajuste de comisión." };
 
       const base = Number(com.base_comisionable || 0);
       let porcentaje: number;
       let monto: number;
 
-      if (datos.modo === "porcentaje") {
+      if (datos.modo === "ninguna") {
+        porcentaje = 0;
+        monto = 0;
+      } else if (datos.modo === "porcentaje") {
         porcentaje = Math.max(0, Math.min(100, Number(datos.porcentaje || 0)));
         monto = Math.round(base * (porcentaje / 100) * 100) / 100;
       } else {

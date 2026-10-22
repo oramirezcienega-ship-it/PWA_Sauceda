@@ -5,6 +5,8 @@
  * vigentes vienen del catálogo de Productos y Servicios.
  */
 
+import { precioUnitarioPorVolumen, type PrecioVolumen } from "@/lib/precios-volumen";
+
 export interface PaqueteInfo {
   id: "acrilico" | "estandar" | "premium";
   badge: string;
@@ -13,6 +15,8 @@ export interface PaqueteInfo {
   precioM2: number;
   /** Cantidad mínima de cobro en m² (del catálogo; 0/undefined = sin mínimo). */
   minimoM2?: number;
+  /** Precio por m² a partir de cierta superficie (del catálogo). */
+  preciosVolumen?: PrecioVolumen[];
   garantia: string;
   mejorPara: string;
   destacado?: boolean;
@@ -78,11 +82,19 @@ export const PAQUETES_DEFAULT: PaqueteInfo[] = [
 ];
 
 /**
- * Total de un paquete para `m2` metros respetando la cantidad mínima de cobro:
- * si el cliente pide menos que el mínimo, se cotiza el mínimo.
+ * Total de un paquete para `m2` metros respetando la cantidad mínima de cobro
+ * (si el cliente pide menos que el mínimo, se cotiza el mínimo) y el precio por
+ * volumen (al alcanzar un tramo, su precio aplica a todos los m²).
  */
-export function cotizarPaquete(pkg: Pick<PaqueteInfo, "precioM2" | "minimoM2">, m2: number) {
+export function cotizarPaquete(pkg: Pick<PaqueteInfo, "precioM2" | "minimoM2" | "preciosVolumen">, m2: number) {
   const minimo = pkg.minimoM2 && pkg.minimoM2 > 0 ? pkg.minimoM2 : 0;
   const m2Cobrados = Math.max(m2, minimo);
-  return { m2Cobrados, total: m2Cobrados * pkg.precioM2, aplicaMinimo: m2Cobrados > m2 };
+  const precioM2 = precioUnitarioPorVolumen(pkg.preciosVolumen, m2Cobrados, pkg.precioM2);
+  return {
+    m2Cobrados,
+    precioM2,
+    total: m2Cobrados * precioM2,
+    aplicaMinimo: m2Cobrados > m2,
+    aplicaVolumen: precioM2 !== pkg.precioM2,
+  };
 }

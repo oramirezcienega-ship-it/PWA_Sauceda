@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizarCostosVolumen, type CostoVolumen } from "@/lib/costos-volumen";
+import { normalizarPreciosVolumen, type PrecioVolumen } from "@/lib/precios-volumen";
 
 /**
  * Productos de impermeabilización del catálogo (Productos y Servicios) que usa
@@ -30,6 +31,8 @@ export interface ProductoImper {
   costoM2: number;
   /** Cantidad mínima de cobro en m² (0 = sin mínimo). */
   minimoM2: number;
+  /** Precio por m² a partir de cierta superficie. */
+  preciosVolumen: PrecioVolumen[];
   /** Costo del proveedor por rango de m² (interno). */
   costosVolumen: CostoVolumen[];
   descripcionValor: string;
@@ -56,7 +59,7 @@ export function paqueteDeNombre(nombre: string): PaqueteImper | null {
 export async function cargarProductosImper(sb: SupabaseClient): Promise<Partial<Record<PaqueteImper, ProductoImper>>> {
   const { data } = await sb
     .from("productos_servicios")
-    .select("id, nombre, precio_unitario, costo_unitario, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo, ficha_tecnica_url, ficha_tecnica_nombre, cantidad_minima, costos_volumen")
+    .select("id, nombre, precio_unitario, costo_unitario, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo, ficha_tecnica_url, ficha_tecnica_nombre, cantidad_minima, costos_volumen, precios_volumen")
     .ilike("nombre", "%imperme%");
 
   const out: Partial<Record<PaqueteImper, ProductoImper>> = {};
@@ -71,6 +74,7 @@ export async function cargarProductosImper(sb: SupabaseClient): Promise<Partial<
       precioM2: Number(f.precio_unitario || 0),
       costoM2: Number(f.costo_unitario || 0),
       minimoM2: Number(f.cantidad_minima || 0),
+      preciosVolumen: normalizarPreciosVolumen(f.precios_volumen),
       costosVolumen: normalizarCostosVolumen(f.costos_volumen),
       descripcionValor: f.descripcion_valor || "",
       especificaciones: f.especificaciones || "",

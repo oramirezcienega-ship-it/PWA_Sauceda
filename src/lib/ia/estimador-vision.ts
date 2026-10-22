@@ -4,6 +4,8 @@
  * SAUCEDA Bienes Raíces y Construcción
  */
 
+import { modeloClaude, opcionesClaude } from "@/lib/ia/claude";
+
 export interface AnalisisVanoVision {
   opening_detected: boolean;
   opening_type: "garage" | "patio" | "entrance";
@@ -163,7 +165,7 @@ async function analizarConAnthropic(
   apiKey: string,
   tipoProyecto: "porton" | "pergola" = "porton"
 ): Promise<AnalisisVanoVision> {
-  const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+  const model = modeloClaude();
   const promptFinal = `${SYSTEM_PROMPT}\n\nNota de contexto: El cliente busca cotizar un(a) ${
     tipoProyecto === "porton" ? "PORTÓN para cochera o fachada" : "PÉRGOLA para patio, cochera o terraza"
   }. Responde EXCLUSIVAMENTE con el objeto JSON solicitado.`;
@@ -177,7 +179,7 @@ async function analizarConAnthropic(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 1200,
+      ...opcionesClaude(model, { maxTokens: 1200 }),
       messages: [
         {
           role: "user",

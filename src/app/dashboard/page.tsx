@@ -7,6 +7,7 @@ import { BotonLlamar } from "@/components/BotonLlamar";
 import { labelTipoNegocio } from "@/lib/types";
 import { ProximasVisitasWidget } from "@/components/ProximasVisitasWidget";
 import { CoordinacionesPendientesWidget } from "@/components/CoordinacionesPendientesWidget";
+import { CoordinacionesServicioPendientesWidget } from "@/components/CoordinacionesServicioPendientesWidget";
 import { ResumenKpisAsesor } from "@/components/ResumenKpisAsesor";
 import { FiltrosDashboard } from "@/components/FiltrosDashboard";
 
@@ -126,6 +127,9 @@ export default async function PaginaDashboard({
 
             {/* Coordinaciones de inspección pendientes (solo las asignadas a este usuario) */}
             <CoordinacionesPendientesWidget />
+
+            {/* Servicios con proveedor por programar */}
+            <CoordinacionesServicioPendientesWidget />
 
             {/* Sección de Tareas Pendientes */}
             <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
@@ -256,6 +260,11 @@ export default async function PaginaDashboard({
         {/* Coordinaciones de inspección pendientes, compartibles por Telegram */}
         <div className="mt-6">
           <CoordinacionesPendientesWidget />
+        </div>
+
+        {/* Servicios con proveedor por programar */}
+        <div className="mt-6">
+          <CoordinacionesServicioPendientesWidget />
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">

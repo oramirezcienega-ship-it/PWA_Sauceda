@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { BotonImprimir } from "@/components/BotonImprimir";
 
+import { MembreteMarca } from "@/components/marca/Logo";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -114,9 +115,7 @@ export default async function PaginaReporteVisita({ params }: PaginaReporteProps
         
         {/* Encabezado Logo */}
         <div className="text-center mb-6 print:hidden">
-          <img src="/logo.svg" alt="SAUCEDA" className="mx-auto h-14 w-14 mb-2" />
-          <h1 className="font-display text-xl font-bold tracking-tight text-verde-profundo">SAUCEDA</h1>
-          <p className="font-mono text-[9px] tracking-[0.2em] text-dorado uppercase">Construye</p>
+          <MembreteMarca centrado alto="h-12" />
         </div>
 
         {/* Ficha Principal */}

@@ -6,11 +6,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * ficha/facts, garantía, precio y fotos), así que basta editar el producto para cambiarlo.
  */
 
-export type ServicioMant = "cisternas" | "tinacos";
+export type ServicioMant = "cisternas" | "tinacos" | "calentadores";
 
 export const ETIQUETA_SERVICIO_MANT: Record<ServicioMant, string> = {
   cisternas: "Mantenimiento de cisternas",
   tinacos: "Limpieza y mantenimiento de tinacos",
+  calentadores: "Mantenimiento de calentador solar",
 };
 
 export interface FotoMant {
@@ -39,11 +40,13 @@ export interface ProductoMant {
 export function servicioDeTipoNegocio(tipo?: string | null): ServicioMant | null {
   if (tipo === "construccion-mantenimiento-tinacos") return "tinacos";
   if (tipo === "construccion-mantenimiento-cisternas") return "cisternas";
+  if (tipo === "construccion-mantenimiento-calentadores") return "calentadores";
   return null;
 }
 
 function servicioDeNombre(nombre: string): ServicioMant | null {
   const n = (nombre || "").toLowerCase();
+  if (n.includes("calentador") || n.includes("solar")) return "calentadores";
   if (n.includes("tinaco")) return "tinacos";
   if (n.includes("cisterna") || n.includes("aljibe")) return "cisternas";
   return null;
@@ -54,23 +57,44 @@ export async function cargarServiciosMantenimiento(
 ): Promise<Partial<Record<ServicioMant, ProductoMant>>> {
   const { data } = await sb
     .from("productos_servicios")
-    .select("id, nombre, precio_unitario, descripcion, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo, tarifas_capacidad")
-    .or("nombre.ilike.%tinaco%,nombre.ilike.%cisterna%,nombre.ilike.%aljibe%");
+    .select("id, nombre, tipo_negocio, precio_unitario, descripcion, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo, tarifas_capacidad, estandar_proceso, estandar_incluye, estandar_garantia_anios, estandar_garantia, estandar_tiempo")
+    .or(
+      "tipo_negocio.in.(construccion-mantenimiento-tinacos,construccion-mantenimiento-cisternas,construccion-mantenimiento-calentadores)," +
+        "nombre.ilike.%tinaco%,nombre.ilike.%cisterna%,nombre.ilike.%aljibe%,nombre.ilike.%calentador%"
+    );
 
   const out: Partial<Record<ServicioMant, ProductoMant>> = {};
-  for (const f of data || []) {
+  // Primero los que tienen modelo de negocio asignado; el nombre sólo es respaldo.
+  const filas = [...(data || [])].sort((x: any, y: any) => Number(!x.tipo_negocio) - Number(!y.tipo_negocio));
+  for (const f of filas) {
     if (f.activo === false) continue;
-    const servicio = servicioDeNombre(f.nombre);
+    const servicio = f.tipo_negocio ? servicioDeTipoNegocio(f.tipo_negocio) : servicioDeNombre(f.nombre);
     if (!servicio || out[servicio]) continue;
     out[servicio] = {
       id: f.id,
       servicio,
       nombre: f.nombre,
       precio: Number(f.precio_unitario || 0),
-      descripcion: f.descripcion || "",
       descripcionValor: f.descripcion_valor || "",
-      especificaciones: f.especificaciones || "",
-      garantia: f.plantilla_garantia || "",
+      // El estándar SAUCEDA (migración 0155) manda sobre los textos sueltos del producto.
+      descripcion: [f.estandar_incluye, f.descripcion].map((x: any) => (x || "").trim()).filter(Boolean).join("\n"),
+      especificaciones: [
+        f.especificaciones || "",
+        (f.estandar_proceso || "").trim() ? `Proceso: ${(f.estandar_proceso || "").trim()}` : "",
+        (f.estandar_tiempo || "").trim() ? `Tiempo de ejecución: ${(f.estandar_tiempo || "").trim()}` : "",
+      ]
+        .map((x: string) => x.trim())
+        .filter(Boolean)
+        .join("\n"),
+      garantia:
+        [
+          Number(f.estandar_garantia_anios) > 0
+            ? `${Number(f.estandar_garantia_anios)} ${Number(f.estandar_garantia_anios) === 1 ? "año" : "años"}`
+            : "",
+          (f.estandar_garantia || "").trim(),
+        ]
+          .filter(Boolean)
+          .join(" · ") || f.plantilla_garantia || "",
       fotos: (Array.isArray(f.fotos) ? f.fotos : []).filter((x: any) => x && /^https?:\/\//i.test(x.url || "")),
       tarifas: (Array.isArray(f.tarifas_capacidad) ? f.tarifas_capacidad : [])
         .map((t: any) => ({ hastaLitros: Math.round(Number(t?.hasta_litros)), precio: Number(t?.precio) }))

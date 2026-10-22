@@ -6,6 +6,7 @@ import type { Comision, ComisionPago } from "@/lib/types";
 import { calcularTotalesTarjetas } from "@/lib/comisiones-totales";
 import { normalizarTelefono } from "@/lib/telefono";
 
+import { MembreteMarca } from "@/components/marca/Logo";
 interface Props {
   asesorNombre: string;
   asesorTelefono?: string | null;
@@ -181,18 +182,7 @@ export function ModalEstadoCuentaImprimible({
         <div data-print-body className="p-6 max-h-[85vh] overflow-y-auto">
           {/* Encabezado compacto: marca a la izquierda, asesor y período a la derecha */}
           <div className="border-b-2 border-verde-profundo pb-3 mb-3 flex items-end justify-between gap-4">
-            <div className="flex items-center gap-2.5">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.svg" alt="Sauceda" className="h-8 w-8" />
-              <div>
-                <h1 className="font-titular text-lg font-bold tracking-tight text-verde-profundo leading-none">
-                  SAUCEDA
-                </h1>
-                <p className="font-titular text-[9px] font-semibold tracking-widest text-sauce uppercase mt-0.5">
-                  Bienes Raíces & Construcción · Administración y Finanzas
-                </p>
-              </div>
-            </div>
+            <MembreteMarca alto="h-9" linea="Administración y Finanzas" />
 
             <div className="text-right">
               <span className="inline-block bg-verde-profundo text-crema text-[10px] font-bold px-2.5 py-0.5 rounded uppercase tracking-wider">

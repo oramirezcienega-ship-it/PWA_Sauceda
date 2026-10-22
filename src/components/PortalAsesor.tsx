@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   votarHorariosPortal,
@@ -12,6 +12,7 @@ import {
   ESTADOS_RETRO_COORDINACION,
   ESTADOS_RETRO_LEAD,
   type CoordinacionPortal,
+  type DetalleLeadCompartido,
   type LeadCompartidoPortal,
   type Retroalimentacion,
 } from "@/lib/portal-asesor-tipos";
@@ -83,6 +84,43 @@ export function PortalAsesor({ token, datos }: Props) {
         ) : (
           leads.map((l) => <TarjetaLead key={l.id} token={token} l={l} />)
         )}
+      </div>
+    </main>
+  );
+}
+
+/** Página de un solo cliente: ficha del expediente y retro, desde el link de la lista de WhatsApp. */
+export function RetroClienteAsesor({
+  token,
+  asesorNombre,
+  lead,
+}: {
+  token: string;
+  asesorNombre: string;
+  lead: LeadCompartidoPortal;
+}) {
+  const [enviada, setEnviada] = useState(false);
+  return (
+    <main className="min-h-screen bg-[#F5F1E8] pb-16">
+      <header className="bg-[#2D4A2B] text-white px-4 pt-6 pb-4">
+        <p className="text-[11px] uppercase tracking-widest text-[#C9A961] font-bold">SAUCEDA · Retro del cliente</p>
+        <h1 className="text-xl font-extrabold mt-1 text-white">Hola, {asesorNombre.split(" ")[0]}</h1>
+        <p className="text-xs text-white/70 mt-0.5">Cuéntanos cómo vas con este cliente. Toca un estatus, dicta o escribe y envía.</p>
+      </header>
+      <div className="max-w-xl mx-auto px-4 pt-4 space-y-3">
+        {enviada && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+            <p className="font-extrabold">✅ ¡Gracias! Tu retro ya llegó a Sauceda.</p>
+            <p className="text-xs mt-1">Puedes cerrar esta página o volver a tu lista de clientes.</p>
+          </div>
+        )}
+        <TarjetaLead token={token} l={lead} abierto alGuardar={() => setEnviada(true)} />
+        <a
+          href={`/asesor/${token}`}
+          className="block rounded-xl bg-white border border-slate-200 py-3 text-center text-sm font-bold text-[#2D4A2B]"
+        >
+          Ver todos mis clientes →
+        </a>
       </div>
     </main>
   );
@@ -277,13 +315,97 @@ function TarjetaCoordinacion({ token, asesorId, c }: { token: string; asesorId: 
   );
 }
 
-function TarjetaLead({ token, l }: { token: string; l: LeadCompartidoPortal }) {
+const pesos = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
+
+/** Dictado por voz del navegador (Chrome/Android y Safari reciente); null si no hay soporte. */
+function useDictado(alTexto: (texto: string) => void) {
+  const [escuchando, setEscuchando] = useState(false);
+  const rec = useRef<any>(null);
+  const [soportado, setSoportado] = useState(false);
+  useEffect(() => {
+    setSoportado(Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition));
+  }, []);
+  const alternar = () => {
+    if (escuchando) {
+      rec.current?.stop();
+      return;
+    }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const r = new SR();
+    r.lang = "es-MX";
+    r.continuous = true;
+    r.interimResults = false;
+    r.onresult = (e: any) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) alTexto(String(e.results[i][0].transcript || "").trim());
+      }
+    };
+    r.onend = () => setEscuchando(false);
+    r.onerror = () => setEscuchando(false);
+    rec.current = r;
+    r.start();
+    setEscuchando(true);
+  };
+  return { soportado, escuchando, alternar };
+}
+
+/** Ficha del negocio del cliente (expediente, valor, cotización). */
+function FichaNegocio({ d }: { d: DetalleLeadCompartido }) {
+  const ubicacion = Array.from(new Set([d.fraccionamiento, d.direccion].filter(Boolean))).join(" · ");
+  const filas: [string, string][] = [
+    ["💼 Negocio", [d.tipoNegocio, d.etapa].filter(Boolean).join(" · ")],
+    ["🗂️ Folio", [d.expedienteId, d.prospectoId].filter(Boolean).join(" · ")],
+    ["📍 Ubicación", ubicacion],
+    ["🏦 Crédito", d.tipoCredito],
+    ["💰 Valor estimado", d.valorEstimado ? pesos(d.valorEstimado) : ""],
+    ["🧾 Cotizado", d.montoCotizado ? `${pesos(d.montoCotizado)} (${d.cotizaciones} cotización${d.cotizaciones === 1 ? "" : "es"})` : ""],
+    ["✉️ Correo", d.correo],
+  ];
+  return (
+    <div className="mt-3 rounded-xl bg-[#F5F1E8]/70 p-3 space-y-1">
+      {filas
+        .filter(([, v]) => v)
+        .map(([k, v]) => (
+          <div key={k} className="flex gap-2 text-xs">
+            <span className="w-28 shrink-0 text-slate-500">{k}</span>
+            <span className="font-semibold text-slate-800">{v}</span>
+          </div>
+        ))}
+      {d.necesidad && <p className="pt-1 text-xs text-slate-600">🎯 {d.necesidad}</p>}
+      {d.ultimaCotizacion?.token && (
+        <a
+          href={`/cotizacion/${d.ultimaCotizacion.token}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block pt-1 text-xs font-bold text-blue-700"
+        >
+          Ver cotización {d.ultimaCotizacion.id} ({d.ultimaCotizacion.estatus.replace(/_/g, " ")}) →
+        </a>
+      )}
+    </div>
+  );
+}
+
+export function TarjetaLead({
+  token,
+  l,
+  abierto = false,
+  alGuardar,
+}: {
+  token: string;
+  l: LeadCompartidoPortal;
+  /** Resumen visible desde el inicio (página de un solo cliente). */
+  abierto?: boolean;
+  alGuardar?: () => void;
+}) {
   const [estado, setEstado] = useState("");
   const [siguientePaso, setSiguientePaso] = useState("");
   const [fecha, setFecha] = useState("");
   const [comentario, setComentario] = useState("");
-  const [verResumen, setVerResumen] = useState(false);
+  const [verResumen, setVerResumen] = useState(abierto);
   const { guardando, mensaje, guardar } = useGuardar();
+  const dictado = useDictado((t) => setComentario((c) => (c ? `${c} ${t}` : t)));
 
   const ultima = l.retro[0];
 
@@ -315,6 +437,7 @@ function TarjetaLead({ token, l }: { token: string; l: LeadCompartidoPortal }) {
         </div>
       )}
 
+      {l.detalle && <FichaNegocio d={l.detalle} />}
       {l.nota && <p className="mt-2 text-xs text-slate-700">📝 {l.nota}</p>}
       {l.resumen && (
         <div className="mt-1">
@@ -348,17 +471,33 @@ function TarjetaLead({ token, l }: { token: string; l: LeadCompartidoPortal }) {
             className="w-36 rounded-xl border border-slate-200 p-2 text-sm"
           />
         </div>
-        <textarea
-          value={comentario}
-          onChange={(e) => setComentario(e.target.value)}
-          rows={2}
-          placeholder="Comentarios"
-          className="w-full rounded-xl border border-slate-200 p-2.5 text-sm"
-        />
+        <div className="relative">
+          <textarea
+            value={comentario}
+            onChange={(e) => setComentario(e.target.value)}
+            rows={abierto ? 4 : 2}
+            placeholder={dictado.soportado ? "Comentarios (toca 🎙️ para dictar)" : "Comentarios (puedes dictar con el micrófono del teclado)"}
+            className="w-full rounded-xl border border-slate-200 p-2.5 pr-12 text-sm"
+          />
+          {dictado.soportado && (
+            <button
+              type="button"
+              onClick={dictado.alternar}
+              title={dictado.escuchando ? "Detener dictado" : "Dictar comentario"}
+              className={`absolute right-2 top-2 h-9 w-9 rounded-full text-base ${
+                dictado.escuchando ? "bg-red-500 text-white animate-pulse" : "bg-slate-100 text-slate-700"
+              }`}
+            >
+              {dictado.escuchando ? "■" : "🎙️"}
+            </button>
+          )}
+        </div>
+        {dictado.escuchando && <p className="text-[11px] font-bold text-red-600">Escuchando… habla y toca ■ al terminar.</p>}
         <button
           type="button"
           disabled={guardando || !estado}
           onClick={async () => {
+            if (dictado.escuchando) dictado.alternar();
             const ok = await guardar(
               () => retroLeadPortal(token, l.id, { estado, siguientePaso, siguientePasoFecha: fecha || null, comentario }),
               "¡Gracias! Guardamos tu respuesta."
@@ -368,6 +507,7 @@ function TarjetaLead({ token, l }: { token: string; l: LeadCompartidoPortal }) {
               setSiguientePaso("");
               setFecha("");
               setComentario("");
+              alGuardar?.();
             }
           }}
           className="w-full rounded-xl bg-[#2D4A2B] py-2.5 text-sm font-bold text-white disabled:opacity-40"

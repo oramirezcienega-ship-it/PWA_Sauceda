@@ -220,8 +220,9 @@ async function asegurarProspectoParaExpediente(
     nombre: datos.cliente || "Cliente",
     primer_apellido: datos.primerApellido || "",
     segundo_apellido: datos.segundoApellido || "",
+    nickname: (datos.nickname || "").trim(),
     telefono: datos.telefono || "",
-    correo: (datos as any).email || (datos as any).correo || "",
+    correo: datos.correo || (datos as any).email || "",
     direccion: datos.direccionPropiedad || "",
     origen: (datos as any).origen || "otro",
     estatus: "nuevo",
@@ -267,6 +268,9 @@ export async function crearExpediente(
     }
   }
 
+  // Las altas de captación traen el correo como `email`.
+  if (!datos.correo && (datos as any).email) datos.correo = (datos as any).email;
+
   // Auto-crear o vincular el prospecto si no fue proporcionado expresamente
   const prospectoIdAuto = await asegurarProspectoParaExpediente(sb, datos);
   if (prospectoIdAuto) {
@@ -297,12 +301,14 @@ export async function crearExpediente(
       nombre: datos.cliente,
       primer_apellido: datos.primerApellido,
       segundo_apellido: datos.segundoApellido,
+      nickname: (datos.nickname || "").trim(),
       telefono: datos.telefono,
       fraccionamiento: datos.fraccionamiento,
       asesor_id: datos.asesorId ?? null,
       operador_id: datos.operadorId ?? null,
     };
-    if ((datos as any).email !== undefined) syncObj.correo = (datos as any).email;
+    const correoAlta = (datos.correo || (datos as any).email || "").trim();
+    if (correoAlta) syncObj.correo = correoAlta;
     await sb
       .from("prospectos")
       .update(syncObj)
@@ -481,6 +487,8 @@ export async function actualizarExpediente(
         nombre: datos.cliente,
         primer_apellido: datos.primerApellido,
         segundo_apellido: datos.segundoApellido,
+        nickname: (datos.nickname || "").trim(),
+        ...(datos.correo !== undefined ? { correo: datos.correo.trim() } : {}),
         telefono: datos.telefono,
         direccion: datos.direccionPropiedad || "",
         ad_name: datos.adName,
@@ -1467,6 +1475,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
     "venta": "Promoción de Venta",
     "solo_tramite": "Solo Trámite",
     "tramite": "Solo Trámite",
+    "asesoria_compra": "Asesoría de Compra",
     "construccion": "Construcción / Obra",
     "obra": "Construcción / Obra",
     "construccion-remodelacion": "Remodelación",
@@ -1484,6 +1493,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
     "mantenimiento": "Mantenimiento Postventa",
     "construccion-mantenimiento-cisternas": "Mantenimiento Cisternas",
     "construccion-mantenimiento-tinacos": "Mantenimiento Tinacos",
+    "construccion-mantenimiento-calentadores": "Mantenimiento Calentadores Solares",
     "construccion_mantenimiento_tinacos": "Mantenimiento Tinacos",
     "mantenimiento_tinacos": "Mantenimiento Tinacos",
     "construccion_mantenimiento_cisternas": "Mantenimiento Cisternas",
@@ -1492,6 +1502,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
     "construccion-herreria": "Herrería",
     "construccion_herreria": "Herrería",
     "herreria": "Herrería",
+    "seguridad": "Seguridad",
   };
 
   const etapaLabels: Record<string, string> = {

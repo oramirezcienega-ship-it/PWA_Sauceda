@@ -1,5 +1,8 @@
 /** Constantes y tipos del portal del asesor (seguros para el navegador). */
 
+/** WhatsApp de la empresa: el asesor escribe "RETRO" aquí y dicta su retro (ver lib/retro-whatsapp). */
+export const WHATSAPP_EMPRESA = (process.env.NEXT_PUBLIC_WHATSAPP_EMPRESA || "524774654700").replace(/\D/g, "");
+
 export const ESTADOS_RETRO_COORDINACION = {
   realizada: "Se realizó",
   no_realizada: "No se realizó",
@@ -36,6 +39,8 @@ export interface Retroalimentacion {
   siguientePaso: string;
   siguientePasoFecha: string | null;
   comentario: string;
+  /** "portal" (link del asesor) o "whatsapp" (texto/audio al número de la empresa). */
+  origen: "portal" | "whatsapp";
   createdAt: string;
 }
 
@@ -79,6 +84,27 @@ export interface LeadCompartidoPortal {
   estadoEnvio: string;
   createdAt: string;
   retro: Retroalimentacion[];
+  /** Datos del negocio/prospecto ligados (solo en la vista del CRM). */
+  detalle?: DetalleLeadCompartido;
+}
+
+export interface DetalleLeadCompartido {
+  expedienteId: string | null;
+  prospectoId: string | null;
+  tipoNegocio: string;
+  etapa: string;
+  valorEstimado: number;
+  saldoDeuda: number;
+  tipoCredito: string;
+  fraccionamiento: string;
+  direccion: string;
+  necesidad: string;
+  correo: string;
+  origen: string;
+  cotizaciones: number;
+  montoCotizado: number;
+  ultimaCotizacion: { id: string; estatus: string; precio: number; token: string } | null;
+  asesorTelefono: string;
 }
 
 export interface AsesorPortal {

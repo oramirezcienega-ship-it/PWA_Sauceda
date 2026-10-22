@@ -49,7 +49,7 @@ export function generarHtmlCorreoInspeccion(datos: DatosCorreoInspeccion): strin
           <!-- Encabezado SAUCEDA -->
           <tr>
             <td style="background-color:#2D4A2B;padding:28px 24px;text-align:center;">
-              <div style="color:#F5F1E8;font-size:24px;font-weight:bold;letter-spacing:2px;">SAUCEDA</div>
+              <img src="${SITE_URL}/brand/horizontal-negativo-800.png" width="200" height="54" alt="SAUCEDA" style="display:block;margin:0 auto 8px;border:0;" />
               <div style="color:#C9A961;font-size:11px;font-weight:600;letter-spacing:3px;margin-top:4px;">CONSTRUCCIÓN & IMPERMEABILIZACIÓN</div>
             </td>
           </tr>

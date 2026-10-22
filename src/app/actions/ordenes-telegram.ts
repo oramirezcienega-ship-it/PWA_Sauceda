@@ -14,6 +14,7 @@ import { armarPaqueteAutorizacion } from "@/lib/cotizacion-telegram";
 import { generarPdfPolizaGarantia, generarPdfRecibo, generarPdfRemision } from "@/lib/pdfDocumentosOT";
 import { pdfsDesdeVistas, type VistaPdf } from "@/lib/pdf-desde-vista";
 
+import { nombreTitularRemision } from "@/lib/remision-titular";
 /** Escapa texto de usuario para el HTML de Telegram. */
 const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -218,7 +219,7 @@ async function armarPaqueteOT(ordenId: string) {
             folio: rem.folio,
             tipo: rem.tipo,
             fecha: rem.fecha,
-            clienteNombre: orden.clienteNombre || "Cliente",
+            clienteNombre: nombreTitularRemision(rem.tipo, datosDoc, orden.clienteNombre || "Cliente"),
             folioOT: orden.folio,
             cotizacionId: rem.cotizacion_id,
             personaRecibe: datosDoc.personaRecibe,

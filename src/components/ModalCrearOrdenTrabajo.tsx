@@ -27,8 +27,18 @@ export function ModalCrearOrdenTrabajo({
   tipoNegocioDefault = "construccion",
   asesores,
 }: ModalCrearOrdenTrabajoProps) {
-  const [titulo, setTitulo] = useState(tituloDefault || "Trabajos de Ejecución");
-  const [tipoNegocio, setTipoNegocio] = useState(tipoNegocioDefault || "construccion");
+  // Expedientes de asesoría de compra o de solo trámite inician una OT de asesoría
+  // (el de solo trámite ya tiene casa: se salta búsqueda y negociación).
+  const tipoInicial =
+    tipoNegocioDefault === "asesoria_compra" || tipoNegocioDefault === "solo_tramite"
+      ? "asesoria_compra"
+      : tipoNegocioDefault || "construccion";
+  const [titulo, setTitulo] = useState(
+    tituloDefault || (tipoInicial === "asesoria_compra" ? "Asesoría de compra" : "Trabajos de Ejecución"),
+  );
+  const [tipoNegocio, setTipoNegocio] = useState(tipoInicial);
+  const [yaTieneCasa, setYaTieneCasa] = useState(tipoNegocioDefault === "solo_tramite");
+  const esAsesoria = tipoNegocio === "asesoria_compra";
   const [asesorEjecutorId, setAsesorEjecutorId] = useState("");
   const [fechaProgramada, setFechaProgramada] = useState(
     new Date().toISOString().split("T")[0]
@@ -63,6 +73,7 @@ export function ModalCrearOrdenTrabajo({
         prospectoId,
         cotizacionId,
         tipoNegocio,
+        yaTieneCasa: esAsesoria ? yaTieneCasa : undefined,
         titulo: titulo.trim(),
         descripcion: descripcion.trim(),
         fechaProgramada,
@@ -138,9 +149,13 @@ export function ModalCrearOrdenTrabajo({
               </label>
               <select
                 value={tipoNegocio}
-                onChange={(e) => setTipoNegocio(e.target.value)}
+                onChange={(e) => {
+                  setTipoNegocio(e.target.value);
+                  if (e.target.value === "asesoria_compra" && titulo === "Trabajos de Ejecución") setTitulo("Asesoría de compra");
+                }}
                 className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon focus:border-sauce focus:ring-1 focus:ring-sauce outline-none bg-white"
               >
+                <option value="asesoria_compra">Asesoría de compra (comprador)</option>
                 <option value="impermeabilizacion">Impermeabilización</option>
                 <option value="mantenimiento_cisternas">Cisternas y Aljibes</option>
                 <option value="construccion">Construcción y Remodelación</option>
@@ -163,6 +178,16 @@ export function ModalCrearOrdenTrabajo({
               />
             </div>
           </div>
+
+          {esAsesoria && (
+            <label className="flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50/60 px-3 py-2 text-xs text-carbon/80">
+              <input type="checkbox" checked={yaTieneCasa} onChange={(e) => setYaTieneCasa(e.target.checked)} className="mt-0.5" />
+              <span>
+                <strong>El cliente ya tiene casa.</strong> La orden se salta la búsqueda y la negociación y va directo al
+                trámite.
+              </span>
+            </label>
+          )}
 
           <div>
             <label className="block font-semibold text-carbon/80 mb-1">

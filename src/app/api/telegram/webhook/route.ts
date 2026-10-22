@@ -8,9 +8,13 @@ import {
 import {
   registrarVotosAsesorCoordinacion,
   marcarAsesorEnteradoCoordinacion,
+  confirmarOpcionProveedor,
 } from "@/lib/coordinacion-inspecciones";
+import { enviarWhatsAppTexto } from "@/lib/whatsapp";
 import { registrarRespuestaAutorizacion } from "@/lib/cotizacion-telegram";
 import { registrarActividad } from "@/lib/actividades";
+import { manejarCallbackCotizacionEspecial, manejarTextoCotizacionEspecial } from "@/lib/cotizaciones-especiales";
+import { manejarCallbackSolicitud, manejarTextoSolicitud } from "@/lib/solicitudes-telegram";
 import { marcarCitaEnteradaTelegram } from "@/lib/inspeccion-telegram";
 import { registrarRespuestaLead, urlPortalParaTelegram } from "@/lib/lead-telegram";
 import {
@@ -45,11 +49,18 @@ export async function POST(req: NextRequest) {
       if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload)) {
         const { data: perfil } = await sb
           .from("perfiles")
-          .select("id, nombre")
+          .select("id, nombre, telegram_chat_id")
           .eq("id", payload)
           .maybeSingle();
 
-        if (perfil) {
+        if (perfil?.telegram_chat_id && String(perfil.telegram_chat_id) !== chatId) {
+          // El enlace pudo reenviarse: no se le quitan los mensajes a la cuenta ya vinculada.
+          await enviarMensajeTelegram({
+            botToken,
+            chatId,
+            texto: "Este enlace ya está vinculado con otra cuenta de Telegram. Si cambiaste de teléfono o cuenta, pide al administrador que la desvincule y te mande el enlace de nuevo.",
+          });
+        } else if (perfil) {
           await sb
             .from("perfiles")
             .update({ telegram_chat_id: chatId, telegram_username: from?.username || null })
@@ -73,8 +84,15 @@ export async function POST(req: NextRequest) {
       // Vinculación de un proveedor: https://t.me/<bot>?start=prov_<id del proveedor>
       const mProv = payload.match(/^prov_([0-9a-f-]{36})$/i);
       if (mProv) {
-        const { data: prov } = await sb.from("proveedores").select("id, nombre").eq("id", mProv[1]).maybeSingle();
-        if (prov) {
+        const { data: prov } = await sb.from("proveedores").select("id, nombre, telegram_chat_id").eq("id", mProv[1]).maybeSingle();
+        if (prov?.telegram_chat_id && String(prov.telegram_chat_id) !== chatId) {
+          // El enlace pudo reenviarse: no se le quitan las cotizaciones a la cuenta ya vinculada.
+          await enviarMensajeTelegram({
+            botToken,
+            chatId,
+            texto: "Este enlace ya está vinculado con otra cuenta de Telegram. Si cambiaste de teléfono o cuenta, pide a SAUCEDA que la desvincule y te mande el enlace de nuevo.",
+          });
+        } else if (prov) {
           await sb
             .from("proveedores")
             .update({ telegram_chat_id: chatId, telegram_username: from?.username || null })
@@ -88,6 +106,14 @@ export async function POST(req: NextRequest) {
           await enviarMensajeTelegram({ botToken, chatId, texto: "No pude vincular este enlace: el proveedor no existe. Pide un enlace nuevo." });
         }
         return NextResponse.json({ ok: true });
+      }
+
+      // Proveedor respondiendo una cotización especial (precio → tiempo → qué incluye)
+      if (text && !text.startsWith("/") && botToken) {
+        const atendido =
+          (await manejarTextoCotizacionEspecial(sb, botToken, chatId, text)) ||
+          (await manejarTextoSolicitud(sb, botToken, chatId, text));
+        if (atendido) return NextResponse.json({ ok: true });
       }
 
       if (text.startsWith("/start") || text.startsWith("/id")) {
@@ -118,6 +144,17 @@ export async function POST(req: NextRequest) {
       const from = cb.from;
       const fromId = String(from.id);
       const username = from.username || "";
+
+      // Cotizaciones especiales: ce:{c|v|n|ok|ed|s}:{respuesta}
+      if (data.startsWith("ce:") && botToken) {
+        await manejarCallbackCotizacionEspecial(sb, botToken, cb);
+        return NextResponse.json({ ok: true });
+      }
+      // Solicitudes a proveedor (coordinar fecha): sp:{a|d|dl|f|fl|ok|v|n}:{envio}
+      if (data.startsWith("sp:") && botToken) {
+        await manejarCallbackSolicitud(sb, botToken, cb);
+        return NextResponse.json({ ok: true });
+      }
 
       // Negociación por etapas cuando las opciones no acomodan: día → franja → hora
       //   n:{coord} (ninguna me acomoda)  d:{coord}:{YYYYMMDD}  dl|dn:{coord}
@@ -294,6 +331,37 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      // Aliado inmobiliario sin casas para una solicitud de búsqueda: bsr:{busquedaId}
+      const mSinRes = data.match(/^bsr:([0-9a-f-]{36})$/i);
+      if (mSinRes) {
+        const { data: busq } = await sb
+          .from("busquedas_aliados")
+          .select("id, estado, expediente_id, aliado:aliado_id(nombre, telegram_chat_id)")
+          .eq("id", mSinRes[1])
+          .maybeSingle();
+        const aliado = (busq as any)?.aliado;
+        if (!busq || !aliado || String(aliado.telegram_chat_id) !== fromId) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "No pude identificar esta solicitud.", true);
+          return NextResponse.json({ ok: true });
+        }
+        if (busq.estado === "respondida") {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Ya nos enviaste casas para esta búsqueda. ¡Gracias!");
+          return NextResponse.json({ ok: true });
+        }
+        await sb
+          .from("busquedas_aliados")
+          .update({ estado: "sin_resultados", respondida_at: new Date().toISOString() })
+          .eq("id", busq.id);
+        await registrarActividad(sb, {
+          expedienteId: busq.expediente_id,
+          tipo: "sistema",
+          titulo: `🚫 ${aliado.nombre} no tiene casas para la búsqueda`,
+          detalle: "Respondió desde Telegram.",
+        });
+        await responderCallbackQueryTelegram(botToken, cb.id, "Registrado: sin casas para esta búsqueda. ¡Gracias!");
+        return NextResponse.json({ ok: true });
+      }
+
       // Acuse de lectura de una inspección compartida: c:{citaId}  (botón "Enterado")
       if (data.startsWith("c:")) {
         const [, citaId] = data.split(":");
@@ -373,6 +441,93 @@ export async function POST(req: NextRequest) {
 
         await marcarAsesorEnteradoCoordinacion(sb, coordId, match.id, "telegram");
         await responderCallbackQueryTelegram(botToken, cb.id, "👀 Registrado: quedaste enterado de la propuesta.");
+        return NextResponse.json({ ok: true });
+      }
+
+      // Confirmación directa del proveedor técnico (Remodelación: Aceptar Opción A / Opción B)
+      // Formato: conf_prov:{coordinacionId}:{opcId}
+      if (data.startsWith("conf_prov:")) {
+        const [, coordId, opcId] = data.split(":");
+        const { data: coord } = await sb
+          .from("coordinaciones_inspeccion")
+          .select("*")
+          .eq("id", coordId)
+          .single();
+
+        if (!coord || coord.estado === "confirmada") {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Esta inspección ya fue confirmada o no está activa.");
+          return NextResponse.json({ ok: true });
+        }
+
+        // Identificar al técnico por telegram_chat_id o username
+        let asesorId: string | null = null;
+        let asesorNombre = from.first_name || "Especialista Técnico";
+
+        const { data: perfiles = [] } = await sb
+          .from("perfiles")
+          .select("id, nombre, telegram_chat_id, telegram_username")
+          .in("id", coord.asesores_ids || []);
+
+        const listaPerfiles = perfiles || [];
+        const matchingPerfil = listaPerfiles.find(
+          (p) =>
+            p.telegram_chat_id === fromId ||
+            (username && p.telegram_username?.toLowerCase() === username.toLowerCase())
+        );
+
+        if (matchingPerfil) {
+          asesorId = matchingPerfil.id;
+          asesorNombre = matchingPerfil.nombre;
+        } else if (listaPerfiles.length > 0) {
+          asesorId = listaPerfiles[0].id;
+          asesorNombre = listaPerfiles[0].nombre;
+        }
+
+        const resConf = await confirmarOpcionProveedor(sb, coordId, opcId, asesorId || undefined);
+        if (resConf.ok) {
+          await responderCallbackQueryTelegram(botToken, cb.id, `✅ ¡Cita confirmada para Opción ${opcId}!`);
+          await enviarMensajeTelegram({
+            botToken,
+            chatId: String(cb.message?.chat?.id || fromId),
+            texto: `✅ *INSPECCIÓN DE REMODELACIÓN CONFIRMADA*\n\nEl especialista *${asesorNombre}* aceptó la *Opción ${opcId}* para el cliente *${coord.cliente_nombre}*.\n\nLa cita ya quedó agendada y el cliente recibió su confirmación definitiva por WhatsApp.`,
+          });
+        } else {
+          await responderCallbackQueryTelegram(botToken, cb.id, `Error: ${resConf.error || "No se pudo confirmar"}`);
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // Rechazo de opciones por el proveedor técnico
+      // Formato: rej_prov:{coordinacionId}
+      if (data.startsWith("rej_prov:")) {
+        const [, coordId] = data.split(":");
+        const { data: coord } = await sb
+          .from("coordinaciones_inspeccion")
+          .select("*")
+          .eq("id", coordId)
+          .single();
+
+        if (coord) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Registrado. Se notificó de inmediato a Gerencia.");
+          
+          const opciones = (coord.opciones_horarios as any[]) || [];
+          const opcA = opciones[0]?.label || "Opción A";
+          const opcB = opciones[1]?.label || "Opción B";
+
+          const msgOscar = `⚠️ *PROVEEDOR RECHAZÓ OPCIONES DE INSPECCIÓN*\n\n` +
+            `El técnico indicó que NO puede en las opciones para *${coord.cliente_nombre}* (${coord.cliente_telefono}) en ${coord.ubicacion}.\n` +
+            `Opciones que propuso el cliente: ${opcA} | ${opcB}\n\n` +
+            `👉 *Entra al CRM para reasignar técnico o contactar al cliente.*`;
+
+          // Alerta WhatsApp a Oscar
+          await enviarWhatsAppTexto("4778110444", msgOscar).catch(() => {});
+
+          await enviarMensajeTelegram({
+            botToken,
+            chatId: String(cb.message?.chat?.id || fromId),
+            texto: `⚠️ *AVISO REGISTRADO:* Se informó que no puedes en estas opciones. Gerencia (Oscar) ya fue notificada para coordinar la reprogramación.`,
+          });
+        }
         return NextResponse.json({ ok: true });
       }
 

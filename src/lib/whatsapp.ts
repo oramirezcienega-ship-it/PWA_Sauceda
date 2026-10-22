@@ -12,6 +12,8 @@
  * se requiere una plantilla aprobada.
  */
 
+import { plantillaPausada } from "@/lib/campanas-whatsapp";
+
 const API_VERSION = "v21.0";
 
 /** Normaliza un teléfono mexicano a formato internacional (52 + 10 dígitos). */
@@ -174,6 +176,8 @@ export async function enviarWhatsAppDocumento(
   if (!token || !phoneId) return { ok: false, error: "WhatsApp no configurado (faltan credenciales)." };
 
   const esImagen = tipoMime?.startsWith("image/") ?? /\.(jpe?g|png|webp|gif)$/i.test(nombreArchivo);
+  // Los videos van como "video" para que se reproduzcan en el chat (como documento llegan como archivo).
+  const esVideo = tipoMime === "video/mp4" || tipoMime === "video/3gpp";
 
   try {
     const esUrl = /^https?:\/\//i.test(documentoUrlOrId);
@@ -185,6 +189,13 @@ export async function enviarWhatsAppDocumento(
           to: tel,
           type: "image",
           image: { ...mediaObj, ...(caption ? { caption } : {}) },
+        }
+      : esVideo
+      ? {
+          messaging_product: "whatsapp",
+          to: tel,
+          type: "video",
+          video: { ...mediaObj, ...(caption ? { caption } : {}) },
         }
       : {
           messaging_product: "whatsapp",
@@ -252,6 +263,9 @@ export async function enviarWhatsAppPlantilla(
       };
     }
     if (!plantilla) return { ok: false, error: "Falta el nombre de la plantilla." };
+    if (plantillaPausada(plantilla)) {
+      return { ok: false, error: `La plantilla "${plantilla}" está pausada (ofrece inspección gratuita).` };
+    }
 
     const components: Record<string, unknown>[] = [];
     if (parametrosCuerpo.length > 0) {
@@ -354,6 +368,9 @@ export async function enviarWhatsAppPlantillaCompleta(
       };
     }
     if (!plantilla) return { ok: false, error: "Falta el nombre de la plantilla." };
+    if (plantillaPausada(plantilla)) {
+      return { ok: false, error: `La plantilla "${plantilla}" está pausada (ofrece inspección gratuita).` };
+    }
 
     const res = await fetch(
       `https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`,

@@ -1,5 +1,6 @@
 import { Encabezado } from "@/components/Encabezado";
 import { TablaLlamadas } from "@/components/TablaLlamadas";
+import { PestanasLlamadas } from "@/components/PestanasLlamadas";
 import { listarLlamadasConmutador, type LlamadaConmutadorApp } from "@/app/actions/llamadas";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ export default async function PaginaLlamadas() {
     <main className="min-h-screen pb-10">
       <Encabezado />
       <div className="mx-auto max-w-5xl px-4 pt-5">
+        <PestanasLlamadas />
         <div className="mb-6">
           <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
             Historial del Conmutador

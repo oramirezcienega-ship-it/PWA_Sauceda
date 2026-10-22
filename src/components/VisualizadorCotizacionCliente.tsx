@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { aceptarCotizacionCliente } from "@/app/actions/cotizaciones";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo } from "@/lib/types";
 
+import { Logo, MembreteMarca } from "@/components/marca/Logo";
 interface VisualizadorCotizacionClienteProps {
   cotizacion: Omit<Cotizacion, "notasInternas" | "costoEstimado">;
   conceptos: Omit<CotizacionConcepto, "costoUnitario">[];
@@ -156,10 +157,7 @@ export function VisualizadorCotizacionCliente({
       
       {/* Encabezado Logo */}
       <div className="text-center mb-8 print:hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.svg" alt="SAUCEDA" className="mx-auto h-16 w-16 mb-2" />
-        <h1 className="font-display text-2xl font-bold tracking-tight text-verde-profundo">SAUCEDA</h1>
-        <p className="font-mono text-[10px] tracking-[0.2em] text-dorado uppercase">Construye</p>
+        <MembreteMarca centrado alto="h-14" />
       </div>
 
       {!modoDocumento && (exito || estatus === "aceptada") ? (
@@ -206,10 +204,7 @@ export function VisualizadorCotizacionCliente({
 
             {/* Logo exclusivo para impresión a la derecha */}
             <div className="hidden print:flex flex-col items-center self-center shrink-0 ml-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.svg" alt="SAUCEDA" className="h-10 w-10" />
-              <div className="font-display text-[10px] font-bold tracking-tight text-verde-profundo leading-none mt-1">SAUCEDA</div>
-              <div className="font-mono text-[6px] tracking-[0.15em] text-dorado uppercase leading-none mt-0.5">Construye</div>
+              <Logo variante="horizontal" className="h-9 w-auto" />
             </div>
           </div>
 
@@ -275,6 +270,15 @@ export function VisualizadorCotizacionCliente({
             </div>
 
             {/* 1. Desglose de Conceptos */}
+            {(() => {
+              const tieneDescuento = conceptos.some((c) => (c.descuento || 0) > 0);
+              const subtotalBase = conceptos.reduce((acc, c) => acc + c.cantidad * c.precioUnitario, 0);
+              const totalConceptos = conceptos.reduce((acc, c) => acc + (c.importe || 0), 0);
+              const montoDescuento = Math.max(0, subtotalBase - totalConceptos);
+              const pctDescuento = subtotalBase > 0 ? (montoDescuento / subtotalBase) * 100 : 0;
+              const hayDescuento = montoDescuento > 0.005;
+              const formatPct = (v: number) => `${Number(v.toFixed(1))}%`;
+              return (
             <div className="space-y-4">
               {/* Desglose de inversión */}
               <h3 className="font-titular text-lg font-bold text-verde-profundo border-b pb-2 flex items-center gap-2">
@@ -282,40 +286,75 @@ export function VisualizadorCotizacionCliente({
                 Desglose e Importe de la Inversión
               </h3>
               <div className="overflow-x-auto rounded-xl border border-carbon/5">
-                {(() => {
-                  const tieneDescuento = conceptos.some((c) => (c.descuento || 0) > 0);
-                  return (
-                    <table className="w-full border-collapse text-left text-xs min-w-[550px] print:text-[10px]">
-                      <thead className="bg-slate-50 border-b font-semibold text-carbon/50">
-                        <tr>
-                          <th className="px-4 py-3 print:px-2 print:py-1.5">Descripción del Concepto / Insumo</th>
-                          <th className="px-4 py-3 print:px-2 print:py-1.5 text-center">Cantidad</th>
-                          <th className="px-4 py-3 print:px-2 print:py-1.5 text-center">Unidad</th>
-                          <th className="px-4 py-3 print:px-2 print:py-1.5 text-right font-mono">P. Unitario</th>
-                          {tieneDescuento && <th className="px-4 py-3 print:px-2 print:py-1.5 text-center">Desc..</th>}
-                          <th className="px-4 py-3 print:px-2 print:py-1.5 text-right">Importe</th>
+                <table className="w-full border-collapse text-left text-xs min-w-[550px] print:text-[10px]">
+                  <thead className="bg-slate-50 border-b font-semibold text-carbon/50">
+                    <tr>
+                      <th className="px-4 py-3 print:px-2 print:py-1.5">Descripción del Concepto / Insumo</th>
+                      <th className="px-4 py-3 print:px-2 print:py-1.5 text-center">Cantidad</th>
+                      <th className="px-4 py-3 print:px-2 print:py-1.5 text-center">Unidad</th>
+                      <th className="px-4 py-3 print:px-2 print:py-1.5 text-right font-mono">P. Unitario</th>
+                      {tieneDescuento && <th className="px-4 py-3 print:px-2 print:py-1.5 text-right">Precio base</th>}
+                      {tieneDescuento && <th className="px-4 py-3 print:px-2 print:py-1.5 text-center">Descuento</th>}
+                      <th className="px-4 py-3 print:px-2 print:py-1.5 text-right">Importe</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-carbon/5">
+                    {conceptos.map((c) => {
+                      const baseFila = c.cantidad * c.precioUnitario;
+                      const descFila = Math.max(0, baseFila - (c.importe || 0));
+                      return (
+                        <tr key={c.id} className="hover:bg-slate-50/20">
+                          <td className="px-4 py-3 print:px-2 print:py-1.5 font-medium">{c.descripcion}</td>
+                          <td className="px-4 py-3 text-center font-mono">{c.cantidad}</td>
+                          <td className="px-4 py-3 text-center">{c.unidad}</td>
+                          <td className="px-4 py-3 print:px-2 print:py-1.5 text-right font-mono">{formatMoneda(c.precioUnitario)}</td>
+                          {tieneDescuento && (
+                            <td className={`px-4 py-3 print:px-2 print:py-1.5 text-right font-mono ${c.descuento ? "text-carbon/50 line-through" : ""}`}>
+                              {formatMoneda(baseFila)}
+                            </td>
+                          )}
+                          {tieneDescuento && (
+                            <td className="px-4 py-3 print:px-2 print:py-1.5 text-center font-mono">
+                              {c.descuento ? (
+                                <div className="leading-tight">
+                                  <span className="inline-block rounded bg-rose-50 px-1.5 py-0.5 text-rose-700 font-bold border border-rose-200">-{c.descuento}%</span>
+                                  <div className="text-[10px] text-rose-600 font-semibold mt-0.5">-{formatMoneda(descFila)}</div>
+                                </div>
+                              ) : "—"}
+                            </td>
+                          )}
+                          <td className="px-4 py-3 print:px-2 print:py-1.5 text-right font-mono font-bold text-verde-profundo">{formatMoneda(c.importe)}</td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-carbon/5">
-                        {conceptos.map((c) => (
-                          <tr key={c.id} className="hover:bg-slate-50/20">
-                            <td className="px-4 py-3 print:px-2 print:py-1.5 font-medium">{c.descripcion}</td>
-                            <td className="px-4 py-3 text-center font-mono">{c.cantidad}</td>
-                            <td className="px-4 py-3 text-center">{c.unidad}</td>
-                            <td className="px-4 py-3 print:px-2 print:py-1.5 text-right font-mono">{formatMoneda(c.precioUnitario)}</td>
-                            {tieneDescuento && (
-                              <td className="px-4 py-3 print:px-2 print:py-1.5 text-center text-rose-600 font-semibold font-mono">
-                                {c.descuento ? `-${c.descuento}%` : "—"}
-                              </td>
-                            )}
-                            <td className="px-4 py-3 print:px-2 print:py-1.5 text-right font-mono font-semibold">{formatMoneda(c.importe)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  );
-                })()}
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
+
+              {/* Resumen: precio base, descuento y total */}
+              {hayDescuento && (
+                <div className="rounded-2xl border-2 border-sauce/30 overflow-hidden print-break-inside-avoid">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 print-grid-3 divide-y sm:divide-y-0 sm:divide-x divide-carbon/10">
+                    <div className="p-4 text-center print:p-2">
+                      <div className="text-[11px] uppercase font-bold tracking-wider text-carbon/50">Precio base</div>
+                      <div className="font-mono text-xl font-bold text-carbon/70 mt-1 line-through decoration-rose-400/70">{formatMoneda(subtotalBase)}</div>
+                    </div>
+                    <div className="p-4 text-center bg-rose-50/60 print:p-2">
+                      <div className="text-[11px] uppercase font-bold tracking-wider text-rose-700">
+                        Descuento aplicado
+                        <span className="ml-1.5 inline-block rounded-full bg-rose-600 text-white px-2 py-0.5 text-[11px] align-middle">-{formatPct(pctDescuento)}</span>
+                      </div>
+                      <div className="font-mono text-xl font-extrabold text-rose-600 mt-1">-{formatMoneda(montoDescuento)}</div>
+                      <div className="text-[10px] text-rose-700/80 font-semibold">Ahorro para ti</div>
+                    </div>
+                    <div className="p-4 text-center bg-verde-profundo/5 print:p-2">
+                      <div className="text-[11px] uppercase font-bold tracking-wider text-verde-profundo">Total con descuento</div>
+                      <div className="font-mono text-xl font-extrabold text-verde-profundo mt-1">{formatMoneda(cotizacion.precioFinal)}</div>
+                      <div className="text-[10px] text-carbon/50 font-semibold">+ IVA</div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Total Callout */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-carbon/5 flex flex-col sm:flex-row justify-between items-center gap-4 print:p-4 print:gap-2">
@@ -325,13 +364,21 @@ export function VisualizadorCotizacionCliente({
                 </div>
                 <div className="text-center sm:text-right">
                   <div className="text-xs text-carbon/40 uppercase font-semibold">Total de Inversión (Antes de IVA)</div>
+                  {hayDescuento && (
+                    <div className="font-mono text-sm text-carbon/40 line-through mt-1">{formatMoneda(subtotalBase)}</div>
+                  )}
                   <div className="font-mono text-3xl font-extrabold text-verde-profundo mt-1">
                     {formatMoneda(cotizacion.precioFinal)}
                   </div>
+                  {hayDescuento && (
+                    <div className="text-xs font-bold text-rose-600 mt-0.5">Ahorras {formatMoneda(montoDescuento)} ({formatPct(pctDescuento)})</div>
+                  )}
                   <div className="text-[10px] text-carbon/40 font-bold block mt-0.5">+ IVA (Antes de Impuestos)</div>
                 </div>
               </div>
             </div>
+              );
+            })()}
 
             {/* 2. Reporte de Inspección */}
             {reporteVisita && (
@@ -564,6 +611,10 @@ export function VisualizadorCotizacionCliente({
           .print-grid-2 {
             display: grid !important;
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .print-grid-3 {
+            display: grid !important;
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
           }
           .print\:hidden, button, form, nav, footer, .border-green-200 {
             display: none !important;

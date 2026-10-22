@@ -24,7 +24,7 @@ const dinero = (n: number) => n.toLocaleString("es-MX", { maximumFractionDigits:
 
 function tarjeta(pkg: PaqueteInfo, m2: number): Nodo {
   const premium = !!pkg.destacado;
-  const { total, m2Cobrados, aplicaMinimo } = cotizarPaquete(pkg, m2);
+  const { total, m2Cobrados, precioM2, aplicaMinimo } = cotizarPaquete(pkg, m2);
   const acento = premium ? DORADO_OSC : VERDE_CLARO;
 
   return h(
@@ -74,8 +74,8 @@ function tarjeta(pkg: PaqueteInfo, m2: number): Nodo {
         "div",
         { color: aplicaMinimo ? "#B45309" : "#64748B", fontSize: 13, marginTop: 8, fontWeight: aplicaMinimo ? 800 : 400 },
         aplicaMinimo
-          ? `Mínimo de cobro: ${m2Cobrados} m²  ·  $${dinero(pkg.precioM2)} por m²`
-          : `$${dinero(pkg.precioM2)} por m²  ·  ${m2} m²`
+          ? `Mínimo de cobro: ${m2Cobrados} m²  ·  $${dinero(precioM2)} por m²`
+          : `$${dinero(precioM2)} por m²  ·  ${m2} m²`
       ),
       h("div", { height: 1, backgroundColor: "#E2E8F0", marginTop: 14, marginBottom: 12 }),
       // Incluye
@@ -147,7 +147,7 @@ export async function generarImagenComparativaImper(paquetes: PaqueteInfo[], m2:
       h(
         "div",
         { justifyContent: "center", marginTop: 14, color: "#64748B", fontSize: 13 },
-        "Precios más IVA · Diagnóstico técnico gratuito en sitio"
+        "Precios sin factura (con factura se agrega IVA) · Diagnóstico técnico gratuito en sitio"
       ),
     ]
   );

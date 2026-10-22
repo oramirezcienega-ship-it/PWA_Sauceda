@@ -74,6 +74,7 @@ export function FormularioProspecto({
         nombre: datos.nombre.trim(),
         primerApellido: datos.primerApellido.trim(),
         segundoApellido: datos.segundoApellido.trim(),
+        nickname: (datos.nickname || "").trim(),
         valorCampana: Number(datos.valorCampana) || 0,
       });
     } catch (err: any) {
@@ -120,6 +121,16 @@ export function FormularioProspecto({
           />
         </Campo>
       </div>
+
+      <Campo etiqueta="Nickname">
+        <input
+          type="text"
+          value={datos.nickname || ""}
+          onChange={(e) => actualizar("nickname", e.target.value)}
+          placeholder="Apodo o nombre corto (se comparte con sus expedientes)"
+          className={INPUT}
+        />
+      </Campo>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Campo etiqueta="Teléfono">

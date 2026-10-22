@@ -35,7 +35,7 @@ export async function obtenerSeguimientoAsesores(): Promise<{
   const sb = supabaseServidor();
   const [coordinaciones, leads] = await Promise.all([
     listarCoordinacionesConRetro(sb, { incluirCanceladas: true, dias: 90 }),
-    listarLeadsConRetro(sb, { dias: 90 }),
+    listarLeadsConRetro(sb, { dias: 90, conDetalle: true }),
   ]);
   return { coordinaciones, leads };
 }
@@ -45,7 +45,7 @@ export async function listarLinksPortalAsesores(): Promise<LinkPortalAsesor[]> {
   const sb = supabaseServidor();
   const { data, error } = await sb
     .from("perfiles")
-    .select("id, nombre, rol, telefono, portal_token, activo")
+    .select("id, nombre, rol, telefono, telefono_whatsapp, portal_token, activo")
     .eq("activo", true)
     .order("nombre");
   if (error) throw new Error(error.message);
@@ -53,7 +53,7 @@ export async function listarLinksPortalAsesores(): Promise<LinkPortalAsesor[]> {
     asesorId: p.id,
     nombre: p.nombre,
     rol: p.rol,
-    telefono: p.telefono || "",
+    telefono: p.telefono_whatsapp || p.telefono || "",
     url: p.portal_token ? urlPortalAsesor(p.portal_token) : null,
   }));
 }

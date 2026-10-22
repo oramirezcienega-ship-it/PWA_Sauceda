@@ -71,7 +71,9 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/orden-trabajo/entrega/") ||
     path.startsWith("/c/") ||
     path.startsWith("/a/") ||
-    path.startsWith("/asesor/");
+    path.startsWith("/asesor/") ||
+    path.startsWith("/aliados/carga/") ||
+    path.startsWith("/precios-proveedor/");
 
   if (!user && !esPublico) {
     const destino = request.nextUrl.clone();
@@ -111,6 +113,8 @@ export const config = {
   // Aplica a todo menos las rutas /api (tienen su propia seguridad),
   // archivos estáticos y assets de la PWA.
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|manifest.json|sw.js|icons).*)",
+    // brand/ y los archivos de imagen de public/ (logos) deben verse sin sesión: login,
+    // portales del cliente, correos y PDFs los cargan sin estar autenticados.
+    "/((?!api|_next/static|_next/image|favicon.ico|manifest.json|sw.js|icons|brand|.*\\.(?:svg|png|jpg|jpeg|webp|ico)$).*)",
   ],
 };

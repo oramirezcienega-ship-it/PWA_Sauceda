@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   enviarLeadTelegramAction,
+  registrarLeadWhatsAppAction,
   previsualizarLeadTelegramAction,
   type PrevisualizacionLeadTelegram,
   type EnvioLeadTelegram,
 } from "@/app/actions/leads-telegram";
-import { armarHtmlLeadTelegram } from "@/lib/lead-telegram-formato";
+import { armarHtmlLeadTelegram, armarTextoLeadWhatsApp } from "@/lib/lead-telegram-formato";
+
+type Canal = "whatsapp" | "telegram";
 
 interface Props {
   telefono: string;
@@ -21,11 +24,13 @@ const urlFoto = (ref: string) =>
   /^https?:\/\//i.test(ref) ? ref : `/api/conversaciones/media?mediaId=${encodeURIComponent(ref)}&raw=1`;
 
 /**
- * Pasar el lead a un asesor por Telegram: se elige al asesor, se revisa/edita
- * el resumen de la IA y se ve exactamente lo que recibirá antes de enviarlo.
+ * Pasar el lead a un asesor por WhatsApp (desde el WhatsApp de quien asigna) o
+ * por Telegram: se elige al asesor, se revisa/edita el resumen de la IA y se ve
+ * exactamente lo que recibirá antes de enviarlo.
  */
 export function ModalPasarLeadTelegram({ telefono, atiendeActual, alCerrar, alEnviado }: Props) {
   const [prev, setPrev] = useState<PrevisualizacionLeadTelegram | null>(null);
+  const [canal, setCanal] = useState<Canal>("whatsapp");
   const [asesorId, setAsesorId] = useState("");
   const [resumen, setResumen] = useState("");
   const [nota, setNota] = useState("");
@@ -39,7 +44,7 @@ export function ModalPasarLeadTelegram({ telefono, atiendeActual, alCerrar, alEn
       if (cancelado) return;
       setPrev(r);
       setResumen(r.resumen || "");
-      const pre = r.asesores?.find((a) => a.nombre === atiendeActual && a.tieneTelegram);
+      const pre = r.asesores?.find((a) => a.nombre === atiendeActual && a.whatsapp);
       if (pre) setAsesorId(pre.id);
     });
     return () => {
@@ -47,22 +52,38 @@ export function ModalPasarLeadTelegram({ telefono, atiendeActual, alCerrar, alEn
     };
   }, [telefono, atiendeActual]);
 
-  const asesor = prev?.asesores?.find((a) => a.id === asesorId);
+  const disponible = (a: { tieneTelegram: boolean; whatsapp: string }, c: Canal) =>
+    c === "telegram" ? a.tieneTelegram : Boolean(a.whatsapp);
+  const asesor = prev?.asesores?.find((a) => a.id === asesorId && disponible(a, canal));
   const html = useMemo(
     () => (prev?.datos ? armarHtmlLeadTelegram(prev.datos, resumen, nota) : ""),
+    [prev, resumen, nota]
+  );
+  const textoWhatsApp = useMemo(
+    () => (prev?.datos ? armarTextoLeadWhatsApp(prev.datos, resumen, nota) : ""),
     [prev, resumen, nota]
   );
 
   const enviar = async () => {
     if (!asesor) return;
+    // Se abre antes de cualquier await para que el navegador no bloquee la ventana
+    if (canal === "whatsapp") {
+      window.open(`https://wa.me/${asesor.whatsapp}?text=${encodeURIComponent(textoWhatsApp)}`, "_blank", "noopener");
+    }
     setEnviando(true);
     setResultado(null);
-    const r = await enviarLeadTelegramAction({ telefono, asesorId, resumen, nota });
+    const r =
+      canal === "whatsapp"
+        ? await registrarLeadWhatsAppAction({ telefono, asesorId, resumen, nota })
+        : await enviarLeadTelegramAction({ telefono, asesorId, resumen, nota });
     setEnviando(false);
     if (r.ok) {
       setResultado({
         tipo: "ok",
-        texto: `Enviado a ${asesor.nombre} por Telegram. Se le asignó el lead, Sofía quedó en pausa y se registró en la bitácora.`,
+        texto:
+          canal === "whatsapp"
+            ? `Se abrió tu WhatsApp con el mensaje para ${asesor.nombre}: pulsa enviar ahí. Se le asignó el lead, Sofía quedó en pausa y se registró en la bitácora.`
+            : `Enviado a ${asesor.nombre} por Telegram. Se le asignó el lead, Sofía quedó en pausa y se registró en la bitácora.`,
         avisos: r.avisos,
       });
       await alEnviado(r.envio);
@@ -81,7 +102,7 @@ export function ModalPasarLeadTelegram({ telefono, atiendeActual, alCerrar, alEn
       <div className="m-auto w-full max-w-2xl rounded-2xl bg-white p-4 sm:p-5 shadow-2xl border border-carbon/10 font-cuerpo">
         <div className="flex items-center justify-between border-b border-carbon/10 pb-3 mb-3">
           <h3 className="font-titular text-lg font-bold text-verde-profundo flex items-center gap-2">
-            <span>📨</span> Pasar lead a un asesor por Telegram
+            <span>📨</span> Pasar lead a un asesor
           </h3>
           <button type="button" onClick={alCerrar} className="text-carbon/40 hover:text-carbon text-lg font-bold p-1">
             ✕
@@ -94,6 +115,36 @@ export function ModalPasarLeadTelegram({ telefono, atiendeActual, alCerrar, alEn
           <div className="rounded-xl bg-rojo/10 border border-rojo/20 p-3 text-xs text-rojo">⚠️ {prev.error}</div>
         ) : (
           <div className="space-y-4">
+            {/* Canal */}
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-wide text-carbon/50 mb-1 block">Enviar por</label>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    ["whatsapp", "🟢 Mi WhatsApp", "Desde tu número; envías tú en WhatsApp"],
+                    ["telegram", "✈️ Telegram", "Bot con botones de acuse, conversación y fotos"],
+                  ] as const
+                ).map(([c, titulo, desc]) => (
+                  <button
+                    key={c}
+                    type="button"
+                    disabled={enviando || resultado?.tipo === "ok"}
+                    onClick={() => setCanal(c)}
+                    className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                      canal === c
+                        ? c === "whatsapp"
+                          ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500"
+                          : "border-sky-500 bg-sky-50 ring-1 ring-sky-500"
+                        : "border-carbon/15 bg-white hover:bg-carbon/5"
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-carbon">{titulo}</div>
+                    <div className="text-[10px] text-carbon/60">{desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Asesor */}
             <div>
               <label className="text-[11px] font-bold uppercase tracking-wide text-carbon/50 mb-1 block">Asesor</label>
@@ -106,9 +157,9 @@ export function ModalPasarLeadTelegram({ telefono, atiendeActual, alCerrar, alEn
               >
                 <option value="">— Elige al asesor —</option>
                 {prev.asesores?.map((a) => (
-                  <option key={a.id} value={a.id} disabled={!a.tieneTelegram}>
+                  <option key={a.id} value={a.id} disabled={!disponible(a, canal)}>
                     {a.nombre}
-                    {a.tieneTelegram ? "" : " · sin Telegram vinculado"}
+                    {disponible(a, canal) ? "" : canal === "telegram" ? " · sin Telegram vinculado" : " · sin WhatsApp registrado"}
                   </option>
                 ))}
               </select>
@@ -153,6 +204,17 @@ export function ModalPasarLeadTelegram({ telefono, atiendeActual, alCerrar, alEn
                 <div className="text-[11px] font-bold uppercase tracking-wide text-carbon/50 mb-1">
                   Así lo verá {asesor?.nombre || "el asesor"}
                 </div>
+                {canal === "whatsapp" ? (
+                  <div className="rounded-xl bg-[#efeae2] p-2 space-y-1.5">
+                    <div className="ml-auto max-w-[95%] rounded-lg bg-[#d9fdd3] p-2.5 text-[12px] leading-relaxed text-carbon whitespace-pre-wrap break-words shadow-sm">
+                      {textoWhatsApp}
+                    </div>
+                    <p className="px-1 text-[10px] text-carbon/60">
+                      WhatsApp no permite adjuntar desde aquí: la conversación, fotos y comparativa quedan en el CRM. Si
+                      quieres, reenvíalas tú desde el chat del cliente.
+                    </p>
+                  </div>
+                ) : (
                 <div className="rounded-xl bg-[#e6ebee] p-2 space-y-1.5">
                   <div
                     className="rounded-lg bg-white p-2.5 text-[12px] leading-relaxed text-carbon whitespace-pre-wrap break-words shadow-sm [&_a]:text-sky-700 [&_a]:underline"
@@ -207,6 +269,7 @@ export function ModalPasarLeadTelegram({ telefono, atiendeActual, alCerrar, alEn
                     </div>
                   )}
                 </div>
+                )}
               </div>
             </div>
 
@@ -218,7 +281,11 @@ export function ModalPasarLeadTelegram({ telefono, atiendeActual, alCerrar, alEn
                 • Queda registrado en la bitácora{" "}
                 {prev.datos?.expedienteId ? `del ${prev.datos.expedienteId}` : prev.datos?.prospectoId ? `del ${prev.datos.prospectoId}` : ""} y aquí verás si lo revisó.
               </div>
-              <div>• Si no confirma en 2 h, se le recuerda y te avisamos por Telegram.</div>
+              {canal === "telegram" ? (
+                <div>• Si no confirma en 2 h, se le recuerda y te avisamos por Telegram.</div>
+              ) : (
+                <div>• Se abre tu WhatsApp con el mensaje listo; cuando confirme, márcalo como revisado en la conversación.</div>
+              )}
             </div>
             {sinFolio && (
               <div className="rounded-xl bg-amber-50 border border-amber-200 p-2.5 text-[11px] text-amber-900">
@@ -257,9 +324,15 @@ export function ModalPasarLeadTelegram({ telefono, atiendeActual, alCerrar, alEn
                     selectAsesorRef.current?.focus();
                   }}
                   disabled={enviando}
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white disabled:opacity-50"
+                  className={`px-5 py-2 rounded-xl text-xs font-bold text-white disabled:opacity-50 ${
+                    canal === "whatsapp" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-sky-600 hover:bg-sky-700"
+                  }`}
                 >
-                  {enviando ? "Enviando…" : asesor ? `Enviar a ${asesor.nombre}` : "Elige un asesor"}
+                  {enviando
+                    ? "Enviando…"
+                    : asesor
+                    ? `${canal === "whatsapp" ? "Abrir WhatsApp" : "Enviar por Telegram"} a ${asesor.nombre}`
+                    : "Elige un asesor"}
                 </button>
               )}
             </div>

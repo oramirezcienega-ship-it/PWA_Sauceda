@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { normalizarTelefono } from "@/lib/telefono";
+import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 
 /**
  * Consulta si las respuestas automáticas de la IA Sofía están pausadas para un teléfono / expediente.
@@ -50,15 +50,58 @@ export async function esConversacionPausada(
   return false;
 }
 
+async function guardarClave(sb: SupabaseClient, clave: string, valor: string): Promise<void> {
+  const { data: existente } = await sb
+    .from("configuracion_agente")
+    .select("clave")
+    .eq("clave", clave)
+    .maybeSingle();
+
+  if (existente) {
+    await sb
+      .from("configuracion_agente")
+      .update({ valor, updated_at: new Date().toISOString() })
+      .eq("clave", clave);
+  } else {
+    await sb.from("configuracion_agente").insert({ clave, valor });
+  }
+}
+
+/**
+ * Indica si la pausa vigente la puso el sistema porque el asesor escribió
+ * (y no el botón de pausa). Solo esas pausas se levantan al salir del chat.
+ * Las pausas anteriores a la marca (sin clave ia_pausa_auto) venían de que el
+ * asesor escribió, así que también cuentan como automáticas; el botón siempre
+ * deja la marca en "false".
+ */
+export async function esPausaAutomatica(sb: SupabaseClient, telefono: string): Promise<boolean> {
+  const tel10 = (normalizarTelefono(telefono) || telefono).replace(/\D/g, "").slice(-10);
+  if (!tel10) return false;
+  try {
+    const { data } = await sb
+      .from("configuracion_agente")
+      .select("clave, valor")
+      .in("clave", [`ia_pausada:${tel10}`, `ia_pausa_auto:${tel10}`]);
+    const valor = (clave: string) => (data || []).find((f: any) => f.clave === clave)?.valor;
+    if (valor(`ia_pausada:${tel10}`) !== "true") return false;
+    return valor(`ia_pausa_auto:${tel10}`) !== "false";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Actualiza el estado de pausa de Sofía para una conversación.
+ * `automatica` marca que la pausa la provocó un mensaje del asesor; cualquier
+ * otro cambio (pausa manual o reactivación) limpia esa marca.
  */
 export async function setConversacionPausada(
   sb: SupabaseClient,
   telefono: string,
   pausada: boolean,
   expedienteId?: string | null,
-  prospectoId?: string | null
+  prospectoId?: string | null,
+  automatica = false
 ): Promise<{ ok: boolean; pausada: boolean; error?: string }> {
   const tel10 = (normalizarTelefono(telefono) || telefono).replace(/\D/g, "").slice(-10);
   if (!tel10) {
@@ -69,22 +112,8 @@ export async function setConversacionPausada(
 
   // 1. Guardar en configuracion_agente (garantía de persistencia inmediata)
   try {
-    const { data: existente } = await sb
-      .from("configuracion_agente")
-      .select("clave")
-      .eq("clave", `ia_pausada:${tel10}`)
-      .maybeSingle();
-
-    if (existente) {
-      await sb
-        .from("configuracion_agente")
-        .update({ valor: valorStr, updated_at: new Date().toISOString() })
-        .eq("clave", `ia_pausada:${tel10}`);
-    } else {
-      await sb
-        .from("configuracion_agente")
-        .insert({ clave: `ia_pausada:${tel10}`, valor: valorStr });
-    }
+    await guardarClave(sb, `ia_pausada:${tel10}`, valorStr);
+    await guardarClave(sb, `ia_pausa_auto:${tel10}`, pausada && automatica ? "true" : "false");
   } catch (err) {
     console.error("Error al guardar estado de pausa en configuracion_agente:", err);
   }
@@ -96,6 +125,22 @@ export async function setConversacionPausada(
         .from("expedientes")
         .update({ ia_pausada: pausada })
         .eq("id", expedienteId);
+    } catch {
+      // Ignorar si la columna aún no está migrada
+    }
+  }
+
+  // Al reactivar, se limpian todos los expedientes/prospectos del teléfono: el webhook
+  // puede consultar un expediente distinto al que se encontró aquí y seguir viéndola pausada.
+  if (!pausada) {
+    const variantes = variantesTelefono(telefono);
+    try {
+      await sb.from("expedientes").update({ ia_pausada: false }).in("telefono", variantes).eq("ia_pausada", true);
+    } catch {
+      // Ignorar si la columna aún no está migrada
+    }
+    try {
+      await sb.from("prospectos").update({ ia_pausada: false }).in("telefono", variantes).eq("ia_pausada", true);
     } catch {
       // Ignorar si la columna aún no está migrada
     }

@@ -5,7 +5,8 @@ import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { iaAgenteActivo } from "@/lib/ia/agente";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { transcribirAudioMeta } from "@/lib/ia/audio";
-import { detectarTipoNegocio } from "@/lib/types";
+import { procesarRetroAsesorWhatsApp } from "@/lib/retro-whatsapp";
+import { detectarTipoNegocio, OrigenAdquisicion } from "@/lib/types";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import { interpretarErrorMeta } from "@/lib/whatsapp";
 import { insertarExpedienteSeguro } from "@/lib/expedientes-insert";
@@ -90,7 +91,7 @@ interface PayloadWhatsApp {
           image?: { id?: string; caption?: string };
           sticker?: { id?: string };
           video?: { id?: string; caption?: string };
-          document?: { id?: string; filename?: string; caption?: string };
+          document?: { id?: string; filename?: string; caption?: string; mime_type?: string };
           reaction?: { message_id?: string; emoji?: string };
           contacts?: Array<{
             name?: { formatted_name?: string; first_name?: string; last_name?: string };
@@ -152,6 +153,9 @@ export function extraerMensajes(payload: PayloadWhatsApp): MensajeWhatsApp[] {
             texto = emoji ? `[reacción: ${emoji}]` : `[reacción: quitada]`;
           } else if (m.type === "video" && m.video?.id) {
             texto = `[video:${m.video.id}]${m.video.caption ? ' ' + m.video.caption : ''}`;
+          } else if (m.type === "document" && m.document?.id && m.document.mime_type?.startsWith("audio/")) {
+            // Archivo de audio enviado como documento (mp3, m4a...): se trata igual que una nota de voz.
+            texto = `[audio:${m.document.id}] (mensaje de tipo audio)`;
           } else if (m.type === "document" && m.document?.id) {
             texto = `[document:${m.document.id}]${m.document.filename ? ' ' + (m.document.filename || m.document.caption || '') : ''}`;
           } else if (m.type === "audio" && m.audio?.id) {
@@ -180,7 +184,9 @@ export function extraerMensajes(payload: PayloadWhatsApp): MensajeWhatsApp[] {
           nombre: nombrePorWaId[m.from],
           mensaje: texto,
           waMessageId: m.id,
-          audioId: m.type === "audio" ? m.audio?.id : undefined,
+          audioId: m.type === "audio"
+            ? m.audio?.id
+            : m.type === "document" && m.document?.mime_type?.startsWith("audio/") ? m.document.id : undefined,
           referral: m.referral,
         });
       }
@@ -226,19 +232,38 @@ async function obtenerOCrearProspecto(
   campaign_name = "",
   adset_name = "",
   ad_name = "",
+  origen: OrigenAdquisicion = "whatsapp",
 ): Promise<string> {
   const { data: existentes } = await sb
     .from("prospectos")
-    .select("id, campaign_name, adset_name, ad_name")
+    .select("id, campaign_name, adset_name, ad_name, origen")
     .in("telefono", variantesTelefono(lead.telefono))
     .limit(1);
 
   if (existentes && existentes.length > 0) {
     const pr = existentes[0];
     const updateAttrs: any = {};
-    if (campaign_name && campaign_name !== pr.campaign_name) updateAttrs.campaign_name = campaign_name;
-    if (adset_name && adset_name !== pr.adset_name) updateAttrs.adset_name = adset_name;
-    if (ad_name && ad_name !== pr.ad_name) updateAttrs.ad_name = ad_name;
+    const esFallbackEstimado = ad_name === "Atribución Estimada (Pauta Activa)";
+
+    // Si viene de fallback estimado, solo rellenar si el prospecto no tenía ya campaña previa
+    if (campaign_name && campaign_name !== pr.campaign_name) {
+      if (!esFallbackEstimado || !pr.campaign_name) {
+        updateAttrs.campaign_name = campaign_name;
+      }
+    }
+    if (adset_name && adset_name !== pr.adset_name) {
+      if (!esFallbackEstimado || !pr.adset_name) {
+        updateAttrs.adset_name = adset_name;
+      }
+    }
+    if (ad_name && ad_name !== pr.ad_name) {
+      if (!esFallbackEstimado || !pr.ad_name) {
+        updateAttrs.ad_name = ad_name;
+      }
+    }
+    if (origen && origen !== "whatsapp" && (!pr.origen || pr.origen === "whatsapp")) {
+      updateAttrs.origen = origen;
+    }
 
     if (Object.keys(updateAttrs).length > 0) {
       await sb.from("prospectos").update(updateAttrs).eq("id", pr.id);
@@ -252,7 +277,7 @@ async function obtenerOCrearProspecto(
     id,
     nombre: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
     telefono: normalizarTelefono(lead.telefono),
-    origen: "whatsapp",
+    origen,
     campaign_name,
     adset_name,
     ad_name,
@@ -356,6 +381,182 @@ export async function comprobarYSalirDeSecuenciaPorMensaje(
   }
 }
 
+/** Etiqueta oficial asignada a atribuciones estimadas cuando Meta descarta el payload */
+export const ATRIBUCION_ESTIMADA_LABEL = "Atribución Estimada (Pauta Activa)";
+
+/** Reglas de palabras clave de servicio para asignación de fallback de campañas activas */
+export interface ReglaServicioFallback {
+  id: string;
+  nombre: string;
+  patron: RegExp;
+  terminosBusqueda: string[];
+  campanaDefault: string;
+  adsetDefault: string;
+}
+
+export const REGLAS_FALLBACK_SERVICIOS: ReglaServicioFallback[] = [
+  // Va primero: "cámara en la azotea" no debe caer en Impermeabilización.
+  {
+    id: "seguridad",
+    nombre: "Seguridad",
+    patron: /(?:c[aá]maras?\b|cctv|videovigilancia|videoportero|interf[oó]n|alarmas?\b|cerco\s*el[eé]ctrico|cerca\s*el[eé]ctrica|seguridad(?!\s*social))/i,
+    terminosBusqueda: ["seguridad", "camara", "cámara", "cctv", "alarma"],
+    campanaDefault: "SAUCEDA Seguridad - Oct 2026",
+    adsetDefault: "Seguridad",
+  },
+  {
+    id: "impermeabilizacion",
+    nombre: "Impermeabilización",
+    patron: /(?:impermeabili|gotera|filtraci|humedad|azotea|rollo\s*prefabricado|acrilic|malla|techo\s*filtr|fuga\s*en\s*techo)/i,
+    terminosBusqueda: ["impermeabili", "imper"],
+    campanaDefault: "SAUCEDA Construye Impermeabilizacion - Jul 2026",
+    adsetDefault: "Impermeabilizacion",
+  },
+  {
+    id: "remodelacion",
+    nombre: "Remodelación",
+    patron: /(?:remodela|acabado|azulejo|cocina|bañ|recamar|amplia|albanil|muro|tablaroca|yeso|piso\s*ceram)/i,
+    terminosBusqueda: ["remodela", "construye"],
+    campanaDefault: "SAUCEDA Construye Remodelacion - Jul 2026",
+    adsetDefault: "Remodelacion",
+  },
+  {
+    id: "herreria",
+    nombre: "Herrería",
+    patron: /(?:herreri|porton|protecci|barandal|reja|techumbr|saguan|zaguan|estructura\s*metal)/i,
+    terminosBusqueda: ["herreri", "porton"],
+    campanaDefault: "SAUCEDA Construye Herreria - Jul 2026",
+    adsetDefault: "Herreria",
+  },
+  {
+    id: "cisternas_tinacos",
+    nombre: "Cisternas y Tinacos",
+    patron: /(?:tinaco|rotoplas|cisterna|aljibe|lavado\s*de\s*tinaco|lavado\s*de\s*cisterna)/i,
+    terminosBusqueda: ["cisterna", "tinaco", "aljibe"],
+    campanaDefault: "SAUCEDA Cisternas y Tinacos - Jul 2026",
+    adsetDefault: "Cisternas y Tinacos",
+  },
+  {
+    id: "piso_estampado",
+    nombre: "Piso Estampado",
+    patron: /(?:estampado|concreto\s*estampado|piso\s*estampado)/i,
+    terminosBusqueda: ["estampado", "piso estampado"],
+    campanaDefault: "SAUCEDA Construye Piso Estampado - Jul 2026",
+    adsetDefault: "Piso Estampado",
+  },
+  {
+    id: "tramite_infonavit",
+    nombre: "Trámite y Acompañamiento Infonavit",
+    patron: /(?:tramite|trámite|acompañamiento|acompanamiento|asesoria|asesoría|precalificaci|puntos\s*infonavit|credito\s*infonavit|crédito\s*infonavit)/i,
+    terminosBusqueda: ["tramite", "trámite", "asesoria", "infonavit"],
+    campanaDefault: "SAUCEDA Compra Tramite - Sep 2026",
+    adsetDefault: "Tramite y Asesoria",
+  },
+  {
+    id: "inmobiliaria_traspasos",
+    nombre: "Traspasos e Inmobiliaria",
+    patron: /(?:traspaso|compramos\s*tu\s*casa|vender\s*casa|deuda\s*de\s*casa)/i,
+    terminosBusqueda: ["leads", "traspaso", "compramos"],
+    campanaDefault: "Sauceda Campaña leads 05.2026",
+    adsetDefault: "Sauceda Leads",
+  },
+];
+
+/**
+ * Resuelve el edge case de Meta Ads (Click-to-WhatsApp donde el usuario edita o borra el texto predeterminado):
+ * 1. Comprueba si el mensaje del cliente contiene palabras clave de algún servicio activo.
+ * 2. Si coincide, busca en `meta_ads_gastos` si hay una campaña activa en la fecha.
+ * 3. Si existe, usa esa campaña; si no, recurre a la campaña activa correspondiente en el catálogo.
+ * 4. Asigna la etiqueta `ad_name: "Atribución Estimada (Pauta Activa)"`.
+ */
+export async function inferirAtribucionFallbackMeta(
+  sb: ReturnType<typeof supabaseServidor>,
+  primerMensaje: string,
+  fechaReferencia?: string,
+): Promise<{ campaign_name: string; adset_name: string; ad_name: string } | null> {
+  const msg = (primerMensaje || "").trim();
+  if (!msg) return null;
+
+  // 1. Identificar si el mensaje coincide con alguna regla de servicio por palabras clave
+  const reglaCoincidente = REGLAS_FALLBACK_SERVICIOS.find((r) => r.patron.test(msg));
+  if (!reglaCoincidente) {
+    return null;
+  }
+
+  const fechaHoy = fechaReferencia || hoyISO();
+
+  try {
+    // 2. Revisar si ese día hay una campaña activa en `meta_ads_gastos`
+    const { data: gastosActivos, error: errGastos } = await sb
+      .from("meta_ads_gastos")
+      .select("campaign_name, centro_costos, producto_servicio, fecha_inicio, fecha_fin")
+      .lte("fecha_inicio", fechaHoy)
+      .or(`fecha_fin.is.null,fecha_fin.gte.${fechaHoy}`)
+      .neq("estatus_contable", "RECHAZADO")
+      .order("fecha_inicio", { ascending: false });
+
+    if (errGastos) {
+      console.warn("[Atribución Fallback] Advertencia al consultar meta_ads_gastos activos:", errGastos.message);
+    }
+
+    let campanaEncontrada: { campaign_name: string; adset_name?: string } | null = null;
+
+    const coincideConServicio = (item: any, terminos: string[]) => {
+      const textoItem = [item.campaign_name, item.centro_costos, item.producto_servicio]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return terminos.some((t) => textoItem.includes(t.toLowerCase()));
+    };
+
+    if (gastosActivos && gastosActivos.length > 0) {
+      const gastoMatch = gastosActivos.find((g) => coincideConServicio(g, reglaCoincidente.terminosBusqueda));
+      if (gastoMatch && gastoMatch.campaign_name) {
+        campanaEncontrada = {
+          campaign_name: gastoMatch.campaign_name,
+          adset_name: gastoMatch.producto_servicio || reglaCoincidente.adsetDefault,
+        };
+      }
+    }
+
+    // 3. Si no hubo registro activo para hoy, revisar campañas recientes en meta_ads_gastos (últimos 60 días)
+    if (!campanaEncontrada) {
+      const { data: gastosRecientes } = await sb
+        .from("meta_ads_gastos")
+        .select("campaign_name, centro_costos, producto_servicio, fecha_inicio, fecha_fin")
+        .neq("estatus_contable", "RECHAZADO")
+        .order("fecha_inicio", { ascending: false })
+        .limit(50);
+
+      if (gastosRecientes && gastosRecientes.length > 0) {
+        const matchReciente = gastosRecientes.find((g) => coincideConServicio(g, reglaCoincidente.terminosBusqueda));
+        if (matchReciente && matchReciente.campaign_name) {
+          campanaEncontrada = {
+            campaign_name: matchReciente.campaign_name,
+            adset_name: matchReciente.producto_servicio || reglaCoincidente.adsetDefault,
+          };
+        }
+      }
+    }
+
+    const campaign_name = campanaEncontrada?.campaign_name || reglaCoincidente.campanaDefault;
+    const adset_name = campanaEncontrada?.adset_name || reglaCoincidente.adsetDefault;
+
+    return {
+      campaign_name,
+      adset_name,
+      ad_name: ATRIBUCION_ESTIMADA_LABEL,
+    };
+  } catch (err) {
+    console.error("[Atribución Fallback] Error en consulta de fallback:", err);
+    return {
+      campaign_name: reglaCoincidente.campanaDefault,
+      adset_name: reglaCoincidente.adsetDefault,
+      ad_name: ATRIBUCION_ESTIMADA_LABEL,
+    };
+  }
+}
+
 /**
  * Registra un lead entrante de WhatsApp.
  * Crea (o reutiliza) el prospecto por teléfono con origen "whatsapp", y le
@@ -367,13 +568,17 @@ export async function registrarLeadWhatsApp(
 ): Promise<void> {
   const sb = supabaseServidor();
 
-  // Si es un audio, transcribirlo usando Whisper antes de continuar
+  // Si es un audio, transcribirlo antes de continuar. Si se logra, Sofía contesta
+  // con normalidad; si no, se pausa y se avisa al equipo (manejarFlujoAudio).
+  let audioSinTranscribir = false;
   if (lead.audioId) {
+    audioSinTranscribir = true;
     try {
       console.log(`[WhatsApp Inbound Voice] Se detectó audio con id ${lead.audioId} para ${lead.telefono}. Transcribiendo...`);
       const textoTranscrito = await transcribirAudioMeta(lead.audioId);
-      if (textoTranscrito) {
+      if (textoTranscrito && textoTranscrito !== "(audio sin voz entendible)") {
         lead.mensaje = `[audio:${lead.audioId}] ${textoTranscrito}`;
+        audioSinTranscribir = false;
         console.log(`[WhatsApp Inbound Voice] Transcripción exitosa: "${textoTranscrito}"`);
       } else {
         lead.mensaje = `[audio:${lead.audioId}] (mensaje de tipo audio)`;
@@ -385,14 +590,43 @@ export async function registrarLeadWhatsApp(
     }
   }
 
+  // Asesor dando retroalimentación de sus clientes (escribió "RETRO"): no es un lead.
+  try {
+    const consumido = await procesarRetroAsesorWhatsApp(sb, {
+      telefono: lead.telefono,
+      texto: lead.mensaje ?? "",
+      waMessageId: lead.waMessageId,
+    });
+    if (consumido) return;
+  } catch (err) {
+    console.error("[Retro WhatsApp] Error procesando retro del asesor:", err);
+  }
+
+  // Proveedor escribiendo a la línea oficial: va a su conversación, sin prospecto ni Sofía.
+  try {
+    const { proveedorPorTelefono, registrarMensajeEntranteProveedor } = await import("@/lib/whatsapp-proveedores");
+    const proveedor = await proveedorPorTelefono(sb, lead.telefono);
+    if (proveedor) {
+      await registrarMensajeEntranteProveedor(sb, proveedor, {
+        telefono: lead.telefono,
+        texto: lead.mensaje ?? "",
+        waMessageId: lead.waMessageId,
+      });
+      return;
+    }
+  } catch (err) {
+    console.error("[WhatsApp proveedores] Error procesando mensaje de proveedor:", err);
+  }
+
   // Teléfono normalizado (canónico) y sus variantes para deduplicar.
   const telefono = normalizarTelefono(lead.telefono);
   const variantesTel = variantesTelefono(lead.telefono);
 
   // Atribución de campaña
-  let campaign_name = "";
-  let adset_name = "";
-  let ad_name = "";
+  let campaign_name = lead.campaign_name || "";
+  let adset_name = lead.adset_name || "";
+  let ad_name = lead.ad_name || "";
+  let origenLead: OrigenAdquisicion = "whatsapp";
 
   if (lead.referral) {
     if (lead.referral.headline) {
@@ -418,28 +652,176 @@ export async function registrarLeadWhatsApp(
         console.error("Error al consultar detalles de ad_id en Graph API desde WhatsApp:", adErr);
       }
     }
+  } else {
+    // Detección automática de leads orgánicos provenientes de saucedamx.com (Google SEO León)
+    const textoMensaje = (lead.mensaje || "").toLowerCase();
+    if (
+      textoMensaje.includes("página web") ||
+      textoMensaje.includes("pagina web") ||
+      textoMensaje.includes("saucedamx") ||
+      textoMensaje.includes("sauceda.mx")
+    ) {
+      origenLead = "sitio-web";
+      campaign_name = "Google SEO León";
+      adset_name = "saucedamx.com";
+
+      if (textoMensaje.includes("impermeabili") || textoMensaje.includes("manto") || textoMensaje.includes("azotea") || textoMensaje.includes("gotera")) {
+        ad_name = "Página Impermeabilización";
+      } else if (textoMensaje.includes("concreto") || textoMensaje.includes("estampado") || textoMensaje.includes("cochera")) {
+        ad_name = "Página Concreto Estampado";
+      } else if (textoMensaje.includes("herreria") || textoMensaje.includes("herrería") || textoMensaje.includes("portón") || textoMensaje.includes("porton") || textoMensaje.includes("pérgola") || textoMensaje.includes("pergola")) {
+        ad_name = "Página Herrería";
+      } else if (textoMensaje.includes("infonavit") || textoMensaje.includes("trámite") || textoMensaje.includes("tramite")) {
+        ad_name = "Página Trámite";
+      } else if (textoMensaje.includes("vender") || textoMensaje.includes("vende")) {
+        ad_name = "Página Vende";
+      } else if (textoMensaje.includes("protege") || textoMensaje.includes("alarma") || textoMensaje.includes("cámara") || textoMensaje.includes("camara") || textoMensaje.includes("cerca")) {
+        ad_name = "Página Protege";
+      } else {
+        ad_name = "Página Web General";
+      }
+    }
+  }
+
+  // Fallback de Atribución (Edge Case de Meta: cuando el cliente borra o edita el texto del anuncio en Click-to-WhatsApp)
+  if (!campaign_name) {
+    const fallback = await inferirAtribucionFallbackMeta(sb, lead.mensaje ?? "");
+    if (fallback) {
+      campaign_name = fallback.campaign_name;
+      adset_name = fallback.adset_name;
+      ad_name = fallback.ad_name;
+      console.log(`[Atribución Fallback] Asignada campaña estimada para lead ${lead.telefono}: ${campaign_name} / ${adset_name} / ${ad_name}`);
+    }
   }
 
   // Prospecto (persona): se busca o se crea por teléfono.
-  const prospectoId = await obtenerOCrearProspecto(sb, lead, campaign_name, adset_name, ad_name);
+  const prospectoId = await obtenerOCrearProspecto(sb, lead, campaign_name, adset_name, ad_name, origenLead);
 
-  // Dedupe del expediente por teléfono (cualquier formato equivalente).
-  const { data: existentes } = await sb
-    .from("expedientes")
-    .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente")
-    .in("telefono", variantesTel)
-    .limit(1);
+  // 1. Detección de token universal (Handshake Enlace Puente wa.me)
+  // Formato universal esperado: [EXP-XXX], [COT-XXX], [PRO-XXX], EXP-XXX, COT-XXX o PRO-XXX
+  const tokenMatch = (lead.mensaje ?? "").match(/(?:EXP|COT|PRO)-[A-Za-z0-9-_]+/i);
+  let expEncontrado: {
+    id: string;
+    notas: string;
+    campaign_name?: string;
+    adset_name?: string;
+    ad_name?: string;
+    tipo_negocio?: string;
+    cliente?: string;
+    telefono?: string;
+    prospecto_id?: string;
+    fraccionamiento?: string;
+  } | null = null;
+  let handshakePorToken = false;
 
-  if (existentes && existentes.length > 0) {
-    const exp = existentes[0] as { id: string; notas: string; campaign_name?: string; adset_name?: string; ad_name?: string; tipo_negocio?: string; cliente?: string };
-    const nota = `${exp.notas ?? ""}\n[WhatsApp ${hoyISO()}] ${
+  if (tokenMatch) {
+    const tokenId = tokenMatch[0].toUpperCase();
+
+    if (tokenId.startsWith("PRO-")) {
+      // Buscar el expediente asociado a este folio de prospecto
+      const { data: exps } = await sb
+        .from("expedientes")
+        .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente, telefono, prospecto_id, fraccionamiento")
+        .eq("prospecto_id", tokenId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (exps && exps.length > 0) {
+        expEncontrado = exps[0] as any;
+        handshakePorToken = true;
+        console.log(`[WhatsApp Puente Universal] Handshake exitoso: token prospecto [${tokenId}] vinculado a expediente ${expEncontrado?.id}`);
+      }
+    } else if (tokenId.startsWith("COT-")) {
+      // Buscar expediente directamente por id o a través de la tabla cotizaciones
+      const { data: eCot } = await sb
+        .from("expedientes")
+        .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente, telefono, prospecto_id, fraccionamiento")
+        .eq("id", tokenId)
+        .maybeSingle();
+
+      if (eCot) {
+        expEncontrado = eCot as any;
+        handshakePorToken = true;
+      } else {
+        const { data: cot } = await sb
+          .from("cotizaciones")
+          .select("expediente_id")
+          .eq("id", tokenId)
+          .maybeSingle();
+
+        if (cot?.expediente_id) {
+          const { data: expDeCot } = await sb
+            .from("expedientes")
+            .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente, telefono, prospecto_id, fraccionamiento")
+            .eq("id", cot.expediente_id)
+            .maybeSingle();
+          if (expDeCot) {
+            expEncontrado = expDeCot as any;
+            handshakePorToken = true;
+          }
+        }
+      }
+      if (handshakePorToken) {
+        console.log(`[WhatsApp Puente Universal] Handshake exitoso: cotización [${tokenId}] vinculada a expediente ${expEncontrado?.id}`);
+      }
+    } else {
+      // Folio EXP-XXX
+      const { data: eToken } = await sb
+        .from("expedientes")
+        .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente, telefono, prospecto_id, fraccionamiento")
+        .eq("id", tokenId)
+        .maybeSingle();
+
+      if (eToken) {
+        expEncontrado = eToken as any;
+        handshakePorToken = true;
+        console.log(`[WhatsApp Puente Universal] Handshake exitoso: token expediente [${tokenId}] vinculado a ${eToken.id}`);
+      }
+    }
+  }
+
+  // Dedupe del expediente por teléfono si no se resolvió por token
+  if (!expEncontrado) {
+    const { data: existentes } = await sb
+      .from("expedientes")
+      .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente, telefono, prospecto_id")
+      .in("telefono", variantesTel)
+      .limit(1);
+
+    if (existentes && existentes.length > 0) {
+      expEncontrado = existentes[0] as any;
+    }
+  }
+
+  if (expEncontrado) {
+    const exp = expEncontrado;
+    const prefijoNota = handshakePorToken ? `[WhatsApp Puente Token ${hoyISO()}]` : `[WhatsApp ${hoyISO()}]`;
+    const nota = `${exp.notas ?? ""}\n${prefijoNota} ${
       lead.mensaje ?? ""
     }`.trim();
 
+    const esFallbackEstimado = ad_name === ATRIBUCION_ESTIMADA_LABEL;
     const updateData: any = { notas: nota, ultimo_movimiento: hoyISO() };
-    if (campaign_name && campaign_name !== exp.campaign_name) updateData.campaign_name = campaign_name;
-    if (adset_name && adset_name !== exp.adset_name) updateData.adset_name = adset_name;
-    if (ad_name && ad_name !== exp.ad_name) updateData.ad_name = ad_name;
+    if (campaign_name && campaign_name !== exp.campaign_name) {
+      if (!esFallbackEstimado || !exp.campaign_name) {
+        updateData.campaign_name = campaign_name;
+      }
+    }
+    if (adset_name && adset_name !== exp.adset_name) {
+      if (!esFallbackEstimado || !exp.adset_name) {
+        updateData.adset_name = adset_name;
+      }
+    }
+    if (ad_name && ad_name !== exp.ad_name) {
+      if (!esFallbackEstimado || !exp.ad_name) {
+        updateData.ad_name = ad_name;
+      }
+    }
+
+    // Si el expediente no tenía teléfono o cambió de línea (puente), sincronizar el teléfono actual
+    if (!exp.telefono) {
+      updateData.telefono = telefono;
+    }
 
     // Si el tipo de negocio era traspaso_compra (default), cayó en "otro" o no tenía, y ahora se detecta algo específico, lo actualizamos.
     if (exp.tipo_negocio === "traspaso_compra" || !exp.tipo_negocio || exp.tipo_negocio === "otro") {
@@ -460,20 +842,23 @@ export async function registrarLeadWhatsApp(
       .from("expedientes")
       .update(updateData)
       .eq("id", exp.id);
+
+    const efectivoProspectoId = exp.prospecto_id || prospectoId;
+
     const nuevo = await guardarMensajeEntrante(sb, {
       telefono,
       texto: lead.mensaje ?? "",
       expedienteId: exp.id,
-      prospectoId,
+      prospectoId: efectivoProspectoId,
       waMessageId: lead.waMessageId,
     });
 
-    // Interceptar mensajes de audio
-    if (lead.audioId) {
+    // Audio que no se pudo transcribir: pausa y aviso al equipo.
+    if (audioSinTranscribir) {
       await manejarFlujoAudio(sb, {
         telefono,
         expedienteId: exp.id,
-        prospectoId,
+        prospectoId: efectivoProspectoId,
         clienteNombre: exp.cliente || "",
         tipoNegocio: exp.tipo_negocio || "Por definir"
       });
@@ -537,8 +922,8 @@ export async function registrarLeadWhatsApp(
     waMessageId: lead.waMessageId,
   });
 
-  // Interceptar mensajes de audio
-  if (lead.audioId) {
+  // Audio que no se pudo transcribir: pausa y aviso al equipo.
+  if (audioSinTranscribir) {
     await manejarFlujoAudio(sb, {
       telefono,
       expedienteId: id,
@@ -625,7 +1010,7 @@ async function manejarFlujoAudio(
 *Cliente:* ${ctx.clienteNombre}
 *Teléfono:* ${ctx.telefono}
 *Negocio:* ${ctx.tipoNegocio}
-El cliente ha enviado un audio. El bot de la IA se ha pausado para esta conversación y no responderá de forma automática. Por favor, atienda a la brevedad en el CRM.`;
+El cliente ha enviado un audio que no se pudo transcribir. El bot de la IA se ha pausado para esta conversación y no responderá de forma automática. Por favor, atienda a la brevedad en el CRM.`;
 
   console.log("[Audio Handler] Enviando notificaciones a Oscar y Paulina...");
   
@@ -739,11 +1124,12 @@ export async function procesarEstadosWhatsApp(payload: any): Promise<void> {
             const insertPayload: Record<string, any> = {
               telefono: destinatario,
               direccion: "out",
-              texto: "[Campaña Mautic / Plantilla WhatsApp]",
+              // No sabemos quién lo envió (Mautic, otra herramienta o un envío del CRM que no
+              // se guardó): no se atribuye a ninguna campaña para no confundir al asesor.
+              texto: "[Mensaje de WhatsApp enviado sin registro en el CRM (plantilla o automatización externa)]",
               wa_message_id: waMessageId,
               estado: nuevoEstado,
-              agente: "Mautic Automatización",
-              campana_origen: "Campaña Mautic",
+              agente: "Envío sin registro",
               canal_id: "whatsapp",
               created_at: status.timestamp && !isNaN(parseInt(status.timestamp, 10))
                 ? new Date(parseInt(status.timestamp, 10) * 1000).toISOString()
@@ -771,7 +1157,7 @@ export async function procesarEstadosWhatsApp(payload: any): Promise<void> {
               const insertBasico: Record<string, any> = {
                 telefono: destinatario,
                 direccion: "out",
-                texto: "[Campaña Mautic / Plantilla WhatsApp]",
+                texto: "[Mensaje de WhatsApp enviado sin registro en el CRM (plantilla o automatización externa)]",
                 wa_message_id: waMessageId,
                 estado: nuevoEstado,
                 canal_id: "whatsapp",

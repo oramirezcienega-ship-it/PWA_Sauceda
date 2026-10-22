@@ -5,6 +5,7 @@ import { aceptarCotizacionCliente } from "@/app/actions/cotizaciones";
 import { formatoPesos } from "@/lib/formato";
 import type { Cotizacion, CotizacionModularData, OpcionesSeleccionadasModular } from "@/lib/types";
 
+import { Logo } from "@/components/marca/Logo";
 interface VisualizadorCotizacionModularProps {
   cotizacion: Omit<Cotizacion, "notasInternas" | "costoEstimado">;
 }
@@ -326,9 +327,7 @@ export function VisualizadorCotizacionModular({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="font-mono text-xs font-bold tracking-widest text-[#D4AF37] uppercase">
-                  SAUCEDA CONSTRUYE
-                </span>
+                <Logo variante="horizontal" className="h-7 w-auto" />
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 uppercase">
                   Cotización Modular Dinámica
                 </span>

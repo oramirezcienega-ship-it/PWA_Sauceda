@@ -29,6 +29,7 @@ import {
 import { PLANTILLAS_MODULARES_DISPONIBLES } from "@/lib/plantillasModulares";
 import { listarProductosServicios } from "@/app/actions/productos";
 import { costoUnitarioPorVolumen } from "@/lib/costos-volumen";
+import { escalonParaValor, formatoEscalon, medidaTarifa, textoConEscalon, valorEscalonEnTexto } from "@/lib/tarifas-capacidad";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { listarProspectosMin } from "@/app/actions/prospectos";
 import { listarEmpresasMin } from "@/app/actions/empresas";
@@ -37,11 +38,59 @@ import { ModalPrevisualizarCotizacion } from "./ModalPrevisualizarCotizacion";
 import { ModalEditorCotizacionModular } from "./ModalEditorCotizacionModular";
 import { EditorPresupuestoApu } from "./construccion/EditorPresupuestoApu";
 import { PanelProveedoresCotizacion } from "./PanelProveedoresCotizacion";
+import { PanelSolicitudesProveedor } from "./proveedores/PanelSolicitudesProveedor";
 import { PanelAutorizacionCostosTelegram } from "./PanelAutorizacionCostosTelegram";
 import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
 import { ModalProgramarInstalacionCotizacion } from "./ModalProgramarInstalacionCotizacion";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
 import { normalizarTelefono } from "@/lib/telefono";
+
+function extraerFechaLocal(fechaStr?: string | null): string {
+  if (!fechaStr) return new Date().toISOString().split("T")[0];
+  if (fechaStr.includes("T")) {
+    const [f] = fechaStr.split("T");
+    if (f && f.length === 10) return f;
+  }
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return new Date().toISOString().split("T")[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function extraerHoraLocal(fechaStr?: string | null): string {
+  if (!fechaStr) return "10:00";
+  if (fechaStr.includes("T")) {
+    const timePart = fechaStr.split("T")[1];
+    if (timePart && timePart.length >= 5) {
+      return timePart.slice(0, 5);
+    }
+  }
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return "10:00";
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${h}:${min}`;
+}
+
+function extraerDatetimeLocal(fechaStr?: string | null): string {
+  if (!fechaStr) return "";
+  if (fechaStr.includes("T")) {
+    const [f, t] = fechaStr.split("T");
+    if (f && t && t.length >= 5) {
+      return `${f}T${t.slice(0, 5)}`;
+    }
+  }
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day}T${h}:${min}`;
+}
 
 interface DetalleCotizacionAdminProps {
   cotizacionInicial: Cotizacion;
@@ -142,16 +191,15 @@ export function DetalleCotizacionAdmin({
   const [mensajeInspeccion, setMensajeInspeccion] = useState({ tipo: "", texto: "" });
 
   const [tecnicoNombre, setTecnicoNombre] = useState(
-    reporteVisitaInicial?.medidas?.tecnicoNombre || cotizacionInicial.inspectorNombre || ""
+    reporteVisitaInicial?.medidas?.tecnicoNombre || reporteVisitaInicial?.inspectorNombre || cotizacionInicial.inspectorNombre || ""
   );
   const [fechaVisitaRealizada, setFechaVisitaRealizada] = useState(
-    reporteVisitaInicial?.medidas?.fechaVisita || 
-    (cotizacionInicial.fechaVisita ? new Date(cotizacionInicial.fechaVisita).toISOString().split("T")[0] : new Date().toISOString().split("T")[0])
+    reporteVisitaInicial?.medidas?.fechaVisita || extraerFechaLocal(cotizacionInicial.fechaVisita)
   );
   const [horaVisitaRealizada, setHoraVisitaRealizada] = useState(
-    reporteVisitaInicial?.medidas?.horaVisita || 
-    (cotizacionInicial.fechaVisita ? new Date(cotizacionInicial.fechaVisita).toTimeString().split(" ")[0].slice(0, 5) : new Date().toTimeString().split(" ")[0].slice(0, 5))
+    reporteVisitaInicial?.medidas?.horaVisita || extraerHoraLocal(cotizacionInicial.fechaVisita)
   );
+  const [marcandoInspeccion, setMarcandoInspeccion] = useState(false);
   const [subiendoFotos, setSubiendoFotos] = useState(false);
   const [dictandoObs, setDictandoObs] = useState(false);
   const [dictandoCond, setDictandoCond] = useState(false);
@@ -328,7 +376,7 @@ export function DetalleCotizacionAdmin({
   // --- State para Cambio de Requerimiento de Visita ---
   const [requiereVisita, setRequiereVisita] = useState(cotizacionInicial.requiereVisita);
   const [fechaVisitaPlan, setFechaVisitaPlan] = useState(
-    cotizacionInicial.fechaVisita ? new Date(cotizacionInicial.fechaVisita).toISOString().slice(0, 16) : ""
+    extraerDatetimeLocal(cotizacionInicial.fechaVisita)
   );
   const [inspectorIdPlan, setInspectorIdPlan] = useState(cotizacionInicial.inspectorId || "");
   const [guardandoRequerimiento, setGuardandoRequerimiento] = useState(false);
@@ -623,6 +671,44 @@ export function DetalleCotizacionAdmin({
     }
   };
 
+  const handleMarcarInspeccionDirecta = async () => {
+    try {
+      setMarcandoInspeccion(true);
+      setMensajeInspeccion({ tipo: "", texto: "" });
+      const timeStr = horaVisitaRealizada || "10:00";
+      const fechaStr = fechaVisitaRealizada || extraerFechaLocal(cotizacion.fechaVisita);
+      const customFechaInspeccion = new Date(`${fechaStr}T${timeStr}:00`).toISOString();
+
+      const rep = await guardarReporteVisita(cotizacion.id, {
+        observacionesTecnicas: obsTecnicas || "Inspección técnica física confirmada y realizada en domicilio.",
+        condicionesSitio: condSitio || "Inspección física realizada según agenda.",
+        medidas: {
+          largo: Number(largo) || 0,
+          ancho: Number(ancho) || 0,
+          areaCalculada: (Number(largo) || 0) * (Number(ancho) || 0),
+          tecnicoNombre: (tecnicoNombre || cotizacion.inspectorNombre || "").trim(),
+          fechaVisita: fechaStr,
+          horaVisita: timeStr,
+          inspeccionRealizada: true,
+          rotaciones,
+        },
+        fotos,
+        fechaInspeccion: customFechaInspeccion,
+      });
+
+      setReporteVisita(rep);
+      setCotizacion((prev) => ({
+        ...prev,
+        estatus: prev.estatus === "esperando_visita" ? "calculando_costo" : prev.estatus,
+      }));
+      setMensajeInspeccion({ tipo: "ok", texto: "¡Inspección técnica confirmada como realizada y vinculada con éxito!" });
+    } catch (err: any) {
+      setMensajeInspeccion({ tipo: "error", texto: err instanceof Error ? err.message : "Error al confirmar inspección." });
+    } finally {
+      setMarcandoInspeccion(false);
+    }
+  };
+
   // Memos para Totales del Presupuesto
   const totalCostoInterno = useMemo(() => {
     return conceptosEditables.reduce((acc, c) => acc + (c.cantidad * c.costoUnitario), 0);
@@ -634,6 +720,13 @@ export function DetalleCotizacionAdmin({
       return acc + (c.cantidad * c.precioUnitario * (1 - desc / 100));
     }, 0);
   }, [conceptosEditables]);
+
+  const totalPrecioBase = useMemo(() => {
+    return conceptosEditables.reduce((acc, c) => acc + (c.cantidad * c.precioUnitario), 0);
+  }, [conceptosEditables]);
+
+  const montoDescuentoPresupuesto = Math.max(0, totalPrecioBase - totalPrecioVenta);
+  const pctDescuentoPresupuesto = totalPrecioBase > 0 ? (montoDescuentoPresupuesto / totalPrecioBase) * 100 : 0;
 
   const margenTotalPresupuesto = useMemo(() => {
     if (!totalPrecioVenta) return 0;
@@ -734,20 +827,52 @@ export function DetalleCotizacionAdmin({
   /** Cantidad mínima de cobro del producto del catálogo que corresponde al concepto (0 si no hay). */
   const minimoDeConcepto = (descripcion: string): number => Number(productoDeConcepto(descripcion)?.cantidadMinima) || 0;
 
+  /** Escalones de capacidad del producto con costo o precio capturado. */
+  const escalonesDe = (prod: any): { hastaLitros: number; precio: number | null; costo: number | null }[] =>
+    (prod?.tarifasCapacidad || []).filter((t: any) => t.precio !== null || t.costo !== null);
+
+  /** Capacidad (litros/tubos) del concepto: la mencionada en la descripción. */
+  const capacidadDeConcepto = (descripcion: string, prod: any): number | null =>
+    escalonesDe(prod).length ? valorEscalonEnTexto(descripcion, medidaTarifa(prod.tarifaMedida)) : null;
+
+  /** Aplica a la fila el costo y precio del escalón de capacidad elegido. */
+  const aplicarEscalon = (index: number, hastaLitros: number) => {
+    setConceptosEditables((prev) =>
+      prev.map((c, i) => {
+        if (i !== index) return c;
+        const prod = productoDeConcepto(c.descripcion);
+        const escalon = escalonesDe(prod).find((t) => t.hastaLitros === hastaLitros);
+        if (!prod || !escalon) return c;
+        return {
+          ...c,
+          descripcion: textoConEscalon(c.descripcion, hastaLitros, medidaTarifa(prod.tarifaMedida)),
+          costoUnitario: escalon.costo ?? c.costoUnitario,
+          precioUnitario: escalon.precio ?? c.precioUnitario,
+        };
+      })
+    );
+  };
+
   const handleCargarDesdeCatalogo = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const prodId = e.target.value;
     if (!prodId) return;
     const prod = catalogoProductos.find((p) => p.id === prodId);
     if (!prod) return;
 
+    // Servicios cobrados por capacidad: arranca en el primer escalón con precio
+    // (el asesor elige la capacidad real en la fila) y se cobra por servicio.
+    const escalones = escalonesDe(prod);
+    const escalon = escalones.find((t) => t.precio !== null) ?? escalones[0];
+    const medida = medidaTarifa(prod.tarifaMedida);
+
     setConceptosEditables((prev) => [
       ...prev,
       {
-        descripcion: prod.nombre,
+        descripcion: escalon ? `${prod.nombre} — hasta ${formatoEscalon(escalon.hastaLitros, medida)}` : prod.nombre,
         cantidad: 1,
-        unidad: prod.unidad,
-        costoUnitario: prod.costoUnitario,
-        precioUnitario: prod.precioUnitario,
+        unidad: escalon ? "servicio" : prod.unidad,
+        costoUnitario: escalon?.costo ?? prod.costoUnitario,
+        precioUnitario: escalon?.precio ?? prod.precioUnitario,
         descuento: 0,
       },
     ]);
@@ -1514,6 +1639,53 @@ export function DetalleCotizacionAdmin({
               </form>
             </div>
 
+            {/* Banner de Estado de la Inspección */}
+            {reporteVisita ? (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-emerald-900 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">✅</span>
+                  <div>
+                    <h5 className="font-bold text-sm">Inspección Técnica Realizada y Confirmada</h5>
+                    <p className="text-xs text-emerald-700">
+                      El reporte técnico de levantamiento físico está generado y vinculado a esta cotización.
+                      {reporteVisita.inspectorNombre ? ` Atendido por ${reporteVisita.inspectorNombre}.` : ""}
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href={`/reporte-visita/${cotizacion.token}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg transition shrink-0"
+                >
+                  <span>📄 Ver Reporte de Cliente</span>
+                  <span>↗</span>
+                </a>
+              </div>
+            ) : cotizacion.requiereVisita ? (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">⚠️</span>
+                  <div>
+                    <h5 className="font-bold text-sm">Inspección Técnica Pendiente de Confirmar</h5>
+                    <p className="text-xs text-amber-700">
+                      Esta cotización requiere inspección física en domicilio. Si la visita ya se llevó a cabo o fue confirmada en agenda, puedes vincular y generar el reporte técnico con un clic.
+                    </p>
+                  </div>
+                </div>
+                {puedeInspeccionar && (
+                  <button
+                    type="button"
+                    onClick={handleMarcarInspeccionDirecta}
+                    disabled={marcandoInspeccion}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-sauce hover:bg-verde-profundo text-white text-xs font-bold rounded-lg transition shadow-xs disabled:opacity-50 shrink-0"
+                  >
+                    {marcandoInspeccion ? "Confirmando..." : "✓ Confirmar Inspección como Realizada"}
+                  </button>
+                )}
+              </div>
+            ) : null}
+
             {/* Ficha de Levantamiento Técnico */}
             <div className="flex items-center justify-between border-b pb-2 pt-4">
               <div className="flex items-center gap-4">
@@ -1745,11 +1917,20 @@ export function DetalleCotizacionAdmin({
                       className="rounded-lg border border-carbon/20 bg-white px-3 py-1.5 text-xs font-semibold text-carbon/70 outline-none focus:border-sauce"
                     >
                       <option value="">📦 Seleccionar de Catálogo...</option>
-                      {catalogoProductos.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.nombre} ({formatMoneda(p.precioUnitario)})
-                        </option>
-                      ))}
+                      {catalogoProductos.map((p) => {
+                        const precios = escalonesDe(p)
+                          .map((t) => t.precio)
+                          .filter((v): v is number => v !== null);
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {p.nombre} (
+                            {precios.length
+                              ? `desde ${formatMoneda(Math.min(...precios))} según capacidad`
+                              : formatMoneda(p.precioUnitario)}
+                            )
+                          </option>
+                        );
+                      })}
                     </select>
                   )}
                   <button
@@ -2031,6 +2212,63 @@ export function DetalleCotizacionAdmin({
                                   placeholder="Ej. Impermeabilización Fester 5 años..."
                                   className="block w-full rounded border border-carbon/15 px-2 py-1 text-base sm:text-xs leading-snug focus:border-sauce focus:outline-none"
                                 />
+                                {(() => {
+                                  const prod = productoDeConcepto(c.descripcion);
+                                  if (!prod) return null;
+                                  const escalones = escalonesDe(prod);
+                                  const medida = medidaTarifa(prod.tarifaMedida);
+                                  const capacidad = capacidadDeConcepto(c.descripcion, prod);
+                                  const escalon = capacidad ? escalonParaValor(escalones, capacidad) : null;
+                                  const verCosto = !esOperaciones || esAdmin;
+                                  const difiere =
+                                    escalon &&
+                                    ((escalon.costo !== null && escalon.costo !== c.costoUnitario) ||
+                                      (escalon.precio !== null && escalon.precio !== c.precioUnitario));
+                                  return (
+                                    <div className="mt-1 space-y-1 text-[10px]">
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span
+                                          className="rounded-full bg-sauce/10 px-1.5 py-0.5 font-semibold text-sauce"
+                                          title="Producto del catálogo ligado a este concepto"
+                                        >
+                                          📦 {prod.nombre}
+                                        </span>
+                                        {escalones.length > 0 && (
+                                          <select
+                                            value={escalon?.hastaLitros ?? ""}
+                                            onChange={(e) => e.target.value && aplicarEscalon(idx, Number(e.target.value))}
+                                            className="rounded border border-carbon/15 bg-white px-1 py-0.5 text-[10px] focus:border-sauce focus:outline-none"
+                                            title="Capacidad: cada escalón tiene su costo y precio en el catálogo"
+                                          >
+                                            <option value="">Elegir capacidad...</option>
+                                            {escalones.map((t) => (
+                                              <option key={t.hastaLitros} value={t.hastaLitros}>
+                                                Hasta {formatoEscalon(t.hastaLitros, medida)}
+                                                {t.precio !== null ? ` — ${formatMoneda(t.precio)}` : " — sin precio"}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        )}
+                                      </div>
+                                      {difiere && escalon && (
+                                        <div className="flex flex-wrap items-center gap-1.5 text-amber-800">
+                                          <span>
+                                            Catálogo (hasta {formatoEscalon(escalon.hastaLitros, medida)}):
+                                            {escalon.costo !== null && verCosto && ` costo ${formatMoneda(escalon.costo)} ·`}
+                                            {escalon.precio !== null && ` precio ${formatMoneda(escalon.precio)}`}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => aplicarEscalon(idx, escalon.hastaLitros)}
+                                            className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 font-semibold hover:bg-amber-100"
+                                          >
+                                            Aplicar
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               <td className="py-2.5 text-center">
                                 <input
@@ -2157,9 +2395,38 @@ export function DetalleCotizacionAdmin({
                           ))}
                         </tbody>
                         <tfoot>
-                          <tr className="border-t-2 border-carbon/15 font-semibold text-carbon/80 bg-slate-50/80">
+                          {montoDescuentoPresupuesto > 0.005 && (
+                            <>
+                              <tr className="border-t-2 border-carbon/15 text-carbon/70 bg-slate-50/80">
+                                <td className="py-2 px-2 font-semibold" colSpan={3 + (!esOperaciones || esAdmin ? 2 : 0)}>
+                                  Precio base (sin descuento)
+                                </td>
+                                <td className="py-2 px-2 text-right" colSpan={3}>
+                                  <span className="font-mono text-sm font-bold text-carbon/70">
+                                    {formatMoneda(totalPrecioBase)}
+                                  </span>
+                                </td>
+                                <td></td>
+                              </tr>
+                              <tr className="text-rose-700 bg-rose-50/70">
+                                <td className="py-2 px-2 font-semibold" colSpan={3 + (!esOperaciones || esAdmin ? 2 : 0)}>
+                                  Descuento aplicado
+                                  <span className="ml-2 inline-block rounded-full bg-rose-600 text-white px-2 py-0.5 text-[11px] font-bold">
+                                    -{Number(pctDescuentoPresupuesto.toFixed(1))}%
+                                  </span>
+                                </td>
+                                <td className="py-2 px-2 text-right" colSpan={3}>
+                                  <span className="font-mono text-sm font-extrabold text-rose-600">
+                                    -{formatMoneda(montoDescuentoPresupuesto)}
+                                  </span>
+                                </td>
+                                <td></td>
+                              </tr>
+                            </>
+                          )}
+                          <tr className={`${montoDescuentoPresupuesto > 0.005 ? "border-t border-carbon/10" : "border-t-2 border-carbon/15"} font-semibold text-carbon/80 bg-slate-50/80`}>
                             <td className="py-3 px-2 font-bold" colSpan={3}>
-                              Total Presupuesto
+                              {montoDescuentoPresupuesto > 0.005 ? "Total con descuento" : "Total Presupuesto"}
                             </td>
                             {(!esOperaciones || esAdmin) && (
                               <td className="py-3 px-2 text-right font-mono text-xs text-carbon/60">
@@ -2176,7 +2443,7 @@ export function DetalleCotizacionAdmin({
                               </td>
                             )}
                             <td className="py-3 px-2 text-right" colSpan={3}>
-                              <span className="font-mono text-sm text-verde-profundo font-bold">
+                              <span className="font-mono text-base text-verde-profundo font-extrabold">
                                 {formatMoneda(totalPrecioVenta)}
                               </span>
                             </td>
@@ -2276,6 +2543,19 @@ export function DetalleCotizacionAdmin({
             {cotizacion.requiereVisita && !reporteVisita && (
               <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-medium">
                 ⚠️ Esta cotización tiene visita técnica física programada, pero aún no se ha registrado el reporte (no bloquea aprobación).
+              </div>
+            )}
+            {cotizacion.requiereVisita && reporteVisita && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center justify-between">
+                <span>✅ Inspección técnica física completada y reporte técnico vinculado con éxito.</span>
+                <a
+                  href={`/reporte-visita/${cotizacion.token}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline text-emerald-900 font-semibold text-[11px]"
+                >
+                  Ver Reporte ↗
+                </a>
               </div>
             )}
             {conceptos.length === 0 && (
@@ -3130,12 +3410,15 @@ export function DetalleCotizacionAdmin({
 
         {/* --- PESTAÑA PROVEEDORES --- */}
         {pestaña === "proveedores" && (
-          <PanelProveedoresCotizacion
-            cotizacionId={cotizacion.id}
-            expedienteId={cotizacion.expedienteId}
-            precioFinal={cotizacion.precioFinal}
-            costoEstimado={cotizacion.costoEstimado}
-          />
+          <div className="space-y-6">
+            <PanelSolicitudesProveedor cotizacionId={cotizacion.id} />
+            <PanelProveedoresCotizacion
+              cotizacionId={cotizacion.id}
+              expedienteId={cotizacion.expedienteId}
+              precioFinal={cotizacion.precioFinal}
+              costoEstimado={cotizacion.costoEstimado}
+            />
+          </div>
         )}
 
       </div>

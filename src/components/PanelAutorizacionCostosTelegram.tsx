@@ -95,7 +95,12 @@ export function PanelAutorizacionCostosTelegram({ cotizacionId }: { cotizacionId
                   <span className="flex items-center gap-1.5 shrink-0">
                     {reg?.respuesta === "autorizado" && <span className="rounded-full bg-green-100 text-green-800 px-2 py-0.5 text-[10px] font-bold">✅ Autorizó</span>}
                     {reg?.respuesta === "rechazado" && <span className="rounded-full bg-rose-100 text-rose-800 px-2 py-0.5 text-[10px] font-bold">❌ Rechazó</span>}
-                    {reg?.ok && !reg.respuesta && <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] font-bold">⏳ Esperando</span>}
+                    {reg?.ok && !reg.respuesta && (
+                      <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] font-bold">
+                        {reg.vistoAt ? "👁️ Visto · esperando" : "⏳ Entregado · sin abrir"}
+                      </span>
+                    )}
+                    {reg && !reg.ok && reg.error && <span className="rounded-full bg-rose-50 text-rojo px-2 py-0.5 text-[10px] font-bold" title={reg.error}>✗ No entregado</span>}
                     {!d.telegramChatId && enlace && (
                       <button type="button" onClick={() => copiar(enlace, d.nombre)} className="text-[10px] font-bold text-sauce hover:underline">
                         🔗 Vincular

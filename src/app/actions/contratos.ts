@@ -1,5 +1,6 @@
 "use server";
 
+import { nombreCompletoDe } from "@/lib/supabase/mapeo";
 import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
@@ -69,6 +70,21 @@ async function generarFolioContrato(sb: any): Promise<string> {
  * Arma los datos del contrato a partir de la OT, la cotización y el cliente,
  * con los valores por defecto de la configuración. Sin folio ni versión.
  */
+/** Nombre del asesor del expediente (o, en su defecto, del prospecto) de la OT. */
+async function nombreAsesorOrden(
+  sb: any,
+  expedienteId: string | null | undefined,
+  prospectoId: string | null | undefined,
+): Promise<string> {
+  for (const [tabla, id] of [["expedientes", expedienteId], ["prospectos", prospectoId]] as const) {
+    if (!id) continue;
+    const { data } = await sb.from(tabla).select("asesor:asesor_id(nombre)").eq("id", id).maybeSingle();
+    const nombre = (data?.asesor as any)?.nombre;
+    if (nombre) return nombre;
+  }
+  return "";
+}
+
 async function armarDatosBase(sb: any, ordenId: string): Promise<{
   ok: boolean;
   error?: string;
@@ -78,7 +94,7 @@ async function armarDatosBase(sb: any, ordenId: string): Promise<{
 }> {
   const { data: ot } = await sb
     .from("ordenes_trabajo")
-    .select("id, folio, titulo, descripcion, tipo_negocio, cotizacion_id, prospecto_id, fecha_programada, fotos_evidencia")
+    .select("id, folio, titulo, descripcion, tipo_negocio, cotizacion_id, prospecto_id, expediente_id, fecha_programada, fotos_evidencia")
     .eq("id", ordenId)
     .maybeSingle();
   if (!ot) return { ok: false, error: "Orden de trabajo no encontrada." };
@@ -91,7 +107,7 @@ async function armarDatosBase(sb: any, ordenId: string): Promise<{
 
   const clienteId = ot.prospecto_id || cot.prospecto_id || null;
   const { data: pros } = clienteId
-    ? await sb.from("prospectos").select("id, nombre, telefono, correo, direccion").eq("id", clienteId).maybeSingle()
+    ? await sb.from("prospectos").select("id, nombre, primer_apellido, segundo_apellido, telefono, correo, direccion").eq("id", clienteId).maybeSingle()
     : { data: null };
 
   const { data: conceptos } = await sb
@@ -145,8 +161,9 @@ async function armarDatosBase(sb: any, ordenId: string): Promise<{
         rfc: pl["prestador_rfc"] || "",
         domicilio: pl["prestador_domicilio"] || "",
       },
+      firmantePrestador: await nombreAsesorOrden(sb, ot.expediente_id, clienteId),
       cliente: {
-        nombre: (cot.cliente_nombre_personalizado as string) || pros?.nombre || "",
+        nombre: (cot.cliente_nombre_personalizado as string) || nombreCompletoDe(pros) || "",
         domicilio: pros?.direccion || "",
         telefono: pros?.telefono || "",
         correo: pros?.correo || "",
@@ -227,7 +244,17 @@ export async function obtenerDatosEdicionContrato(ordenId: string): Promise<{
       .neq("estado", "cancelado")
       .maybeSingle();
     if (vigente?.datos_snapshot) {
-      return { ok: true, datos: vigente.datos_snapshot as DatosContrato };
+      const datos = vigente.datos_snapshot as DatosContrato;
+      // Contratos anteriores no guardaban el firmante: se propone el asesor
+      if (!datos.firmantePrestador) {
+        const { data: ot } = await sb
+          .from("ordenes_trabajo")
+          .select("expediente_id, prospecto_id")
+          .eq("id", ordenId)
+          .maybeSingle();
+        datos.firmantePrestador = await nombreAsesorOrden(sb, ot?.expediente_id, ot?.prospecto_id);
+      }
+      return { ok: true, datos };
     }
     const r = await armarDatosBase(sb, ordenId);
     return r.ok ? { ok: true, datos: r.datos } : { ok: false, error: r.error };
@@ -352,6 +379,7 @@ export async function generarContrato(
       garantiaObjeto: o.garantiaObjeto ?? datos.garantiaObjeto,
       garantiaExclusiones: o.garantiaExclusiones ?? datos.garantiaExclusiones,
       clausulaClima: o.clausulaClima ?? datos.clausulaClima,
+      firmantePrestador: (o.firmantePrestador ?? datos.firmantePrestador ?? "").trim(),
     };
     datos.anticipoMonto = redondear((datos.total * datos.anticipoPct) / 100);
     datos.finiquitoMonto = redondear(datos.total - datos.anticipoMonto);

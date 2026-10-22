@@ -53,6 +53,8 @@ export function ModalRegistrarRecibo({
     new Date().toISOString().split("T")[0]
   );
   const [notas, setNotas] = useState("");
+  // A nombre de quién sale el recibo: por defecto el contacto, editable (p. ej. otro titular o quien paga).
+  const [aNombreDe, setANombreDe] = useState(clienteNombre || "");
   const [recibidoPorId, setRecibidoPorId] = useState("");
   const [numRecibos, setNumRecibos] = useState(1);
   const [receptores, setReceptores] = useState<{ id: string; nombre: string; rol: string }[]>([]);
@@ -111,6 +113,7 @@ export function ModalRegistrarRecibo({
           concepto: concepto.trim() || "Pago de servicios",
           referenciaPago,
           notas,
+          clienteNombre: aNombreDe.trim() || null,
         });
         // Se agregan a la lista los que sí se emitieron, aunque alguno falle
         resVarios.recibos.forEach((r) => alCrear(r));
@@ -131,6 +134,7 @@ export function ModalRegistrarRecibo({
         fechaPago,
         notas,
         recibidoPorId: recibidoPorId || null,
+        clienteNombre: aNombreDe.trim() || null,
       });
 
       if (res.ok && res.recibo) {
@@ -383,6 +387,25 @@ export function ModalRegistrarRecibo({
                   <option value="otro">Cheque / Otro</option>
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-carbon/80 mb-1">
+                Recibo a nombre de *
+              </label>
+              <input
+                type="text"
+                required
+                value={aNombreDe}
+                onChange={(e) => setANombreDe(e.target.value)}
+                placeholder="Nombre de quien paga o titular del recibo"
+                className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon focus:border-sauce focus:ring-1 focus:ring-sauce outline-none"
+              />
+              {aNombreDe.trim() && aNombreDe.trim() !== clienteNombre && (
+                <p className="mt-1 text-[10.5px] text-amber-700">
+                  Distinto del contacto ({clienteNombre}). El recibo saldrá a nombre de {aNombreDe.trim()}.
+                </p>
+              )}
             </div>
 
             <div>
