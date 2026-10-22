@@ -24,7 +24,8 @@ const ESTADOS: Record<EstadoLlamadaIA, { label: string; clase: string }> = {
 };
 
 const RESULTADOS: Record<ResultadoLlamadaIA, string> = {
-  visita_agendada: "✅ Aceptó visita (falta anticipo)",
+  visita_agendada: "✅ Aceptó visita",
+  interesado: "🔥 Interesado",
   transferido: "📞 Transferido a asesor",
   duda: "❓ Tiene dudas",
   no_interesado: "✖ No interesado",

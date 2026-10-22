@@ -29,7 +29,7 @@ export default async function PaginaLlamadasIA() {
         <div className="mb-6">
           <h1 className="font-titular text-3xl font-semibold text-verde-profundo">Llamadas IA</h1>
           <p className="mt-1 text-sm text-carbon/60">
-            Sofía llama por Vapi para reagendar visitas técnicas pendientes. Nada se marca sin aprobación.
+            Sofía llama por Vapi para dar seguimiento a cotizaciones enviadas. Nada se marca sin aprobación.
           </p>
         </div>
 

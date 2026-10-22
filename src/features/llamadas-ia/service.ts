@@ -3,12 +3,7 @@ import { registrarActividad } from "@/lib/actividades";
 import { normalizarTelefono } from "@/lib/telefono";
 import { obtenerAgenteDisponible, registrarInicioLlamada } from "@/features/conmutador/service";
 import { cargarProductosImper, ETIQUETA_PAQUETE } from "@/lib/ia/catalogo-imper";
-import {
-  anticipoInspeccion,
-  cargarCostosInspeccion,
-  costoInspeccionPorTipo,
-  formatoPesosEnteros,
-} from "@/lib/costo-inspeccion";
+import { formatoPesosEnteros } from "@/lib/costo-inspeccion";
 import { avisarAsesorDesdeIA } from "@/lib/ia/aviso-asesor";
 
 /**
@@ -29,6 +24,7 @@ import { avisarAsesorDesdeIA } from "@/lib/ia/aviso-asesor";
 export type EstadoLlamadaIA = "pendiente" | "aprobada" | "en_curso" | "completada" | "fallida" | "cancelada";
 export type ResultadoLlamadaIA =
   | "visita_agendada"
+  | "interesado"
   | "transferido"
   | "duda"
   | "no_interesado"
@@ -43,12 +39,12 @@ export interface ContextoLlamadaIA {
   colonia?: string;
   /** Estimado que ya recibió el cliente (precio_final de la cotización). */
   monto?: number;
-  /** tipo_negocio para el costo de la visita técnica. */
+  /** tipo_negocio de la cotización (define precios y qué revisa la visita). */
   tipoNegocio?: string;
 }
 
 /** Versión del guion: se guarda con cada resultado para comparar versiones. */
-export const GUION_VERSION = "reagendar-v2";
+export const GUION_VERSION = "seguimiento-v3";
 
 export interface LlamadaIA {
   id: string;
@@ -175,7 +171,7 @@ const TIPO_POR_SERVICIO: Record<string, string> = {
 
 /** Qué revisa el especialista en la visita, por línea (mismo texto que usa Sofía en WhatsApp). */
 const QUE_REVISA: Record<string, string> = {
-  "construccion-impermeabilizacion": "el estado de la losa, grietas, humedad, filtraciones y desagües",
+  "construccion-impermeabilizacion": "el estado de la losa, grietas, humedad, filtraciones y desagües, y confirma medidas",
   "construccion-remodelacion": "el espacio, las medidas y lo que hace falta para el proyecto",
   construccion: "el lugar y el origen real del problema",
 };
@@ -184,16 +180,13 @@ interface ConocimientoLlamada {
   esImper: boolean;
   precios: string;
   minimo: string;
-  visita: string;
-  anticipo: string;
-  resto: string;
   queRevisa: string;
 }
 
 /**
  * Datos oficiales que Sofía puede decir: precios por m² del catálogo (Productos y
- * Servicios) y costo de la visita técnica (configuracion_agente). Lo que no esté
- * aquí, Sofía no lo afirma.
+ * Servicios). Lo que no esté aquí, Sofía no lo afirma. En llamada la visita técnica
+ * es sin costo y solo se ofrece cuando el cliente ya muestra intención.
  */
 async function conocimientoLlamada(ll: LlamadaIA): Promise<ConocimientoLlamada> {
   const sb = supabaseServidor();
@@ -201,13 +194,7 @@ async function conocimientoLlamada(ll: LlamadaIA): Promise<ConocimientoLlamada> 
     ll.contexto.tipoNegocio ||
     (/imper/i.test(ll.contexto.servicio || "") ? "construccion-impermeabilizacion" : "construccion");
   const esImper = tipo === "construccion-impermeabilizacion";
-
-  const [costos, productos] = await Promise.all([
-    cargarCostosInspeccion(sb),
-    esImper ? cargarProductosImper(sb) : Promise.resolve({} as Awaited<ReturnType<typeof cargarProductosImper>>),
-  ]);
-  const costo = costoInspeccionPorTipo(costos, tipo);
-  const anticipo = anticipoInspeccion(costo);
+  const productos = esImper ? await cargarProductosImper(sb) : {};
 
   const lineas: string[] = [];
   const minimos: number[] = [];
@@ -228,9 +215,6 @@ async function conocimientoLlamada(ll: LlamadaIA): Promise<ConocimientoLlamada> 
     esImper,
     precios: lineas.join("\n- "),
     minimo: minimos.length ? `${Math.round(Math.min(...minimos))}–${Math.round(Math.max(...minimos))} m²` : "",
-    visita: formatoPesosEnteros(costo),
-    anticipo: formatoPesosEnteros(anticipo),
-    resto: formatoPesosEnteros(costo - anticipo),
     queRevisa: QUE_REVISA[tipo] ?? QUE_REVISA.construccion,
   };
 }
@@ -245,34 +229,33 @@ function promptReagendarVisita(
   const horarios = espacios.map((e) => `- ${e.texto} (valor para fecha_visita: ${e.iso})`).join("\n");
   const sinRespuesta = hayAsesor
     ? "ofrece comunicarlo con un asesor ahora; si acepta, usa la herramienta de transferencia"
-    : "dile que un asesor le llama hoy para resolverlo";
+    : "dile que un asesor le escribe hoy por WhatsApp para resolverlo";
 
-  return `Eres Sofía, asistente virtual de Sauceda, en una llamada telefónica. Español de México, cálida y directa.
+  return `Eres Sofía, asistente virtual de Sauceda, en una llamada telefónica. Español de México, cálida, natural y sin presión.
 
-ESTILO (obligatorio): máximo 2 frases cortas por turno y una sola pregunta. Nada de listas ni explicaciones largas. Si te interrumpen, no repitas lo que ya dijiste.
+ESTILO (obligatorio): máximo 2 frases cortas por turno y una sola pregunta. Nada de listas ni explicaciones largas. Si te interrumpen, no repitas lo que ya dijiste. Escucha más de lo que hablas.
 
-OBJETIVO: que el cliente acepte la visita técnica y elija horario. Después de resolver cualquier duda, vuelve a ofrecer la visita.
+OBJETIVO: retomar la cotización que ya le enviamos, resolver sus dudas y saber qué tan interesado está. NO es una llamada para cerrar ni para agendar a la fuerza.
 
 DATOS OFICIALES (lo ÚNICO que puedes afirmar):
 - Cliente: ${ll.nombre || "sin nombre"}. Pidió cotización de ${servicio}${ll.contexto.colonia ? ` en ${ll.contexto.colonia}` : ""}.
-${ll.contexto.monto ? `- Ya recibió su estimado: alrededor de ${formatoPesosEnteros(ll.contexto.monto)}. Es un estimado; el precio final se confirma en la visita.\n` : ""}${
+${ll.contexto.monto ? `- Ya recibió su estimado: alrededor de ${formatoPesosEnteros(ll.contexto.monto)}. Es un estimado con base en sus medidas.\n` : ""}${
     k.precios
       ? `- Precios por m² (catálogo):\n- ${k.precios}${k.minimo ? `\n- Para superficies pequeñas hay un mínimo de cobro de ${k.minimo}.` : ""}\n`
       : "- No tienes precios de este servicio: si preguntan, el precio lo confirma un asesor.\n"
-  }- Visita técnica: un especialista revisa ${k.queRevisa} y le da el precio final. Cuesta ${k.visita} y se le descuenta completa si contrata (para el cliente termina costando $0).
-- Para apartarla: anticipo de ${k.anticipo} con una liga de Mercado Pago que le envía un asesor por WhatsApp; los ${k.resto} restantes se pagan al especialista al llegar.
-- Horarios disponibles (ofrece dos):
-${horarios || "- Ninguno: no ofrezcas horarios; dile que un asesor le propone fecha."}
+  }- Visita técnica (SIN COSTO): un especialista revisa ${k.queRevisa}, y deja el precio final.
 
-CÓMO LLEVAR LA LLAMADA:
-1. Si confirma que sigue interesado: en una frase di qué es la visita, cuánto cuesta y que se descuenta si contrata; ofrece dos horarios.
-2. Si elige horario: repítelo y explica que un asesor le manda por WhatsApp la liga del anticipo y le confirma la cita. Tú NO confirmas la cita. Despídete.
-3. Si ningún horario le queda: pregunta qué día y hora prefiere, anótalo y di que el asesor se lo confirma.
-4. Precio por m²: da el dato oficial en una frase (siempre "más IVA") y vuelve a ofrecer la visita.
+CÓMO LLEVAR LA LLAMADA (en este orden, sin saltarte pasos):
+1. DESCUBRIR: pregunta si pudo revisar la cotización y qué le pareció. Deja que hable.
+2. RESOLVER: responde sus dudas solo con los DATOS OFICIALES. Si pregunta por precio, da el dato en una frase ("más IVA"). Pregunta qué opción le interesó o para cuándo lo necesita.
+3. DETECTAR INTENCIÓN. Hay intención clara SOLO si el cliente hace algo de esto: dice que le interesa hacerlo, pregunta cuándo pueden empezar o cuánto tardan, compara entre opciones para decidir, pregunta cómo se paga, o pide que alguien vaya a ver.
+   - Si NO hay intención clara: no ofrezcas visita. Pregunta qué le haría falta para decidirse y ofrece que un asesor le escriba por WhatsApp con lo que necesite.
+   - Si HAY intención clara: entonces propón el siguiente paso con suavidad: "Si le parece, el siguiente paso es que un especialista pase a revisar y confirmar medidas, sin costo, para dejarle el precio final. ¿Le gustaría?"
+4. SOLO SI ACEPTA la visita: ofrece dos horarios de esta lista. Si elige uno, repítelo y di que un asesor le confirma por WhatsApp. Si ninguno le queda, pregunta qué día y hora prefiere y di que el asesor se lo confirma.
+${horarios ? `   Horarios disponibles:\n${horarios}` : "   No hay horarios cargados: di que un asesor le propone fecha por WhatsApp."}
 5. Objeciones:
-   - "Otros vienen gratis": nuestra visita deja el precio exacto, no un aproximado, y si contrata se la descontamos completa.
-   - "Está caro": ${k.esImper && k.precios ? "el acrílico es la opción más económica; " : ""}el precio exacto depende de lo que vea el especialista en la visita.
-   - "Lo pienso": sin presión; ofrece que un asesor le escriba por WhatsApp y despídete.
+   - "Está caro": ${k.esImper && k.precios ? "el acrílico es la opción más económica; " : ""}pregunta con qué lo está comparando y ofrece que un asesor revise opciones con él.
+   - "Lo pienso" / "ahorita no": sin presión; pregunta si prefiere que un asesor le escriba por WhatsApp o que le llamemos más adelante.
    - "Ya contraté a alguien" o ya no le interesa: agradece, pregunta brevemente el motivo y despídete.
 6. Cualquier cosa que NO esté en DATOS OFICIALES (meses sin intereses, descuentos, tiempos de obra, marcas, otros paquetes, garantías distintas): no la inventes; ${sinRespuesta}.
 7. Si se molesta o pide hablar con una persona: ${hayAsesor ? "transfiérelo a un asesor" : "dile que un asesor le llama hoy"}.
@@ -288,6 +271,7 @@ const ESQUEMA_RESULTADO = {
       type: "string",
       enum: [
         "visita_agendada",
+        "interesado",
         "transferido",
         "duda",
         "no_interesado",
@@ -297,21 +281,23 @@ const ESQUEMA_RESULTADO = {
         "no_contesta",
       ],
       description:
-        "visita_agendada: aceptó la visita técnica y dio un horario (falta el anticipo). transferido: se pasó a un asesor. duda: tiene preguntas o lo piensa y un asesor debe contactarlo. no_interesado: ya no quiere el servicio. llamar_despues: pidió otra hora. buzon: contestó un buzón o grabación. no_llamar: pidió no ser llamado. no_contesta: nadie habló.",
+        "visita_agendada: aceptó la visita técnica sin costo. interesado: mostró intención pero aún no quiere visita (seguimiento del asesor). transferido: se pasó a un asesor. duda: tiene preguntas que Sofía no pudo resolver o lo está pensando. no_interesado: ya no quiere el servicio. llamar_despues: pidió otra hora. buzon: contestó un buzón o grabación. no_llamar: pidió no ser llamado. no_contesta: nadie habló.",
     },
     fecha_visita: {
       type: "string",
-      description: "Si eligió uno de los horarios ofrecidos, su 'valor para fecha_visita' exacto (ISO 8601).",
+      description: "Si aceptó la visita y eligió uno de los horarios ofrecidos, su 'valor para fecha_visita' exacto (ISO 8601).",
     },
     horario_cliente: {
       type: "string",
-      description: "Si propuso otro día u horario, tal como lo dijo (ej. 'sábado en la mañana').",
+      description: "Si aceptó la visita y propuso otro día u horario, tal como lo dijo (ej. 'sábado en la mañana').",
     },
     llamar_despues: {
       type: "string",
       description: "Si pidió otra hora, fecha y hora en ISO 8601 con zona -06:00.",
     },
     interes: { type: "integer", minimum: 1, maximum: 5, description: "Nivel de interés del 1 al 5." },
+    opcion_interes: { type: "string", description: "Opción o paquete que le interesó, si lo dijo." },
+    senal_compra: { type: "string", description: "La señal de intención que dio el cliente, si la hubo (ej. 'preguntó cuándo pueden empezar')." },
     objecion: { type: "string", description: "Objeción o duda principal del cliente, si la hubo." },
     pregunta_sin_respuesta: {
       type: "string",
@@ -345,8 +331,8 @@ function asistenteReagendarVisita(
   }
 
   return {
-    name: "Sofia - Reagendar visita",
-    firstMessage: `Hola${nombre ? ` ${nombre}` : ""}, le habla Sofía, asistente virtual de Sauceda; esta llamada se graba. Le llamo por la cotización de ${servicio} que le enviamos. ¿Sigue interesado?`,
+    name: "Sofia - Seguimiento de cotizacion",
+    firstMessage: `Hola${nombre ? ` ${nombre}` : ""}, le habla Sofía, asistente virtual de Sauceda; esta llamada se graba. Le llamo por la cotización de ${servicio} que le enviamos, ¿pudo revisarla?`,
     model: {
       provider: "openai",
       model: process.env.VAPI_CAMPANA_MODELO || "gpt-4o-mini",
@@ -502,7 +488,7 @@ export async function sincronizarConVapi(vapiCallId: string): Promise<{ ok: bool
   const datos = call.analysis?.structuredData ?? {};
   const motivo = call.endedReason || "";
   const validos: ResultadoLlamadaIA[] = [
-    "visita_agendada", "transferido", "duda", "no_interesado", "llamar_despues", "no_contesta", "buzon", "no_llamar",
+    "visita_agendada", "interesado", "transferido", "duda", "no_interesado", "llamar_despues", "no_contesta", "buzon", "no_llamar",
   ];
   let resultado: ResultadoLlamadaIA | "" = validos.includes(datos.resultado as ResultadoLlamadaIA)
     ? (datos.resultado as ResultadoLlamadaIA)
@@ -554,12 +540,13 @@ export async function sincronizarConVapi(vapiCallId: string): Promise<{ ok: bool
       .upsert({ telefono: normalizarTelefono(ll.telefono), motivo: "Lo pidió en llamada IA" }, { onConflict: "telefono" });
   }
 
-  // La cita no se confirma aquí: la confirma el asesor al validar el anticipo
-  // (misma regla que Sofía en WhatsApp). Se le avisa con lo que pidió el cliente.
+  // Sofía no confirma citas: el asesor confirma la visita (sin costo) y da
+  // seguimiento a quien mostró intención o tiene dudas.
   const horarioCliente = typeof datos.horario_cliente === "string" ? datos.horario_cliente.trim() : "";
   const preferencia = fechaVisita ? textoFecha(fechaVisita) : horarioCliente;
   const avisos: Partial<Record<ResultadoLlamadaIA, string>> = {
-    visita_agendada: `Llamada IA: aceptó la visita técnica${preferencia ? ` (${preferencia})` : ""}. Enviar liga de anticipo y confirmar cita${ll.cotizacion_id ? ` · ${ll.cotizacion_id}` : ""}.`,
+    visita_agendada: `Llamada IA: aceptó visita técnica sin costo${preferencia ? ` (${preferencia})` : ""}. Confirmar fecha por WhatsApp${ll.cotizacion_id ? ` · ${ll.cotizacion_id}` : ""}.`,
+    interesado: `Llamada IA: interesado${typeof datos.opcion_interes === "string" && datos.opcion_interes ? ` en ${datos.opcion_interes}` : ""}, darle seguimiento por WhatsApp${ll.cotizacion_id ? ` · ${ll.cotizacion_id}` : ""}.`,
     duda: `Llamada IA: tiene dudas, llamarle${typeof datos.objecion === "string" && datos.objecion ? ` · ${datos.objecion}` : ""}.`,
   };
   const aviso = avisos[resultado];
@@ -593,7 +580,8 @@ export async function sincronizarConVapi(vapiCallId: string): Promise<{ ok: bool
 
   if (ll.prospecto_id && !ll.es_prueba) {
     const etiquetas: Record<ResultadoLlamadaIA, string> = {
-      visita_agendada: `Aceptó la visita${preferencia ? ` (${preferencia})` : ""}, falta anticipo`,
+      visita_agendada: `Aceptó visita técnica${preferencia ? ` (${preferencia})` : ""}`,
+      interesado: "Interesado: seguimiento del asesor",
       transferido: "Transferido a un asesor",
       duda: "Tiene dudas: un asesor debe llamarle",
       no_interesado: "Ya no está interesado",
