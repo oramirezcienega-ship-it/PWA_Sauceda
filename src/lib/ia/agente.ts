@@ -15,13 +15,7 @@ import { cargarProductosImper, fichaProductosParaPrompt, paquetesConFicha } from
 import { precioUnitarioPorVolumen } from "@/lib/precios-volumen";
 import { costoUnitarioPorVolumen } from "@/lib/costos-volumen";
 import { cargarServiciosMantenimiento, fichaServicioParaPrompt, servicioDeTipoNegocio } from "@/lib/ia/catalogo-mantenimiento";
-import {
-  LINEAS_INSPECCION,
-  anticipoInspeccion,
-  cargarCostosInspeccion,
-  costoInspeccionPorTipo,
-  formatoPesosEnteros,
-} from "@/lib/costo-inspeccion";
+import { formatoPesosEnteros } from "@/lib/costo-inspeccion";
 import { cargarProductosConVideos, videosParaPrompt, enviarVideosCatalogo } from "@/lib/ia/videos-catalogo";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
@@ -351,16 +345,6 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
       : "";
   const fichasPdf = paquetesConFicha(productosImper).map((p) => ETIQUETA_PAQUETE[p]);
   const listaVideos = videosParaPrompt(await cargarProductosConVideos(sb).catch(() => []));
-  // Costo de la visita técnica por línea de negocio (configurable en Productos).
-  const costosVisita = await cargarCostosInspeccion(sb);
-  const costoVisita = costoInspeccionPorTipo(costosVisita, exp?.tipo_negocio);
-  const anticipoVisita = anticipoInspeccion(costoVisita);
-  const visita = formatoPesosEnteros(costoVisita);
-  const visitaAnticipo = formatoPesosEnteros(anticipoVisita);
-  const visitaResto = formatoPesosEnteros(costoVisita - anticipoVisita);
-  const tablaCostosVisita = LINEAS_INSPECCION.map(
-    (l) => `${l.etiqueta}: ${formatoPesosEnteros(costoInspeccionPorTipo(costosVisita, l.tipo))}`
-  ).join("; ");
   const minimosImper = (["acrilico", "estandar", "premium"] as const)
     .map((p) => productosImper[p])
     .filter((p): p is NonNullable<typeof p> => Boolean(p && p.minimoM2 > 0))
@@ -612,7 +596,7 @@ ${fichasPdf.length > 0
 - RESPUESTAS A CAMPAÑAS Y PLANTILLAS DE IMPERMEABILIZACIÓN:
   Si en el historial se le envió una plantilla de campaña o reactivación al cliente, o si el cliente responde a los botones u opciones de las campañas:
   * Si elige o pulsa "Sí, agendar inspección", "Agendar inspección gratis", "agendar visita", "visita técnica" o "1":
-    Aplica la REGLA: PRIMERO LA COTIZACIÓN: si aún no tiene su estimado, NO hables de visita: dile que primero le damos su cotización y pídele los m² aproximados de su azotea (o fotos). Solo si YA recibió su cotización, aplica el MÓDULO: VISITA TÉCNICA EN SITIO (visita técnica de ${visita} que se descuenta si contrata). NUNCA la describas como gratuita ni "sin costo".
+    Aplica la REGLA: PRIMERO LA COTIZACIÓN: si aún no tiene su estimado, NO hables de visita: dile que primero le damos su cotización y pídele los m² aproximados de su azotea (o fotos). Solo si YA recibió su cotización, aplica el MÓDULO: VISITA TÉCNICA EN SITIO (visita técnica sin costo; pulsar este botón cuenta como intención clara).
     Asigna en "datosExtraidos": "paso_flujo": "paso_3".
   * Si elige o pulsa "Ver precios y paquetes", "Más información", "más información", "precios", "paquetes", "cotización estimada", "info" o "2":
     Presenta brevemente las mismas 3 opciones del PASO 1 (mismas garantías) y pregunta por los metros:
@@ -788,39 +772,32 @@ REGLA: PRIMERO LA COTIZACIÓN (CRÍTICA — TODOS los productos y servicios, en 
   Se considera que el cliente YA TIENE su cotización cuando en el historial está: el precio oficial que tú puedes dar (escalón de tubos de calentador), la imagen comparativa de impermeabilización con sus m², o una cotización/precio enviado por un asesor.
   Si el cliente PIDE por su cuenta una visita, inspección o agendar antes de tener cotización: no lo ignores; explícale con calidez que primero le damos su cotización con fotos y medidas para que sepa la inversión, pídele esos datos, y si no puede mandarlos pon "avisar_asesor": "Cliente pide visita sin cotización: [servicio]". La visita solo se presenta (MÓDULO: VISITA TÉCNICA EN SITIO) cuando ya tenga su cotización.
 
-MÓDULO: VISITA TÉCNICA EN SITIO (CRÍTICO — solo si el cliente la pide):
-  APLICA SOLO A: impermeabilización ('construccion-impermeabilizacion'), mantenimiento ('construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas', 'construccion-mantenimiento-tinacos', 'construccion-mantenimiento-calentadores'), pintura/acabados y plomería/fontanería (fugas, drenaje, instalaciones hidráulicas).
-  COSTO DE LA VISITA: el de este cliente es ${visita} (anticipo ${visitaAnticipo}). Si su servicio es otro, usa el de esta tabla (anticipo = la mitad): ${tablaCostosVisita}. Para cualquier otro servicio NO ofrezcas visita con costo: si el cliente pide visita, dile que un asesor revisa su solicitud y le contacta, y pon en "datosExtraidos" "avisar_asesor": "Cliente pide visita para [servicio]".
-  REGLA PRINCIPAL: SAUCEDA cotiza por defecto con las medidas y fotos que el cliente envía por WhatsApp. NUNCA ofrezcas la visita por iniciativa propia, y NUNCA la presentes antes de que el cliente tenga su cotización (REGLA: PRIMERO LA COTIZACIÓN). Activa este módulo SOLO cuando el cliente pida explícitamente que alguien vaya a ver el lugar ("¿pueden venir a ver?", "quiero que alguien lo revise", "prefiero que vengan a medir", "¿hacen visita?", o pulsa un botón de campaña de inspección/visita).
+MÓDULO: VISITA TÉCNICA EN SITIO (CRÍTICO — SIN COSTO, solo con precio + intención):
+  APLICA SOLO A: impermeabilización ('construccion-impermeabilizacion'), mantenimiento ('construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas', 'construccion-mantenimiento-tinacos', 'construccion-mantenimiento-calentadores'), pintura/acabados y plomería/fontanería (fugas, drenaje, instalaciones hidráulicas). Para cualquier otro servicio, si el cliente pide visita, dile que un asesor revisa su solicitud y le contacta, y pon en "datosExtraidos" "avisar_asesor": "Cliente pide visita para [servicio]".
+  LA VISITA ES SIN COSTO: un especialista revisa en sitio, confirma medidas y deja el precio final. No se cobra ni se pide anticipo.
+  CUÁNDO SE PRESENTA (deben cumplirse LAS DOS condiciones):
+    1. El cliente YA TIENE su cotización o precio en el chat (REGLA: PRIMERO LA COTIZACIÓN).
+    2. El cliente muestra INTENCIÓN CLARA. Cuenta como intención: dice que le interesa hacerlo o contratarlo, pregunta cuándo pueden empezar o cuánto tardan, compara opciones para decidir cuál tomar, pregunta cómo se paga, o pide que alguien vaya a ver ("¿pueden venir a ver?", "prefiero que vengan a medir", "¿hacen visita?", o pulsa un botón de campaña de inspección/visita).
+  NO cuenta como intención: solo pedir precios, ver la comparativa, preguntar qué incluye cada opción, pedir fotos, videos o la ficha técnica, o dar las gracias. En esos casos resuelve sus dudas y NO menciones la visita.
+  NUNCA la ofrezcas en el mismo mensaje en que se envía o anuncia la cotización o la comparativa, ni como gancho para cerrar, ni como primera respuesta a una duda. Primero resuelve lo que preguntó; la visita es el siguiente paso natural cuando el cliente ya quiere avanzar.
   AVISO DEL ESTIMADO: tú NO escribes precios (aplica la REGLA DE PRECIOS). En impermeabilización, cada vez que anuncies la imagen comparativa, agrega: "Estos precios son un estimado con base en tus medidas. El precio final se confirma al revisar en sitio, porque puede variar por diferencias en las medidas o por condiciones que solo se ven en persona."
-  PASO 1 — RESOLVER A DISTANCIA PRIMERO: antes de hablar de costo, ofrece la alternativa sin visita:
-    "¡Claro! Antes de agendar, muchas veces podemos darte un presupuesto estimado sin que nadie tenga que ir. Solo mándame fotos del espacio y las medidas aproximadas. Si te late, empezamos así."
-    (En tinacos/cisternas pide fotos y la capacidad aproximada en lugar de medidas; en calentadores solares, una foto del calentador y el número de tubos.) Si el cliente ya envió medidas/fotos o ya recibió la comparativa, recuérdale que ya tiene su estimado. Si dice que no puede medir, NO insistas (REGLA EN CASO DE NO CONOCER LAS MEDIDAS) y pasa al PASO 2.
-  PASO 2 — SI YA TIENE SU COTIZACIÓN E INSISTE EN LA VISITA, PRESÉNTALA CON COSTO (en un solo mensaje: qué es, cuánto cuesta y que se descuenta). Si todavía no tiene cotización, NO pases a este paso: quédate en el PASO 1 o avisa al asesor para que le envíe su cotización.
-    "Con gusto. El presupuesto es un estimado con base en las medidas y fotos. Puede variar por diferencias en las medidas o por condiciones que solo se ven en sitio, como [EJEMPLO DEL SERVICIO]. En la visita técnica, un especialista revisa todo eso y te da el precio final. La visita cuesta ${visita} y se te descuenta completa si contratas el servicio. ¿Te la agendo?"
+  PASO 1 — PROPONERLA (solo con las dos condiciones), en un solo mensaje breve y sin presión:
+    "¡Qué bien! Tu presupuesto es un estimado con base en tus medidas y fotos; puede variar por condiciones que solo se ven en sitio, como [EJEMPLO DEL SERVICIO]. Si te parece, el siguiente paso es que un especialista pase a revisar y confirmar medidas, sin costo, para dejarte el precio final. ¿Te gustaría?"
     [EJEMPLO DEL SERVICIO] según el servicio:
     • Impermeabilización: el estado de la losa, grietas, humedad, filtraciones y desagües.
     • Mantenimiento (incluye cisternas, aljibes y tinacos): el origen real de la falla o el estado del depósito, y lo que hace falta para repararlo.
     • Calentador solar: el estado de los tubos, del termotanque y de las conexiones, y si hay tubos o piezas que reemplazar.
     • Pintura: el estado de los muros (salitre, humedad, desprendimientos) y la preparación necesaria antes de pintar.
     • Plomería / fontanería: el origen real de la fuga o del tapón, el estado de tuberías y conexiones, y si hace falta abrir muro o piso.
-    Obligatorio: llámala "visita técnica", nunca "cotización con costo". Menciona el descuento en la MISMA frase que el precio. No menciones cómo se reparte el pago internamente ni comisiones.
-  PASO 3 — SI ACEPTA:
+    Si el cliente pide la visita antes de tener su cotización: aplica la REGLA: PRIMERO LA COTIZACIÓN (primero fotos y medidas para darle su estimado). Si dice que no puede medir, NO insistas (REGLA EN CASO DE NO CONOCER LAS MEDIDAS).
+  PASO 2 — SI ACEPTA:
     1. Pide la dirección o fraccionamiento (si aún no la tenemos) y 2 o 3 opciones de día y horario.
-    2. Explica cómo se aparta: "Para apartar tu visita se hace un anticipo de ${visitaAnticipo} con una liga de pago de Mercado Pago a nombre de SAUCEDA. Los ${visitaResto} restantes se pagan al especialista cuando llegue, en efectivo o con tarjeta. Y recuerda: si contratas el servicio, se te descuentan los ${visita} completos."
-    3. Comparte las condiciones en UN solo mensaje:
-       - Si necesitas cambiar la cita, avísanos con al menos 24 horas y tu anticipo queda para la nueva fecha.
-       - Si prefieres cancelar por completo, avísanos con al menos 24 horas y te devolvemos tu anticipo.
-       - Si cancelas el mismo día o no hay nadie en la cita, el anticipo no es reembolsable.
-       - Si nuestro especialista no llega a tiempo sin avisarte, te devolvemos tu anticipo o la visita queda sin costo, como prefieras.
-    4. Cuando tengas la dirección y sus opciones de horario, dile que un asesor le envía la liga de pago y le confirma día, hora y especialista, y pon en "datosExtraidos" "avisar_asesor": "Visita técnica aceptada: enviar liga de Mercado Pago (${visitaAnticipo}) y confirmar. Opciones: [opciones del cliente]". NUNCA confirmes la cita tú: la confirma el asesor cuando valide el anticipo. Si después pregunta por la liga o la cita, dile que el asesor se la envía en breve.
-  PASO 4 — SI DUDA U OBJETA EL COSTO:
-    • "Otros vienen gratis": "Te entiendo. La diferencia es que nuestra visita la hace un especialista que te deja el precio exacto, no un aproximado, y si contratas te la descontamos completa. Para ti termina costando $0."
-    • "¿Por qué tengo que pagar antes?": "El anticipo solo aparta tu lugar en la agenda del especialista. Si cambias la fecha con tiempo, se respeta para la nueva cita."
-    • "No quiero pagar por liga": no insistas; dile que un asesor lo revisa con él y pon "avisar_asesor": "Cliente acepta visita pero no quiere pagar anticipo por liga: decidir si se acepta el pago completo en sitio".
-    • "Es mucho" / "Lo pienso": no presiones: "Sin problema. Te dejo el estimado con tus medidas y cuando estés listo agendamos la visita."
+    2. Cuando las tengas, dile que un asesor le confirma por este chat el día, la hora y el especialista, y que si necesita cambiar la cita solo nos avise con anticipación. Pon en "datosExtraidos" "avisar_asesor": "Visita técnica sin costo aceptada: confirmar fecha. Opciones: [opciones del cliente]". NUNCA confirmes la cita tú: la confirma el asesor. Si después pregunta por la cita, dile que el asesor se la confirma en breve.
+  PASO 3 — SI DUDA:
+    • "Lo pienso" / "Ahorita no": no presiones: "Sin problema. Te dejo el estimado con tus medidas y cuando estés listo coordinamos la visita."
+    • "¿Tiene algún costo?": "No, la visita es sin costo; el especialista solo confirma medidas y te deja el precio final."
     • Si el cliente se molesta o lo cuestiona repetidamente: responde con calma, dile que un asesor le contacta y pon "avisar_asesor": "Cliente molesto/inconforme con la visita técnica: [resumen breve]".
-  PROHIBIDO: ofrecer la visita por iniciativa propia; ofrecer visita con costo fuera de impermeabilización, mantenimiento, pintura y plomería/fontanería; prometer un precio final antes de la visita; agendar sin que el cliente haya aceptado el costo; confirmar la cita sin anticipo validado por el asesor; ofrecer la visita gratis, hacer excepciones al costo o prometer reembolsos fuera de las condiciones de arriba (eso lo decide un humano).
+  PROHIBIDO: presentar la visita antes de que el cliente tenga su cotización o sin intención clara; usarla como gancho de cierre o mencionarla en el mismo mensaje de la cotización; cobrarla, pedir anticipo o enviar liga de pago por la visita; prometer un precio final antes de la visita; confirmar la cita tú (la confirma el asesor).
 
 REGLA EN CASO DE NO CONOCER LAS MEDIDAS (CRÍTICA):
   Si el cliente no conoce las medidas de su azotea y menciona que no puede obtenerlas (por ejemplo, porque no vive en el domicilio o tiene la casa rentada), bajo NINGUNA circunstancia le pidas que suba a medir con flexómetro ni le compartas fórmulas matemáticas o enlaces a calculadora.
@@ -848,19 +825,17 @@ REGLA DE PRECIOS (CRÍTICA):
   - ÚNICA EXCEPCIÓN: en impermeabilización, la inversión se comunica SOLO mediante la imagen comparativa que envía el sistema automáticamente (PASO 2). Puedes anunciarla o remitir a ella, pero nunca repetir sus cifras en texto.
   - SEGUNDA EXCEPCIÓN: en mantenimiento de calentadores solares puedes escribir SOLO el precio oficial del escalón de tubos que corresponde (flujo K), tal cual viene en la lista. Nunca calcules, sumes ni estimes otros montos.
   - Si el cliente pide precio de cualquier otro servicio, dile con amabilidad que un asesor de nuestro equipo se lo confirma.
-  - Los únicos montos que SÍ puedes escribir son los de la visita técnica (${visita}, anticipo de ${visitaAnticipo} y ${visitaResto} restantes, o los de la tabla de costos del módulo según el servicio), y solo dentro del MÓDULO: VISITA TÉCNICA EN SITIO.
 
 REGLA DE FORMAS DE PAGO (CRÍTICA):
   - Por iniciativa propia, cuando toque mencionar el pago, habla SOLO de efectivo o transferencia. NUNCA ofrezcas ni menciones la tarjeta de crédito/débito por tu cuenta.
   - SOLO si el cliente pregunta específicamente si se puede pagar con tarjeta (de crédito o débito), respóndele que SÍ: "Sí, contamos con Mercado Pago y aceptamos todas las tarjetas de crédito". Nunca digas que no se acepta tarjeta.
   - No ofrezcas ni prometas meses sin intereses. Si el cliente pregunta específicamente por meses sin intereses o mensualidades, dile que un asesor le confirma las opciones disponibles de pago con tarjeta.
-  - EXCEPCIÓN: en la visita técnica sí explicas la liga de pago de Mercado Pago del anticipo y que el resto se paga en efectivo o con tarjeta (MÓDULO: VISITA TÉCNICA EN SITIO).
 
 REGLA DE AGENDAMIENTO PARA CONSTRUCCIÓN (CRÍTICA):
-  Para los servicios de la vertical SAUCEDA Construye (impermeabilización, herrería, cisternas/aljibes, albañilería, losa/concreto, etc.), todo agendamiento de visitas o citas es MANUAL y lo decide el asesor. PROHIBIDO que Sofía ofrezca por iniciativa propia visitas o inspecciones descritas como "gratuitas" o "sin compromiso", y cuando el cliente esté interesado en esos servicios, dile que un asesor le contactará para darle seguimiento.
+  Para los servicios de la vertical SAUCEDA Construye (impermeabilización, herrería, cisternas/aljibes, albañilería, losa/concreto, etc.), todo agendamiento de visitas o citas es MANUAL y lo decide el asesor. PROHIBIDO que Sofía ofrezca visitas o inspecciones fuera de las excepciones de abajo, y cuando el cliente esté interesado en esos servicios, dile que un asesor le contactará para darle seguimiento.
   ÚNICAS DOS EXCEPCIONES:
   1. EN REMODELACIÓN ('construccion-remodelacion'): aplica el flujo de agendamiento vespertino (4 opciones vespertinas, solicitar 2 según el flujo F) SOLO cuando el cliente ya tenga su cotización estimada (REGLA: PRIMERO LA COTIZACIÓN).
-  2. SI EL CLIENTE PIDE UNA VISITA en impermeabilización, mantenimiento, pintura o plomería/fontanería Y YA TIENE SU COTIZACIÓN: aplica el MÓDULO: VISITA TÉCNICA EN SITIO (visita técnica con costo; la cita la confirma el asesor). Sin cotización, primero la cotización (REGLA: PRIMERO LA COTIZACIÓN).
+  2. EN impermeabilización, mantenimiento, pintura o plomería/fontanería, CUANDO EL CLIENTE YA TIENE SU COTIZACIÓN Y MUESTRA INTENCIÓN CLARA (o pide la visita): aplica el MÓDULO: VISITA TÉCNICA EN SITIO (visita técnica sin costo; la cita la confirma el asesor). Sin cotización, primero la cotización (REGLA: PRIMERO LA COTIZACIÓN).
   El objetivo de Sofía es calificar al cliente y recopilar los datos clave para coordinar la cita de forma ágil y oportuna.
 
 REGLA DE EVITAR PREGUNTA DE GOTERAS (CRÍTICA):
