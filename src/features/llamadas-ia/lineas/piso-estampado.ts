@@ -18,6 +18,7 @@ import {
 
 const MINIMO_M2 = 35;
 const CATALOGO_URL = "saucedamx.com/construye/concreto-estampado/catalogo-de-estampados";
+const MUNICIPIOS = "Silao, Irapuato, Guanajuato y Lagos de Moreno";
 
 const PREGUNTAS_PISO: PreguntaFrecuente[] = [
   {
@@ -50,19 +51,32 @@ const PREGUNTAS_PISO: PreguntaFrecuente[] = [
   },
   {
     pregunta: "¿Dónde están? / ¿Van a mi ciudad?",
-    respuesta: "Estamos en León, Guanajuato. Si su propiedad está fuera de León, el asesor le confirma si podemos atenderla.",
+    respuesta: `Estamos en León, Guanajuato, y atendemos León y alrededores, además de ${MUNICIPIOS}. Si es otra ciudad, el asesor le confirma si podemos llegar.`,
+  },
+  {
+    pregunta: "¿De qué espesor lo hacen? / ¿Aguanta el peso de los carros?",
+    respuesta:
+      "Lo hacemos de 10 centímetros, que es lo que recomendamos, y aguanta sin problema el peso de hasta dos vehículos. Si lo quiere de 15 centímetros también se puede, pero el costo sube bastante.",
+  },
+  {
+    pregunta: "¿Se puede poner sobre tierra? / ¿Sobre el piso que ya tengo?",
+    respuesta: "Sí, lo ideal es colocarlo directamente sobre tierra, y también se puede colocar sin problema sobre un piso de concreto.",
+  },
+  {
+    pregunta: "¿Qué mantenimiento lleva? / ¿Cada cuánto se resella?",
+    respuesta: "En promedio cada 5 a 6 años; depende mucho de qué tan expuesto esté al sol y a la lluvia directa.",
   },
 ];
 
 /** Dudas reales sin respuesta confirmada: Sofía las pasa al asesor. */
 const PENDIENTES_PISO = [
-  "Si se puede colocar sobre tierra o sobre el piso que ya tiene, y cuánto cuesta preparar la base",
-  "Si aguanta el peso de autos y con qué espesor",
+  "Cuánto cuesta preparar la base o quitar el piso que ya tiene",
+  "Precio del espesor de 15 centímetros",
   "Cuántos días tarda el trabajo",
   "Garantía",
-  "Mantenimiento, resellado o reparación de un piso estampado que ya existe",
+  "Reparación de un piso estampado que ya existe",
   "Precio por volumen en áreas grandes",
-  "Si llegamos a una ciudad específica fuera de León",
+  `Si llegamos a una ciudad que no sea León, sus alrededores, ${MUNICIPIOS}`,
   "Antiderrapante u otros acabados especiales",
 ];
 
@@ -83,7 +97,7 @@ const OBJECIONES_PISO: Objecion[] = [
       "Sin presión. Ofrece que le compartamos otra vez el catálogo de diseños por WhatsApp y pregunta en qué fecha le volvemos a llamar.",
   },
   {
-    cuando: "La propiedad está fuera de León",
+    cuando: `La propiedad está fuera de León y sus alrededores, y no es en ${MUNICIPIOS}`,
     respuesta:
       "Agradece, dile que el asesor le confirma si podemos llegar a su ciudad y no prometas el servicio. Registra la ciudad.",
   },
@@ -114,11 +128,11 @@ async function precioPorM2(): Promise<number> {
 
 export const lineaPisoEstampado: LineaLlamada = {
   clave: "piso-estampado",
-  version: "piso-estampado-v1",
+  version: "piso-estampado-v2",
   tipos: ["construccion-piso-estampado"],
   reServicio: /estampad/i,
   contexto:
-    "son clientes que preguntaron por piso o concreto estampado por WhatsApp (sobre todo cochera, patio, terraza, entrada o jardín), casi siempre dieron su área y medidas y preguntaron el precio por metro, pero no recibieron presupuesto ni seguimiento. Varios dudan si su piso o tierra actual sirve de base, y algunos viven fuera de León.",
+    `son clientes que preguntaron por piso o concreto estampado por WhatsApp (sobre todo cochera, patio, terraza, entrada o jardín), casi siempre dieron su área y medidas y preguntaron el precio por metro, pero no recibieron presupuesto ni seguimiento. Varios dudan si su piso o tierra actual sirve de base, y algunos viven fuera de León (atendemos León y alrededores, ${MUNICIPIOS}).`,
   apertura: (ctx, nombre) =>
     `Hola${nombre ? ` ${nombre}` : ""}, le habla Sofía, asistente virtual de Sauceda; esta llamada se graba. Le llamo por el piso estampado que nos preguntó por WhatsApp${ctx.metros ? ` para sus ${ctx.metros} metros` : ""}, ¿lo sigue considerando?`,
   async datosOficiales() {
@@ -131,8 +145,8 @@ export const lineaPisoEstampado: LineaLlamada = {
 - Catálogo de diseños en línea: ${CATALOGO_URL} (si lo quiere, dile que se lo compartimos por WhatsApp; no le dictes la dirección).`;
   },
   orientar:
-    "pregunta para qué área es (cochera, patio, terraza…) y si ya tiene firme de concreto o es tierra. Si es cochera, confirma si la va a usar para autos.",
-  reglaPrecio: `da el precio por metro cuadrado. Si conoces sus metros y son ${MINIMO_M2} o más, da el total aproximado (metros por precio, redondeado a cientos, "alrededor de"). Si son menos de ${MINIMO_M2}, explica que se cotiza como paquete mínimo en la visita. Si es tierra o la base no está lista, aclara que preparar la base se cotiza aparte en la visita. Siempre di que el precio exacto se confirma en la visita.`,
+    "pregunta para qué área es (cochera, patio, terraza…) y si ya tiene firme de concreto o es tierra. Si es cochera, confirma si la va a usar para autos (con 10 centímetros aguanta hasta dos vehículos).",
+  reglaPrecio: `da el precio por metro cuadrado. Si conoces sus metros y son ${MINIMO_M2} o más, da el total aproximado (metros por precio, redondeado a cientos, "alrededor de"). Si son menos de ${MINIMO_M2}, explica que se cotiza como paquete mínimo en la visita. Sobre tierra o sobre concreto se puede colocar; si hay que quitar un piso o nivelar, aclara que eso se revisa y cotiza en la visita. Siempre di que el precio exacto se confirma en la visita.`,
   visita:
     "un especialista le lleva el muestrario físico de texturas y colores, mide el área, revisa la base y le deja el presupuesto exacto",
   propuestaVisita:
