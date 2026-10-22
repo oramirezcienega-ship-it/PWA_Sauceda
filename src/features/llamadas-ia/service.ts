@@ -211,7 +211,7 @@ async function conocimientoLlamada(ll: LlamadaIA): Promise<ConocimientoLlamada> 
       : "";
     const valor = prod.descripcionValor.trim().split(/(?<=[.!?])\s/)[0];
     lineas.push(
-      `${ETIQUETA_PAQUETE[p]}: ${formatoPesosEnteros(prod.precioM2)} por m² más IVA${garantia ? `, garantía ${garantia} años por escrito` : ""}${volumen}${valor ? `. ${valor}` : ""}`,
+      `${ETIQUETA_PAQUETE[p]}: ${formatoPesosEnteros(prod.precioM2)} por m² sin factura${garantia ? `, garantía ${garantia} años por escrito` : ""}${volumen}${valor ? `. ${valor}` : ""}`,
     );
     if (prod.minimoM2 > 0) minimos.push(prod.minimoM2);
   }
@@ -236,7 +236,7 @@ function promptReagendarVisita(
     ? "dile que eso se lo confirma un asesor y ofrece comunicarlo ahora; si acepta, usa la herramienta de transferencia"
     : "dile que eso se lo confirma un asesor hoy por WhatsApp";
   const estimado = ll.contexto.monto
-    ? `alrededor de ${formatoPesosEnteros(ll.contexto.monto)} más IVA${ll.contexto.paquete ? ` con la opción ${ll.contexto.paquete}` : ""}${ll.contexto.metros ? ` para ${ll.contexto.metros} m²` : ""}`
+    ? `alrededor de ${formatoPesosEnteros(ll.contexto.monto)} sin factura${ll.contexto.paquete ? ` con la opción ${ll.contexto.paquete}` : ""}${ll.contexto.metros ? ` para ${ll.contexto.metros} m²` : ""}`
     : "";
 
   return `Eres Sofía, asistente virtual de Sauceda, en una llamada telefónica. Español de México, cálida, natural y sin presión.
@@ -256,7 +256,7 @@ ${estimado ? `- Su estimado: ${estimado}. Es un estimado con las medidas que nos
 ${k.esImper ? `${conocimientoParaPrompt()}\n\n` : ""}CÓMO LLEVAR LA LLAMADA (en este orden):
 1. DESCUBRIR: pregunta si pudo revisar la cotización y qué le pareció. Deja que hable.
 2. ORIENTAR: si no ha elegido opción, pregunta cómo está su azotea (¿ya tiene goteras o es preventivo?) y recomienda UNA opción en una frase según su respuesta.
-3. RESOLVER: responde dudas con DATOS OFICIALES y PREGUNTAS FRECUENTES. Precios siempre "más IVA".
+3. RESOLVER: responde dudas con DATOS OFICIALES y PREGUNTAS FRECUENTES. Los precios son sin factura; si necesita factura se agrega el IVA.
 4. DETECTAR INTENCIÓN con las SEÑALES DE COMPRA.
    - Sin intención clara: no ofrezcas visita. Usa la respuesta de OBJECIONES que corresponda y pregunta qué le haría falta para decidirse.
    - Con intención clara, o si duda de sus medidas y le interesa: propón con suavidad: "Si le parece, el siguiente paso es que un especialista pase a revisar y confirmar medidas, sin costo, para dejarle el precio final. ¿Le gustaría?"

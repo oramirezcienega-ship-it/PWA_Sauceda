@@ -26,12 +26,21 @@ export const PREGUNTAS_IMPER: PreguntaFrecuente[] = [
   {
     pregunta: "¿El precio incluye IVA? / Con IVA cuánto sería / Si no necesito factura…",
     respuesta:
-      "Los precios son más IVA. Si pregunta por el total con IVA o sin factura, el asesor le confirma el monto exacto.",
+      "Los precios son sin factura; si necesita factura, se agrega el IVA. El monto exacto con factura se lo confirma el asesor.",
   },
   {
     pregunta: "¿Es carpeta, tapete, rollo o líquido? / ¿Qué es la gravilla?",
     respuesta:
       "La estándar y la Premium son de rollo con gravilla protectora encima, en color rojo o gris a su elección; la acrílica es la opción líquida.",
+  },
+  {
+    pregunta: "¿Qué marca manejan? / ¿Qué material es?",
+    respuesta:
+      "En la estándar y la Premium usamos membrana IMPAC Hogar Poliéster, de Saint-Gobain, que se adhiere con soplete por termofusión.",
+  },
+  {
+    pregunta: "¿Se puede pisar?",
+    respuesta: "Sí, el acabado con gravilla aguanta tránsito ligero ocasional, por ejemplo para subir a revisar el tinaco.",
   },
   {
     pregunta: "¿Qué incluye?",
@@ -43,12 +52,42 @@ export const PREGUNTAS_IMPER: PreguntaFrecuente[] = [
     respuesta: "Sí, la garantía es por escrito: 3, 5 o 10 años según la opción.",
   },
   {
-    pregunta: "¿Aceptan tarjeta?",
-    respuesta: "Sí, aceptamos tarjeta con Mercado Pago, además de efectivo y transferencia.",
+    pregunta: "¿Aceptan tarjeta? / ¿Hay meses sin intereses?",
+    respuesta:
+      "Sí aceptamos tarjeta, además de efectivo y transferencia. No manejamos meses sin intereses; con Mercado Pago se puede pagar a meses con intereses.",
   },
   {
-    pregunta: "¿Dónde están? / ¿Tienen oficina?",
-    respuesta: "Estamos en León, Guanajuato, y atendemos León y alrededores.",
+    pregunta: "¿Quitan la carpeta o membrana que ya tengo?",
+    respuesta:
+      "Sí, nosotros la retiramos; tiene un costo adicional pequeño que el especialista confirma en la visita.",
+  },
+  {
+    pregunta: "¿Cuánto tardan? / ¿En un día lo ponen?",
+    respuesta: "Regularmente se aplica en un día hasta unos 100 metros; si son más metros, toma un poco más.",
+  },
+  {
+    pregunta: "¿Se puede sobre lámina? / ¿Encima del piso? / Tengo paneles solares",
+    respuesta:
+      "Se aplica sobre losa o piso, no sobre lámina. Si tiene paneles solares, nosotros los podemos mover para trabajar.",
+  },
+  {
+    pregunta: "¿Pueden hacerlo solo en una parte de la azotea?",
+    respuesta: "Sí, podemos aplicarlo solo en una parte; el precio se ajusta a esos metros (con el mínimo de cobro).",
+  },
+  {
+    pregunta: "¿También reparan la humedad de plafones y muros por dentro?",
+    respuesta:
+      "Sí, en Sauceda Construye también reparamos humedades en plafones y muros interiores; eso se cotiza aparte y el especialista lo revisa en la visita.",
+  },
+  {
+    pregunta: "¿Dónde están? / ¿Tienen oficina? / ¿Van a mi ciudad?",
+    respuesta:
+      "Estamos en León, Guanajuato. Atendemos León y ciudades muy cercanas; si es fuera de León, el asesor le confirma si llegamos a su ciudad.",
+  },
+  {
+    pregunta: "¿Cuándo conviene impermeabilizar? / ¿Se puede con lluvia?",
+    respuesta:
+      "La temporada seca es el mejor momento: el material se adhiere mejor con la losa completamente seca, y así queda listo antes de que lleguen las lluvias.",
   },
   {
     pregunta: "No sé bien las medidas / ¿Ustedes van a medir? / Si van y miden, ¿cambia la cotización?",
@@ -59,15 +98,11 @@ export const PREGUNTAS_IMPER: PreguntaFrecuente[] = [
 
 /** Preguntas reales que aún no tienen respuesta confirmada: Sofía las pasa al asesor. */
 export const PENDIENTES_DE_CONFIRMAR = [
-  "Meses sin intereses o descuento con tarjeta",
-  "Si se retira la carpeta o membrana que ya tiene, y si tiene costo",
-  "Cuántos días tarda la aplicación",
-  "Precio total con IVA o sin factura",
-  "Si se aplica sobre lámina, sobre piso o con paneles solares",
-  "Si reparan humedades en plafones y muros interiores",
-  "Si dan servicio fuera de León (Silao, Valle de Santiago, Lagos de Moreno, San Francisco, Guanajuato capital)",
-  "Marca del material",
-  "Si se puede aplicar solo en una parte de la azotea",
+  "Marca de la opción acrílica",
+  "Monto exacto con factura",
+  "Costo de retirar la carpeta, de mover paneles o de reparar humedades interiores",
+  "Si llegamos a una ciudad específica fuera de León",
+  "Descuentos",
 ];
 
 export interface Objecion {
@@ -79,7 +114,7 @@ export const OBJECIONES_IMPER: Objecion[] = [
   {
     cuando: "\"Está caro\" / \"se sale de mi presupuesto\" / \"no me alcanza\"",
     respuesta:
-      "Valida sin discutir. Menciona que la acrílica es la más económica y que, si solo es una parte de la azotea o las medidas son menores, el especialista lo confirma al medir. Pregunta con qué lo está comparando.",
+      "Valida sin discutir. Menciona que la acrílica es la más económica, que se puede hacer solo en la parte que más lo necesita y que se puede pagar con tarjeta a meses (con intereses). Pregunta con qué lo está comparando.",
   },
   {
     cuando: "\"Lo voy a platicar con mi esposo/esposa\" / \"tengo que pedir autorización\"",
@@ -89,7 +124,7 @@ export const OBJECIONES_IMPER: Objecion[] = [
   {
     cuando: "\"Más adelante\" / \"hasta diciembre\" / \"el próximo año\" / \"estoy ahorrando\"",
     respuesta:
-      "Sin presión. Comenta que la temporada seca es buena época para aplicarlo, antes de las lluvias, y pregunta en qué fecha le volvemos a llamar.",
+      "Sin presión. Comenta que la temporada seca es el mejor momento para aplicarlo, antes de las lluvias, y pregunta en qué fecha le volvemos a llamar.",
   },
   {
     cuando: "\"Estoy cotizando con otros\" / \"déjame ver otras opciones\"",
