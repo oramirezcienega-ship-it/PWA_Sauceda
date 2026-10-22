@@ -28,7 +28,7 @@ export default async function RemisionOrdenTrabajoPage({ params }: RemisionOTPag
 
   return (
     <main className="min-h-screen bg-slate-100 py-10 px-4 print:bg-white print:py-0 print:px-0 flex flex-col items-center">
-      <div className="w-full max-w-3xl flex justify-between items-center mb-6 print:hidden">
+      <div className="w-full max-w-3xl flex justify-between items-center gap-3 mb-6 print:hidden">
         <Link
           href={`/orden-trabajo/entrega/${params.token}`}
           className="text-xs font-semibold text-carbon/60 hover:text-carbon flex items-center gap-1 bg-white border border-carbon/10 px-3 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm"

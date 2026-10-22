@@ -39,7 +39,7 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
       {/* Una sola hoja carta al imprimir */}
       <style>{`@page { size: letter; margin: 12mm 14mm; } @media print { html, body { background: #fff !important; } }`}</style>
       {/* Botón flotante para imprimir */}
-      <div className="w-full max-w-3xl flex justify-between items-center mb-6 print:hidden">
+      <div className="w-full max-w-3xl flex justify-between items-center gap-3 mb-6 print:hidden">
         <Link
           href={`/cotizacion/${cotizacion.token}`}
           className="text-xs font-semibold text-carbon/60 hover:text-carbon flex items-center gap-1 bg-white border border-carbon/10 px-3 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm"
