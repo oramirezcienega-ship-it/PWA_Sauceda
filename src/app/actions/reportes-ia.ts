@@ -561,8 +561,8 @@ export async function sincronizarHistorialMarketing(
     return { success: true, count: 0, message: "No se encontraron datos de publicidad en Meta Ads para este periodo." };
   }
   revalidatePath("/finanzas");
-  const sinClasificar = r.campanasSinClasificar.length
-    ? ` Campañas sin subcuenta (no entran al estado de resultados hasta clasificarlas): ${r.campanasSinClasificar.join(", ")}.`
+  const sinClasificar = r.campanasPorConfirmar.length
+    ? ` Campañas por confirmar en Finanzas → Por clasificar: ${r.campanasPorConfirmar.join(", ")}.`
     : "";
   return {
     success: true,

@@ -24,6 +24,8 @@ import { TabBalanceGeneral } from "./TabBalanceGeneral";
 import { TabFlujoEfectivo } from "./TabFlujoEfectivo";
 import { TabConfiguracion } from "./TabConfiguracion";
 import { TabRentabilidadProductos } from "./TabRentabilidadProductos";
+import { TabClasificacion } from "./TabClasificacion";
+import { contarPorClasificar } from "@/app/actions/clasificacion";
 import { TabProyecciones } from "./proyecciones/TabProyecciones";
 import { ModalNuevoMovimiento } from "./ModalNuevoMovimiento";
 import { ModalImportarExcel } from "./ModalImportarExcel";
@@ -39,6 +41,7 @@ type TabId =
   | "balance"
   | "flujo"
   | "rentabilidad"
+  | "clasificacion"
   | "proyecciones"
   | "configuracion";
 
@@ -80,6 +83,7 @@ export function FinanzasClient() {
   const [estadoResultados, setEstadoResultados] = useState<EstadoResultadosReporte | null>(null);
   const [balance, setBalance] = useState<BalanceGeneralReporte | null>(null);
   const [flujo, setFlujo] = useState<FlujoEfectivoReporte | null>(null);
+  const [porClasificar, setPorClasificar] = useState(0);
 
   // Cargar catálogos una vez
   const cargarCatalogos = useCallback(async () => {
@@ -156,6 +160,7 @@ export function FinanzasClient() {
     cargarDatos().then(async () => {
       if (!primera) return;
       await cargarCatalogos();
+      setPorClasificar(await contarPorClasificar().catch(() => 0));
       const res = await conciliarRemisionesPendientes().catch(() => null);
       if (res && res.procesadas > 0) cargarDatos();
     });
@@ -314,6 +319,7 @@ export function FinanzasClient() {
                 ["balance", "⚖️ Balance General"],
                 ["flujo", "🌊 Flujo de Efectivo"],
                 ["rentabilidad", "📦 Rentabilidad"],
+                ["clasificacion", "🗂️ Por clasificar"],
                 ["proyecciones", "🔮 Proyecciones"],
                 ["configuracion", "⚙️ Configuración"]
               ] as const
@@ -329,6 +335,11 @@ export function FinanzasClient() {
                 }`}
               >
                 <span>{label}</span>
+                {tab === "clasificacion" && porClasificar > 0 && (
+                  <span className="ml-0.5 rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                    {porClasificar}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
@@ -404,6 +415,15 @@ export function FinanzasClient() {
                 fechaInicio={fechaInicio}
                 fechaFin={fechaFin}
                 nombreUnidad={nombreUnidadSeleccionada}
+              />
+            )}
+
+            {activeTab === "clasificacion" && (
+              <TabClasificacion
+                onCambio={() => {
+                  cargarDatos();
+                  contarPorClasificar().then(setPorClasificar).catch(() => {});
+                }}
               />
             )}
 

@@ -144,6 +144,24 @@ export async function aplicarMetaAdsMes(
       g.codigoSubcuenta !== "SIN-SUBCUENTA" &&
       (!datos.subcuentas || datos.subcuentas.includes(g.codigoSubcuenta))
   );
+
+  // Movimientos de subcuentas que se quedaron sin gasto en el mes (sus campañas se
+  // reclasificaron o se ignoraron): se eliminan para no dejar totales viejos.
+  if (!datos.subcuentas) {
+    const vigentes = new Set(
+      grupos.filter((g) => g.businessUnitId).map((g) => `${datos.mes}|${g.codigoSubcuenta}`)
+    );
+    const { data: movs } = await sb
+      .from("transactions")
+      .select("id, origen_id")
+      .eq("origen_modulo", "meta_ads")
+      .like("origen_id", `${datos.mes}|%`);
+    for (const t of movs || []) {
+      if (vigentes.has(t.origen_id)) continue;
+      await sb.from("transactions").delete().eq("id", t.id);
+    }
+  }
+
   if (grupos.length === 0) return { ok: false, movimientos: 0, total: 0, error: "No hay gasto por importar en ese mes." };
 
   const { data: cat } = await sb
@@ -252,6 +270,104 @@ export function subcuentaDeCampana(nombre: string, subcuentas: SubcuentaMarketin
   return regla?.[0] || null;
 }
 
+// ============================================================
+// Reglas de clasificación (tabla reglas_clasificacion)
+// ============================================================
+
+export const ORIGEN_META = "meta_ads";
+
+export interface ReglaMeta {
+  criterio_valor: string;
+  nombre: string | null;
+  estado: "confirmada" | "sugerida" | "pendiente";
+  accion: "clasificar" | "ignorar";
+  codigo_subcuenta: string | null;
+  producto_nombre: string | null;
+}
+
+/** Reglas de Meta por campaign_id. */
+export async function reglasMetaPorCampana(sb: SupabaseClient): Promise<Map<string, ReglaMeta>> {
+  const { data, error } = await sb
+    .from("reglas_clasificacion")
+    .select("criterio_valor, nombre, estado, accion, codigo_subcuenta, producto_nombre")
+    .eq("origen", ORIGEN_META)
+    .eq("criterio_tipo", "campaign_id");
+  if (error) throw new Error(`reglas_clasificacion: ${error.message}`);
+  return new Map((data || []).map((r: any) => [r.criterio_valor, r as ReglaMeta]));
+}
+
+/** Catálogo de subcuentas y una función que traduce una regla a las columnas de meta_ads_gastos. */
+async function cargarDestinos(sb: SupabaseClient) {
+  const [{ data: subcuentasData }, { data: centros }, { data: productos }] = await Promise.all([
+    sb
+      .from("marketing_subcuentas")
+      .select("codigo, nombre, cuenta_mayor_codigo, cuenta_mayor_nombre, business_unit_id, servicio_tipos, es_general")
+      .eq("activo", true),
+    sb.from("business_units").select("id, codigo"),
+    sb
+      .from("meta_ads_gastos")
+      .select("codigo_subcuenta, producto_servicio")
+      .not("codigo_subcuenta", "is", null)
+      .not("producto_servicio", "is", null)
+      .order("fecha_inicio", { ascending: false })
+      .limit(500),
+  ]);
+  const subcuentas = (subcuentasData || []) as (SubcuentaMarketingBase & Record<string, any>)[];
+  const subPorCodigo = new Map(subcuentas.map((s) => [s.codigo, s]));
+  const ccCodigo = new Map((centros || []).map((c: any) => [c.id, c.codigo]));
+  // Producto por defecto de cada subcuenta: el último que se usó
+  const productoPorSubcuenta = new Map<string, string>();
+  (productos || []).forEach((p: any) => {
+    if (!productoPorSubcuenta.has(p.codigo_subcuenta)) productoPorSubcuenta.set(p.codigo_subcuenta, p.producto_servicio);
+  });
+
+  const clasificacion = (regla: ReglaMeta | null | undefined) => {
+    const codigo = regla && regla.accion === "clasificar" ? regla.codigo_subcuenta : null;
+    const sub = codigo ? subPorCodigo.get(codigo) : null;
+    return {
+      centro_costos: (sub && ccCodigo.get(sub.business_unit_id)) || null,
+      cuenta_mayor: sub ? `${sub.cuenta_mayor_codigo} ${sub.cuenta_mayor_nombre}` : null,
+      codigo_subcuenta: sub ? codigo : null,
+      nombre_subcuenta: sub?.nombre || null,
+      producto_servicio: sub ? regla?.producto_nombre || productoPorSubcuenta.get(codigo!) || null : null,
+    };
+  };
+
+  return { subcuentas, productoPorSubcuenta, clasificacion };
+}
+
+/**
+ * Aplica la regla actual de una campaña a todos sus días y recalcula en Finanzas
+ * los meses afectados. Se llama al confirmar o corregir una regla.
+ */
+export async function reclasificarCampanaMeta(sb: SupabaseClient, campaignId: string): Promise<string[]> {
+  const [destinos, reglas] = await Promise.all([cargarDestinos(sb), reglasMetaPorCampana(sb)]);
+  const regla = reglas.get(campaignId);
+  const ahora = new Date().toISOString();
+
+  const { data: dias } = await sb.from("meta_ads_gastos").select("fecha_inicio").eq("campaign_id", campaignId);
+  const meses = Array.from(new Set((dias || []).map((d: any) => String(d.fecha_inicio).slice(0, 7)))).sort();
+  if (meses.length === 0) return [];
+
+  if (regla?.accion === "ignorar") {
+    await sb
+      .from("meta_ads_gastos")
+      .update({ ...destinos.clasificacion(null), estatus_contable: ESTATUS_RECHAZADO, transaction_id: null, updated_at: ahora })
+      .eq("campaign_id", campaignId);
+  } else {
+    // Cambia de subcuenta: se desliga del movimiento anterior y se vuelve a aplicar
+    await sb
+      .from("meta_ads_gastos")
+      .update({ ...destinos.clasificacion(regla), estatus_contable: "PENDIENTE_VALIDACION", transaction_id: null, updated_at: ahora })
+      .eq("campaign_id", campaignId);
+  }
+
+  for (const mes of meses) {
+    await aplicarMetaAdsMes(sb, { mes, moneyAccountId: null, pagado: false });
+  }
+  return meses;
+}
+
 interface InsightCampana {
   campaign_id: string;
   campaign_name: string;
@@ -308,7 +424,8 @@ export interface ResultadoSyncMeta {
   registros: number;
   gasto: number;
   mesesAplicados: string[];
-  campanasSinClasificar: string[];
+  /** Campañas cuya clasificación falta confirmar en Finanzas → Por clasificar. */
+  campanasPorConfirmar: string[];
   error?: string;
 }
 
@@ -328,7 +445,7 @@ export async function sincronizarMetaAds(opciones: {
   const desde =
     opciones.desde || new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1).toISOString().split("T")[0];
   const base: ResultadoSyncMeta = {
-    ok: false, desde, hasta, dias: 0, registros: 0, gasto: 0, mesesAplicados: [], campanasSinClasificar: [],
+    ok: false, desde, hasta, dias: 0, registros: 0, gasto: 0, mesesAplicados: [], campanasPorConfirmar: [],
   };
 
   // El token del formulario va primero; si caducó (p. ej. uno viejo guardado en el
@@ -354,39 +471,36 @@ export async function sincronizarMetaAds(opciones: {
       (i) => Number(i.spend || 0) > 0 || Number(i.impressions || 0) > 0
     );
 
-    // Clasificación: las campañas ya conocidas conservan la suya; las nuevas, por su nombre
-    const [{ data: previas }, { data: subcuentasData }, { data: centros }] = await Promise.all([
-      sb
-        .from("meta_ads_gastos")
-        .select("campaign_id, codigo_subcuenta, producto_servicio, fecha_inicio")
-        .not("codigo_subcuenta", "is", null)
-        .order("fecha_inicio", { ascending: false }),
-      sb
-        .from("marketing_subcuentas")
-        .select("codigo, nombre, cuenta_mayor_codigo, cuenta_mayor_nombre, business_unit_id, servicio_tipos, es_general")
-        .eq("activo", true),
-      sb.from("business_units").select("id, codigo"),
-    ]);
-    const subcuentas = (subcuentasData || []) as (SubcuentaMarketingBase & Record<string, any>)[];
-    const subPorCodigo = new Map(subcuentas.map((s) => [s.codigo, s]));
-    const ccCodigo = new Map((centros || []).map((c: any) => [c.id, c.codigo]));
-    const clasifPorCampana = new Map<string, { codigo: string; producto: string | null }>();
-    const productoPorSubcuenta = new Map<string, string>();
-    for (const p of previas || []) {
-      if (!clasifPorCampana.has(p.campaign_id)) {
-        clasifPorCampana.set(p.campaign_id, { codigo: p.codigo_subcuenta, producto: p.producto_servicio });
-      }
-      if (p.producto_servicio && !productoPorSubcuenta.has(p.codigo_subcuenta)) {
-        productoPorSubcuenta.set(p.codigo_subcuenta, p.producto_servicio);
-      }
+    // Clasificación por reglas (Finanzas → Por clasificar). Una campaña nueva recibe una
+    // regla sugerida por su nombre (se aplica provisionalmente) o pendiente (no entra al P&L).
+    const destinos = await cargarDestinos(sb);
+    const reglas = await reglasMetaPorCampana(sb);
+    const nuevas = new Map<string, ReglaMeta>();
+    for (const i of insights) {
+      if (reglas.has(i.campaign_id) || nuevas.has(i.campaign_id)) continue;
+      const codigo = subcuentaDeCampana(i.campaign_name || "", destinos.subcuentas);
+      nuevas.set(i.campaign_id, {
+        criterio_valor: i.campaign_id,
+        nombre: i.campaign_name,
+        estado: codigo ? "sugerida" : "pendiente",
+        accion: "clasificar",
+        codigo_subcuenta: codigo,
+        producto_nombre: (codigo && destinos.productoPorSubcuenta.get(codigo)) || null,
+      });
+    }
+    if (nuevas.size > 0) {
+      const { error } = await sb.from("reglas_clasificacion").upsert(
+        Array.from(nuevas.values()).map((r) => ({ ...r, origen: ORIGEN_META, criterio_tipo: "campaign_id" })),
+        { onConflict: "origen,criterio_tipo,criterio_valor", ignoreDuplicates: true }
+      );
+      if (error) throw new Error(`reglas_clasificacion: ${error.message}`);
+      nuevas.forEach((r, id) => reglas.set(id, r));
     }
 
-    const sinClasificar = new Set<string>();
+    const porConfirmar = new Set<string>();
     const filas = insights.map((i) => {
-      const previa = clasifPorCampana.get(i.campaign_id);
-      const codigo = previa?.codigo || subcuentaDeCampana(i.campaign_name || "", subcuentas);
-      if (!codigo) sinClasificar.add(i.campaign_name);
-      const sub = codigo ? subPorCodigo.get(codigo) : null;
+      const regla = reglas.get(i.campaign_id)!;
+      if (regla.estado !== "confirmada") porConfirmar.add(i.campaign_name);
       return {
         fecha_inicio: i.date_start,
         fecha_fin: i.date_stop,
@@ -395,11 +509,7 @@ export async function sincronizarMetaAds(opciones: {
         account_name: i.account_name || "Sauceda",
         campaign_id: i.campaign_id,
         campaign_name: i.campaign_name,
-        centro_costos: (sub && ccCodigo.get(sub.business_unit_id)) || null,
-        cuenta_mayor: sub ? `${sub.cuenta_mayor_codigo} ${sub.cuenta_mayor_nombre}` : null,
-        codigo_subcuenta: codigo,
-        nombre_subcuenta: sub?.nombre || null,
-        producto_servicio: previa?.producto || (codigo && productoPorSubcuenta.get(codigo)) || null,
+        ...destinos.clasificacion(regla),
         gasto: r2(Number(i.spend || 0)),
         impresiones: Number(i.impressions || 0),
         alcance: Number(i.reach || 0),
@@ -418,6 +528,19 @@ export async function sincronizarMetaAds(opciones: {
         .from("meta_ads_gastos")
         .upsert(filas.slice(k, k + 500), { onConflict: "campaign_id,fecha_inicio,fecha_fin" });
       if (error) throw new Error(`meta_ads_gastos: ${error.message}`);
+    }
+
+    // Campañas marcadas como "ignorar": sus días no entran al estado de resultados
+    const ignoradas = Array.from(new Set(filas.map((f) => f.campaign_id))).filter(
+      (id) => reglas.get(id)?.accion === "ignorar"
+    );
+    if (ignoradas.length > 0) {
+      await sb
+        .from("meta_ads_gastos")
+        .update({ estatus_contable: ESTATUS_RECHAZADO, transaction_id: null, updated_at: new Date().toISOString() })
+        .in("campaign_id", ignoradas)
+        .gte("fecha_inicio", desde)
+        .lte("fecha_inicio", hasta);
     }
 
     // Métricas diarias del Dashboard Inteligente, con los prospectos del CRM de cada día
@@ -472,7 +595,7 @@ export async function sincronizarMetaAds(opciones: {
       registros: filas.length,
       gasto: r2(filas.reduce((a, f) => a + f.gasto, 0)),
       mesesAplicados,
-      campanasSinClasificar: Array.from(sinClasificar),
+      campanasPorConfirmar: Array.from(porConfirmar),
     };
   } catch (err: any) {
     return { ...base, error: err?.message || "Error al sincronizar Meta Ads." };
