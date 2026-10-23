@@ -3586,6 +3586,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         abierto={mostrarComparativaSeguridad}
         onCerrar={() => setMostrarComparativaSeguridad(false)}
         nombreCliente={detalle?.nombre || "Cliente"}
+        telefono={detalle?.telefono}
         onEnviarImagenDirecta={handleEnviarArchivoDirecto}
       />
 

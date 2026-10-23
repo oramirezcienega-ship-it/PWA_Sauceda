@@ -984,8 +984,19 @@ export interface ModularFotos {
   estructuralDescripcion?: string;
 }
 
+/** Textos de la propuesta cuando no es una obra (ej. combo de seguridad); sin ellos se usan los de pérgola/obra. */
+export interface ModularEtiquetas {
+  fotoPrincipal?: string;
+  fotoSecundaria?: string;
+  base?: string;
+  baseResumen?: string;
+  opcionalesSeccion?: string;
+  opcionalesTitulo?: string;
+}
+
 export interface CotizacionModularData {
   plantillaKey?: string;
+  etiquetas?: ModularEtiquetas;
   titulo: string;
   descripcion?: string;
   dimensiones?: ModularDimensiones;

@@ -50,6 +50,11 @@ export function VisualizadorCotizacionModular({
     return cotizacion.opcionesSeleccionadas?.incluirIva ?? false;
   });
 
+  // Propuestas que no son obra (ej. combo de seguridad) traen sus propios textos y sólo muestran sus fotos reales
+  const etiquetas = datosModulares.etiquetas;
+  const mostrarFoto1 = !etiquetas || Boolean(datosModulares.fotos?.renderUrl);
+  const mostrarFoto2 = !etiquetas || Boolean(datosModulares.fotos?.estructuralUrl);
+
   const [estatus, setEstatus] = useState(cotizacion.estatus);
   const [nombreFirma, setNombreFirma] = useState("");
   const [firmaVacia, setFirmaVacia] = useState(true);
@@ -460,8 +465,10 @@ export function VisualizadorCotizacionModular({
           )}
 
           {/* GALERÍA VISUAL: RENDER FOTORREALISTA Y DISEÑO ESTRUCTURAL */}
+          {(mostrarFoto1 || mostrarFoto2) && (
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Foto 1: Render Fotorrealista ("Cómo se vería real") */}
+            {mostrarFoto1 && (
             <div
               onClick={() =>
                 setFotoModal({
@@ -484,7 +491,7 @@ export function VisualizadorCotizacionModular({
                 <div className="absolute top-3 left-3">
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-[#1E3A2F]/90 backdrop-blur-xs px-2.5 py-1 text-[11px] font-bold text-white shadow-xs">
                     <span>✨</span>
-                    <span>Cómo se vería real (Render 3D)</span>
+                    <span>{etiquetas?.fotoPrincipal || "Cómo se vería real (Render 3D)"}</span>
                   </span>
                 </div>
                 <div className="absolute bottom-3 right-3 rounded-lg bg-black/60 backdrop-blur-xs px-2.5 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
@@ -501,8 +508,10 @@ export function VisualizadorCotizacionModular({
                 </p>
               </div>
             </div>
+            )}
 
             {/* Foto 2: Diseño Estructural del Desarrollo */}
+            {mostrarFoto2 && (
             <div
               onClick={() =>
                 setFotoModal({
@@ -525,7 +534,7 @@ export function VisualizadorCotizacionModular({
                 <div className="absolute top-3 left-3">
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-900/90 backdrop-blur-xs px-2.5 py-1 text-[11px] font-bold text-sky-300 shadow-xs border border-sky-400/30">
                     <span>📐</span>
-                    <span>Diseño Estructural del Desarrollo</span>
+                    <span>{etiquetas?.fotoSecundaria || "Diseño Estructural del Desarrollo"}</span>
                   </span>
                 </div>
                 <div className="absolute bottom-3 right-3 rounded-lg bg-black/60 backdrop-blur-xs px-2.5 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
@@ -542,7 +551,9 @@ export function VisualizadorCotizacionModular({
                 </p>
               </div>
             </div>
+            )}
           </div>
+          )}
         </div>
 
         {/* Cuerpo de Partidas */}
@@ -552,7 +563,7 @@ export function VisualizadorCotizacionModular({
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/60 pb-3">
               <div className="flex items-center gap-2.5">
                 <span className="rounded-md bg-[#1E3A2F] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-                  Obligatoria
+                  {etiquetas?.base || "Obligatoria"}
                 </span>
                 <h3 className="font-titular text-base sm:text-lg font-bold text-[#1E3A2F]">
                   {datosModulares.estructuraBase.titulo}
@@ -583,10 +594,10 @@ export function VisualizadorCotizacionModular({
           <div className="space-y-6">
             <div className="border-b border-slate-200/80 pb-2">
               <div className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
-                Personalización de Acabados
+                {etiquetas?.opcionalesSeccion || "Personalización de Acabados"}
               </div>
               <h2 className="font-titular text-lg font-bold text-[#1E3A2F]">
-                Partidas Opcionales y Acabados
+                {etiquetas?.opcionalesTitulo || "Partidas Opcionales y Acabados"}
               </h2>
               <p className="text-xs text-slate-500">
                 Selecciona las opciones deseadas para ver el presupuesto actualizado en tiempo real.
@@ -765,7 +776,7 @@ export function VisualizadorCotizacionModular({
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1.5 text-xs text-slate-600">
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-400">Estructura base:</span>
+                  <span className="text-slate-400">{etiquetas?.baseResumen || "Estructura base"}:</span>
                   <span className="font-mono font-semibold text-slate-800">
                     {formatoPesos(calculos.precioBase)}
                   </span>
@@ -819,7 +830,7 @@ export function VisualizadorCotizacionModular({
                       ))}
                       <th className="px-3.5 py-2.5">Complementos</th>
                       <th className="px-3.5 py-2.5 text-right font-mono">Total s/IVA</th>
-                      <th className="px-3.5 py-2.5 text-right font-mono">Por m²</th>
+                      {datosModulares.dimensiones && <th className="px-3.5 py-2.5 text-right font-mono">Por m²</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -878,9 +889,11 @@ export function VisualizadorCotizacionModular({
                           <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-900">
                             {formatoPesos(presetSubtotal)}
                           </td>
-                          <td className="px-3.5 py-2.5 text-right font-mono text-slate-500">
-                            {porM2 > 0 ? formatoPesos(porM2) : "—"}
-                          </td>
+                          {datosModulares.dimensiones && (
+                            <td className="px-3.5 py-2.5 text-right font-mono text-slate-500">
+                              {porM2 > 0 ? formatoPesos(porM2) : "—"}
+                            </td>
+                          )}
                         </tr>
                       );
                     })}

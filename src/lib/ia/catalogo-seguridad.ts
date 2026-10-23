@@ -18,6 +18,8 @@ export interface ProductoSeguridad {
   nombre: string;
   familia: string;
   precio: number;
+  /** Costo del proveedor (interno). */
+  costo: number;
   gama: string;
   descripcion: string;
   descripcionValor: string;
@@ -50,7 +52,7 @@ export function claveFamilia(nombre: string): string {
 export async function cargarFamiliasSeguridad(sb: SupabaseClient, opciones: { soloAptosIa?: boolean } = {}): Promise<FamiliaSeguridad[]> {
   const { data } = await sb
     .from("productos_servicios")
-    .select("id, nombre, categoria, precio_unitario, gama, descripcion, descripcion_valor, especificaciones, fotos, apto_para_ia, activo")
+    .select("id, nombre, categoria, precio_unitario, costo_unitario, gama, descripcion, descripcion_valor, especificaciones, fotos, apto_para_ia, activo")
     .eq("tipo_negocio", "seguridad")
     .eq("activo", true)
     .gt("precio_unitario", 0);
@@ -66,6 +68,7 @@ export async function cargarFamiliasSeguridad(sb: SupabaseClient, opciones: { so
       nombre: f.nombre,
       familia: nombreFamilia,
       precio: Number(f.precio_unitario || 0),
+      costo: Number(f.costo_unitario || 0),
       gama: f.gama || "estandar",
       descripcion: f.descripcion || "",
       descripcionValor: f.descripcion_valor || "",

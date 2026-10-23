@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import {
+  crearComboSeguridad,
   generarComparativaSeguridad,
   listarFamiliasSeguridad,
   type FamiliaSeguridadResumen,
@@ -19,6 +20,8 @@ export interface ModalComparativaSeguridadProps {
   abierto: boolean;
   onCerrar: () => void;
   nombreCliente?: string;
+  /** Teléfono de la conversación: para armar el combo como cotización del cliente. */
+  telefono?: string;
   onEnviarImagenDirecta?: (file: File, caption?: string) => Promise<boolean | void>;
 }
 
@@ -26,7 +29,9 @@ function formatearDinero(monto: number) {
   return monto.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 }
 
-export function ModalComparativaSeguridad({ abierto, onCerrar, nombreCliente, onEnviarImagenDirecta }: ModalComparativaSeguridadProps) {
+type RolCombo = "incluido" | "opcional" | "fuera";
+
+export function ModalComparativaSeguridad({ abierto, onCerrar, nombreCliente, telefono, onEnviarImagenDirecta }: ModalComparativaSeguridadProps) {
   const [familias, setFamilias] = useState<FamiliaSeguridadResumen[]>([]);
   const [cargando, setCargando] = useState(false);
   const [clave, setClave] = useState<string | null>(null);
@@ -36,6 +41,10 @@ export function ModalComparativaSeguridad({ abierto, onCerrar, nombreCliente, on
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [enviandoFotos, setEnviandoFotos] = useState<string | null>(null);
+  const [vistaCombo, setVistaCombo] = useState(false);
+  const [rolesCombo, setRolesCombo] = useState<Record<string, RolCombo>>({});
+  const [creandoCombo, setCreandoCombo] = useState(false);
+  const [comboCreado, setComboCreado] = useState<string | null>(null);
 
   useEffect(() => {
     if (!abierto) return;
@@ -134,6 +143,35 @@ export function ModalComparativaSeguridad({ abierto, onCerrar, nombreCliente, on
     }
   }
 
+  /** Abre el armado del combo con todo en "No va"; el asesor marca lo incluido y lo opcional. */
+  function abrirCombo() {
+    setRolesCombo({});
+    setComboCreado(null);
+    setError(null);
+    setVistaCombo(true);
+  }
+
+  async function crearCombo() {
+    if (!telefono) return;
+    const fijos = Object.keys(rolesCombo).filter((id) => rolesCombo[id] === "incluido");
+    const opcionales = Object.keys(rolesCombo).filter((id) => rolesCombo[id] === "opcional");
+    setCreandoCombo(true);
+    setError(null);
+    try {
+      const r = await crearComboSeguridad(telefono, { fijos, opcionales });
+      if (r.ok && r.cotizacionId) setComboCreado(r.cotizacionId);
+      else setError(r.error || "No se pudo crear la cotización.");
+    } catch {
+      setError("No se pudo crear la cotización.");
+    } finally {
+      setCreandoCombo(false);
+    }
+  }
+
+  const todosLosProductos = familias.flatMap((f) => f.productos.map((p) => ({ ...p, familia: f.nombre })));
+  const totalIncluido = todosLosProductos.filter((p) => rolesCombo[p.id] === "incluido").reduce((s, p) => s + p.precio, 0);
+  const totalOpcional = todosLosProductos.filter((p) => rolesCombo[p.id] === "opcional").reduce((s, p) => s + p.precio, 0);
+
   const familia = familias.find((f) => f.clave === clave);
   const claveComplemento = familia ? COMPLEMENTOS_FAMILIA[familia.clave]?.familia : undefined;
   const complemento = familias.find((f) => f.clave === claveComplemento) || null;
@@ -228,7 +266,84 @@ export function ModalComparativaSeguridad({ abierto, onCerrar, nombreCliente, on
             )}
           </div>
 
-          {/* Vista previa */}
+          {vistaCombo ? (
+            /* Armado del combo (cotización modular) */
+            <div className="p-3 sm:p-4 space-y-3">
+              <div>
+                <h3 className="text-sm font-bold text-carbon">🧩 Combo como cotización</h3>
+                <p className="text-[11px] text-carbon/60">
+                  Marca lo que el cliente ya eligió como <b>Incluido</b> y lo que quieras sugerirle como <b>Opcional</b>. En su enlace
+                  podrá prender o apagar los opcionales y ver el total al momento.
+                </p>
+              </div>
+              {comboCreado ? (
+                <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-900 space-y-2">
+                  <p>
+                    ✓ Cotización <b>{comboCreado}</b> creada y pendiente de aprobación. Revísala, apruébala y envíale el enlace al
+                    cliente desde Construcción.
+                  </p>
+                  <a
+                    href={`/construccion/${comboCreado}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-block px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                  >
+                    Abrir cotización ↗
+                  </a>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-lg border border-carbon/10 bg-white divide-y divide-carbon/10">
+                    {todosLosProductos.map((p) => {
+                      const rol = rolesCombo[p.id] || "fuera";
+                      return (
+                        <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                          <div className="min-w-0">
+                            <span className="block text-xs font-bold text-carbon">{p.nombre}</span>
+                            <span className="block text-[10px] text-carbon/60">
+                              {p.familia} · {formatearDinero(p.precio)}
+                            </span>
+                          </div>
+                          <div className="flex rounded-lg border border-carbon/15 overflow-hidden text-[10px] font-bold">
+                            {(["incluido", "opcional", "fuera"] as const).map((r) => (
+                              <button
+                                key={r}
+                                type="button"
+                                onClick={() => setRolesCombo((prev) => ({ ...prev, [p.id]: r }))}
+                                className={`px-2.5 py-1 cursor-pointer ${
+                                  rol !== r
+                                    ? "bg-white text-carbon/60 hover:bg-slate-50"
+                                    : r === "incluido"
+                                      ? "bg-verde-profundo text-white"
+                                      : r === "opcional"
+                                        ? "bg-amber-400 text-carbon"
+                                        : "bg-slate-200 text-carbon"
+                                }`}
+                              >
+                                {r === "incluido" ? "Incluido" : r === "opcional" ? "Opcional" : "No va"}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-carbon">
+                    Incluido: <b>{formatearDinero(totalIncluido)}</b>
+                    {totalOpcional > 0 && (
+                      <>
+                        {" "}
+                        · Con todos los opcionales: <b>{formatearDinero(totalIncluido + totalOpcional)}</b>
+                      </>
+                    )}
+                  </p>
+                  {!telefono && <p className="text-[11px] text-red-700">Abre este cotizador desde una conversación para ligar la cotización al cliente.</p>}
+                  {error && <p className="text-[11px] text-red-700">{error}</p>}
+                </>
+              )}
+            </div>
+          ) : (
+          /* Vista previa */
           <div className="p-3 sm:p-4 flex items-center justify-center min-h-[260px]">
             {generando && <p className="text-xs text-carbon/50">Generando imagen…</p>}
             {!generando && error && <p className="text-xs text-red-700">{error}</p>}
@@ -241,9 +356,40 @@ export function ModalComparativaSeguridad({ abierto, onCerrar, nombreCliente, on
               />
             )}
           </div>
+          )}
         </div>
 
         <div className="border-t border-carbon/10 bg-white p-3 flex flex-wrap justify-end gap-2 shrink-0">
+          {vistaCombo ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setVistaCombo(false)}
+                className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon font-bold text-xs transition cursor-pointer"
+              >
+                ← Volver a la comparativa
+              </button>
+              {!comboCreado && (
+                <button
+                  type="button"
+                  onClick={crearCombo}
+                  disabled={!telefono || totalIncluido === 0 || creandoCombo}
+                  className="px-4 py-2 rounded-lg bg-verde-profundo hover:bg-verde-profundo/90 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:opacity-50"
+                >
+                  {creandoCombo ? "⏳ Creando cotización..." : "🧩 Crear cotización del combo"}
+                </button>
+              )}
+            </>
+          ) : (
+          <>
+          <button
+            type="button"
+            onClick={abrirCombo}
+            disabled={familias.length === 0}
+            className="mr-auto px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon font-bold text-xs transition cursor-pointer disabled:opacity-50"
+          >
+            🧩 Armar combo
+          </button>
           <button
             type="button"
             onClick={descargar}
@@ -261,6 +407,8 @@ export function ModalComparativaSeguridad({ abierto, onCerrar, nombreCliente, on
             >
               {enviando ? "⏳ Enviando imagen..." : "📤 Enviar Imagen al Chat"}
             </button>
+          )}
+          </>
           )}
         </div>
       </div>
