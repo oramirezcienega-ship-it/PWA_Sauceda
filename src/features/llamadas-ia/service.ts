@@ -208,13 +208,17 @@ function promptLlamada(
   const servicio = ll.contexto.servicio || "su proyecto";
   const horarios = espacios.map((e) => `- ${e.texto} (valor para fecha_visita: ${e.iso})`).join("\n");
   const sug = ll.sugerencia;
-  const previo = sug?.gancho && !/^sin dato concreto/i.test(sug.gancho)
-    ? `
-LO QUE SABEMOS DE ESTE CLIENTE (úsalo para retomar en DESCUBRIR, con tus palabras; no lo leas tal cual):
-- ${sug.gancho}${sug.punto ? `
-- Dónde se quedó: ${sug.punto}` : ""}${sug.objecion ? `
-- Freno probable: ${sug.objecion}` : ""}
-`
+  // Lo saca el análisis de la bandeja al leer el WhatsApp: la llamada no relee la conversación.
+  const sabemos = [
+    sug?.gancho && !/^sin dato concreto/i.test(sug.gancho) ? sug.gancho : "",
+    sug?.punto ? `Dónde se quedó: ${sug.punto}` : "",
+    sug?.objecion ? `Freno probable: ${sug.objecion}` : "",
+    sug?.precio_dado
+      ? `PRECIO QUE YA RECIBIÓ POR WHATSAPP: ${sug.precio_dado}. Cuenta como precio conocido. Si pregunta o hace falta, repite ESE precio tal cual se le dio (nunca otro ni uno calculado por ti) y aclara que el precio final se confirma en la visita.`
+      : "",
+  ].filter(Boolean);
+  const previo = sabemos.length
+    ? `\nLO QUE SABEMOS DE ESTE CLIENTE (úsalo para retomar en DESCUBRIR, con tus palabras; no lo leas tal cual):\n${sabemos.map((x) => `- ${x}`).join("\n")}\n`
     : "";
   const sinRespuesta = hayAsesor
     ? "dile que eso se lo confirma un asesor y ofrece comunicarlo ahora; si acepta, usa la herramienta de transferencia"

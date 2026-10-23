@@ -1,5 +1,3 @@
-import { supabaseServidor } from "@/lib/supabase/server";
-import { formatoPesosEnteros } from "@/lib/costo-inspeccion";
 import {
   conocimientoParaPrompt,
   PREGUNTAS_GENERALES,
@@ -21,8 +19,8 @@ const MUNICIPIOS = "Silao, Irapuato, Guanajuato y Lagos de Moreno";
 
 const PREGUNTAS_PISO: PreguntaFrecuente[] = [
   {
-    pregunta: "¿Cuánto cuesta el metro? / ¿Precio por metro terminado?",
-    respuesta: "Usa el precio de DATOS OFICIALES y la regla de PRECIO.",
+    pregunta: "¿Cuánto cuesta el metro? / ¿Precio por metro terminado? / ¿Cuánto me dijeron?",
+    respuesta: "Usa la regla de PRECIO: sin cifras.",
   },
   ...PREGUNTAS_GENERALES,
   {
@@ -121,18 +119,9 @@ const SENALES_PISO = [
   "pregunta cómo se paga",
 ];
 
-async function precioPorM2(): Promise<number> {
-  const { data } = await supabaseServidor()
-    .from("productos_servicios")
-    .select("precio_unitario, activo")
-    .ilike("nombre", "%estampad%");
-  const prod = (data ?? []).find((p) => p.activo !== false && Number(p.precio_unitario) > 0);
-  return prod ? Number(prod.precio_unitario) : 0;
-}
-
 export const lineaPisoEstampado: LineaLlamada = {
   clave: "piso-estampado",
-  version: "piso-estampado-v4",
+  version: "piso-estampado-v5",
   tipos: ["construccion-piso-estampado"],
   reServicio: /estampad/i,
   contexto:
@@ -140,17 +129,12 @@ export const lineaPisoEstampado: LineaLlamada = {
   apertura: (ctx, nombre) =>
     `Hola${nombre ? ` ${nombre}` : ""}, le habla Sofía, asistente virtual de Sauceda; esta llamada se graba. Le llamo por el piso estampado que nos preguntó por WhatsApp${ctx.metros ? ` para sus ${ctx.metros} metros` : ""}, ¿lo sigue considerando?`,
   async datosOficiales() {
-    const precio = await precioPorM2();
-    return `${
-      precio
-        ? `- Concreto estampado: a partir de ${formatoPesosEnteros(precio)} por m² sin factura, como precio de referencia. El precio final depende de las características del área y del suelo (si es tierra, pasto o firme de concreto, niveles y accesos) y se define en la visita. El diseño no cambia el precio. No hay mínimo de metros: también se hacen áreas chicas.`
-        : "- No tienes el precio cargado: si preguntan, el precio lo confirma un asesor."
-    }
+    return `- Concreto estampado: NO das precios ni cifras. El precio depende de las características del área y del suelo (si es tierra, pasto o firme de concreto, niveles y accesos). El diseño no cambia el precio. No hay mínimo de metros: también se hacen áreas chicas.
 - Catálogo de diseños en línea: ${CATALOGO_URL} (si lo quiere, dile que se lo compartimos por WhatsApp; no le dictes la dirección).`;
   },
   orientar:
     "pregunta para qué área es (cochera, patio, terraza…) y si ya tiene firme de concreto o es tierra. Si es cochera, confirma si la va a usar para autos (con 10 centímetros aguanta hasta dos vehículos).",
-  reglaPrecio: `da el precio de referencia "a partir de" por metro cuadrado y, si conoces sus metros, el aproximado "desde unos" (metros por precio, redondeado a cientos). En la misma respuesta explica en una frase que el precio final depende de las características del área y del suelo, y pregunta cómo está su suelo (tierra, pasto o firme de concreto). Nunca des un total cerrado ni le digas que su área es muy chica o menciones mínimos.`,
+  reglaPrecio: `NUNCA inventes ni calcules cifras: ni precio por metro, ni rangos, ni "desde", ni totales. Si en LO QUE SABEMOS DE ESTE CLIENTE aparece el PRECIO QUE YA RECIBIÓ POR WHATSAPP, usa SOLO ese, tal cual se le dio, y aclara que el final depende del área y del suelo; cuenta como precio conocido. Si no ha recibido precio: explica en una frase que depende de las características del área y del suelo, confirma sus metros, pregunta cómo está su suelo (tierra, pasto o firme de concreto) y dile que un asesor le manda su presupuesto por WhatsApp, donde puede mandar una foto del área. Nunca le digas que su área es muy chica ni menciones mínimos.`,
   visita:
     "un especialista le lleva el muestrario físico de texturas y colores, mide el área, revisa la base y le deja el presupuesto exacto",
   propuestaVisita:

@@ -451,6 +451,7 @@ function TarjetaSugerida({
         {sug?.descartar && <p className="text-xs font-semibold text-rojo">La IA sugiere no llamar.</p>}
         {sug?.razon && <p className="text-sm text-carbon/80">{sug.razon}</p>}
         {sug?.punto && <p className="text-xs text-carbon/50">Dónde se quedó: {sug.punto}</p>}
+        {sug?.precio_dado && <p className="text-xs text-carbon/60">💲 Ya recibió precio: {sug.precio_dado}</p>}
 
         {editando ? (
           <div className="space-y-2 rounded-lg bg-crema/50 p-3">

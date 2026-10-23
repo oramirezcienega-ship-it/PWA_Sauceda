@@ -23,6 +23,8 @@ export interface SugerenciaLlamada {
   hora_razon: string;
   /** Resumen de dónde se quedó la conversación. */
   punto?: string;
+  /** Precio o cotización que ya se le dio en la conversación (vacío si no). */
+  precio_dado?: string;
   /** La conversación dice que no conviene llamar (ya contrató, pidió no contacto…). */
   descartar?: boolean;
   /** El humano cambió hora o gancho. */
@@ -117,9 +119,10 @@ Decide:
 2. hora: el día y hora en que es más probable que conteste, según cuándo escribe. Si escribe en la noche o fuera de horario, elige la hora permitida más cercana a su costumbre (por ejemplo 18:00 o 18:30). Si escribe en fin de semana, prefiere sábado. Si no hay datos, media mañana (11:00) entre semana.
 3. gancho: 1–2 frases, tratando al cliente de USTED, que Sofía puede usar para retomar, basadas en algo CONCRETO que el cliente dijo o preguntó (su área, su duda, su problema; ej. "Nos comentó que se le filtra el agua en la recámara; ¿pudo revisar la cotización?"). No saludes ni te presentes: Sofía ya lo hace. No inventes precios, descuentos ni promociones. Si la conversación no tiene nada concreto, escribe solo: "Sin dato concreto: retomar la cotización."
 4. objecion: la objeción o freno más probable, si se nota.
+5. precio_dado: si en la conversación SAUCEDA ya le dio un precio o cotización (por m², total, paquete o enlace de cotización), escríbelo con las cifras EXACTAS que se le dieron y a qué se refieren (ej. "$X por m², unos $Y por sus N m² de cochera"); no inventes cifras que no estén en la conversación; si no se le dio precio, "".
 
 Responde SOLO con este JSON:
-{"prioridad":"alta|media|baja","puntaje":0,"razon":"máximo 20 palabras","punto":"dónde se quedó la conversación, máximo 20 palabras","dias":[1,2,3,4,5,6],"hora":11,"minuto":0,"hora_razon":"máximo 15 palabras","gancho":"...","objecion":"","descartar":false}
+{"prioridad":"alta|media|baja","puntaje":0,"razon":"máximo 20 palabras","punto":"dónde se quedó la conversación, máximo 20 palabras","dias":[1,2,3,4,5,6],"hora":11,"minuto":0,"hora_razon":"máximo 15 palabras","gancho":"...","objecion":"","precio_dado":"","descartar":false}
 "dias" usa 1=lunes … 6=sábado; vacío si da igual.`;
 }
 
@@ -208,6 +211,7 @@ export async function analizarSugerencia(
     objecion: texto(r.objecion) || undefined,
     hora_razon: texto(r.hora_razon),
     punto: texto(r.punto) || undefined,
+    precio_dado: texto(r.precio_dado) || undefined,
     descartar: descartar || undefined,
   };
 
