@@ -433,10 +433,7 @@ export function DashboardInteligente() {
   // Handler para ejecutar el backfill histórico desde Facebook Ads
   const handleSincronizarHistorial = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fbToken.trim()) {
-      alert("Por favor introduce el Token de Acceso de Facebook.");
-      return;
-    }
+    // Sin token se usa el del servidor (el mismo de la sincronización diaria)
     setSincronizandoHistorial(true);
     try {
       const res = await sincronizarHistorialMarketing(fbToken, fbAdAccountId, fbFechaInicio);
@@ -2180,9 +2177,8 @@ export function DashboardInteligente() {
                   <textarea
                     value={fbToken}
                     onChange={(e) => setFbToken(e.target.value)}
-                    placeholder="Pega el token de Meta generado en la consola..."
+                    placeholder="Déjalo vacío para usar el token del servidor (sincronización diaria automática)"
                     className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono h-20 resize-none"
-                    required
                   />
                   {fbToken && (
                     <p className="text-[9px] text-emerald-600 font-semibold mt-1">✓ Token guardado localmente — se rellena automáticamente</p>
@@ -2217,7 +2213,7 @@ export function DashboardInteligente() {
                 </div>
 
                 <p className="text-[10px] text-slate-400 leading-normal font-medium">
-                  Esta acción descargará día por día los gastos reales de Meta Ads, contará automáticamente los prospectos registrados en el CRM para cada día y creará el historial consolidado.
+                  Descarga día por día el gasto real de Meta Ads por campaña, cuenta los prospectos registrados en el CRM cada día y lo refleja en el estado de resultados. Ya corre sola cada mañana; usa este botón para cargar meses anteriores.
                 </p>
 
                 <div className="flex gap-3 pt-2">

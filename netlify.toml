@@ -17,6 +17,11 @@
 [functions."despachar-llamadas-ia"]
   schedule = "*/5 * * * *"
 
+# Meta Ads: gasto del mes en curso y del anterior → Dashboard Inteligente y estado de resultados.
+# 12:00 UTC = 06:00 h en Ciudad de México.
+[functions."sincronizar-meta-ads"]
+  schedule = "0 12 * * *"
+
 
 [[headers]]
   for = "/*"

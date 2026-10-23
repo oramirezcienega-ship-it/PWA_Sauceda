@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdministrador } from "@/lib/supabase/cliente-sesion";
 import { obtenerDatosCRM } from "./crm";
@@ -539,9 +540,10 @@ Responde exclusivamente con un JSON válido con esta estructura:
 }
 
 /**
- * Sincroniza el historial de métricas desde una fecha de inicio (ej: '2026-05-01')
- * obteniendo los datos reales de gasto, impresiones y clics desde Facebook API,
- * y emparejándolo con la cantidad real de leads creados en el CRM de Supabase para cada día.
+ * Sincroniza Meta Ads desde una fecha de inicio (ej: '2026-05-01'): gasto por campaña
+ * y día, métricas del dashboard con los leads del CRM y su reflejo en el estado de
+ * resultados. Sin token usa el del servidor (META_ADS_ACCESS_TOKEN), el mismo de la
+ * sincronización diaria automática.
  */
 export async function sincronizarHistorialMarketing(
   accessToken: string,
@@ -549,91 +551,27 @@ export async function sincronizarHistorialMarketing(
   fechaInicio: string = "2026-05-01"
 ) {
   await requireAdministrador();
-  const sb = supabaseServidor();
-
-  try {
-    const hoyStr = new Date().toISOString().split("T")[0];
-
-    // 1. Obtener métricas diarias de Facebook Ads en una sola petición (con límite amplio de 500 registros para evitar cortes)
-    const urlFb = `https://graph.facebook.com/v18.0/act_${adAccountId}/insights`;
-    const resFb = await fetch(
-      `${urlFb}?access_token=${accessToken}&time_range=${JSON.stringify({
-        since: fechaInicio,
-        until: hoyStr
-      })}&time_increment=1&limit=500&fields=spend,clicks,impressions`
-    );
-
-    if (!resFb.ok) {
-      const errText = await resFb.text();
-      throw new Error(`Error de Facebook Graph API: ${resFb.status} - ${errText}`);
-    }
-
-    const dataFb = await resFb.json();
-    const insightsFb = dataFb.data || [];
-
-    // 2. Obtener todos los prospectos creados desde la fecha de inicio
-    const { data: prospectos, error: errLeads } = await sb
-      .from("prospectos")
-      .select("created_at")
-      .gte("created_at", `${fechaInicio}T00:00:00Z`);
-
-    if (errLeads) throw errLeads;
-
-    // 3. Agrupar leads del CRM por fecha en formato YYYY-MM-DD (usando zona horaria local de la app)
-    const leadsPorFecha: { [key: string]: number } = {};
-    prospectos?.forEach(p => {
-      const fecha = new Date(p.created_at).toISOString().split("T")[0];
-      leadsPorFecha[fecha] = (leadsPorFecha[fecha] || 0) + 1;
-    });
-
-    // 4. Mapear cada día de Facebook Insights e incluir el conteo de leads
-    const registrosParaInsertar = insightsFb.map((item: any) => {
-      const fecha = item.date_start;
-      return {
-        fecha,
-        canal: "facebook",
-        gasto_publicitario: Number(item.spend || 0),
-        clics: Number(item.clicks || 0),
-        impresiones: Number(item.impressions || 0),
-        leads_registrados_crm: leadsPorFecha[fecha] || 0
-      };
-    });
-
-    if (registrosParaInsertar.length === 0) {
-      return {
-        success: true,
-        count: 0,
-        message: "No se encontraron datos de publicidad en Facebook Ads para este periodo."
-      };
-    }
-
-    // 5. Borrar datos viejos de Facebook en ese rango de fechas para evitar conflictos de clave única
-    await sb
-      .from("analytics_marketing")
-      .delete()
-      .eq("canal", "facebook")
-      .gte("fecha", fechaInicio);
-
-    // 6. Hacer el insert masivo en Supabase
-    const { error: errInsert } = await sb
-      .from("analytics_marketing")
-      .insert(registrosParaInsertar);
-
-    if (errInsert) throw errInsert;
-
-    return {
-      success: true,
-      count: registrosParaInsertar.length,
-      message: `Se sincronizaron exitosamente ${registrosParaInsertar.length} días de historial de publicidad desde el ${fechaInicio}.`
-    };
-  } catch (err: any) {
-    console.error("Fallo al sincronizar historial de marketing:", err);
-    return {
-      success: false,
-      count: 0,
-      message: err.message || "Error interno del servidor."
-    };
+  const { sincronizarMetaAds } = await import("@/features/marketing/meta-ads");
+  const r = await sincronizarMetaAds({ token: accessToken, adAccountId, desde: fechaInicio });
+  if (!r.ok) {
+    console.error("Fallo al sincronizar historial de marketing:", r.error);
+    return { success: false, count: 0, message: r.error || "Error interno del servidor." };
   }
+  if (r.registros === 0) {
+    return { success: true, count: 0, message: "No se encontraron datos de publicidad en Meta Ads para este periodo." };
+  }
+  revalidatePath("/finanzas");
+  const sinClasificar = r.campanasSinClasificar.length
+    ? ` Campañas sin subcuenta (no entran al estado de resultados hasta clasificarlas): ${r.campanasSinClasificar.join(", ")}.`
+    : "";
+  return {
+    success: true,
+    count: r.dias,
+    message:
+      `Se sincronizaron ${r.dias} días ($${r.gasto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}) desde el ${fechaInicio}.` +
+      (r.mesesAplicados.length ? ` Reflejado en Finanzas: ${r.mesesAplicados.join(", ")}.` : "") +
+      sinClasificar,
+  };
 }
 
 /**
