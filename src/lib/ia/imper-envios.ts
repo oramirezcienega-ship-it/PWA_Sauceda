@@ -43,7 +43,7 @@ export function hayFotosEnCatalogo(productos: Partial<Record<PaqueteImper, Produ
   return (["acrilico", "estandar", "premium"] as const).some((p) => fotosParaEnviar(productos[p]).length > 0);
 }
 
-async function yaEnviado(sb: SupabaseClient, expedienteId: string | null | undefined, marca: string): Promise<boolean> {
+export async function yaEnviado(sb: SupabaseClient, expedienteId: string | null | undefined, marca: string): Promise<boolean> {
   if (!expedienteId) return false;
   const { data } = await sb
     .from("mensajes_whatsapp")
@@ -55,7 +55,7 @@ async function yaEnviado(sb: SupabaseClient, expedienteId: string | null | undef
   return Boolean(data && data.length > 0);
 }
 
-async function enviarYRegistrar(
+export async function enviarYRegistrar(
   sb: SupabaseClient,
   ctx: { canal: string; telefono: string; expedienteId?: string | null; agente: string },
   buffer: Buffer,

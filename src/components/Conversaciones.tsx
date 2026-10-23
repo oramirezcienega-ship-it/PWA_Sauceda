@@ -40,6 +40,7 @@ import { DocumentosVentas } from "./DocumentosVentas";
 import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
 import { ModalCalculadoraImpermeabilizacion } from "./ModalCalculadoraImpermeabilizacion";
 import { ModalCotizacionExpress } from "./ModalCotizacionExpress";
+import { ModalComparativaSeguridad } from "./ModalComparativaSeguridad";
 import { ModalCoordinarInspeccion } from "./ModalCoordinarInspeccion";
 import { ModalPasarLeadTelegram } from "./ModalPasarLeadTelegram";
 import { ModalCatalogoPlantillas } from "./ModalCatalogoPlantillas";
@@ -884,6 +885,7 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [exitoOrtografia, setExitoOrtografia] = useState(false);
   const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
   const [mostrarCotizacionExpress, setMostrarCotizacionExpress] = useState(false);
+  const [mostrarComparativaSeguridad, setMostrarComparativaSeguridad] = useState(false);
   const [menuCotizador, setMenuCotizador] = useState(false);
   const [mostrarCoordinacion, setMostrarCoordinacion] = useState(false);
   const [mostrarServicioProveedor, setMostrarServicioProveedor] = useState(false);
@@ -3124,6 +3126,19 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                                   Comparativa por m²: Acrílico, Estándar y Premium
                                 </span>
                               </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMenuCotizador(false);
+                                  setMostrarComparativaSeguridad(true);
+                                }}
+                                className="w-full text-left px-2.5 py-2 rounded hover:bg-amber-50 cursor-pointer"
+                              >
+                                <span className="block text-xs font-bold text-carbon">🔐 Seguridad</span>
+                                <span className="block text-[10px] text-carbon/60">
+                                  Opciones con foto y precio: videoporteros, cerraduras…
+                                </span>
+                              </button>
                             </div>
                           </>
                         )}
@@ -3564,6 +3579,14 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
           setTexto((prev) => (prev.trim() ? `${prev}\n\n${textoCotizacion}` : textoCotizacion));
           textareaRef.current?.focus();
         }}
+      />
+
+      {/* Modal de Comparativa de Seguridad (familia del catálogo) */}
+      <ModalComparativaSeguridad
+        abierto={mostrarComparativaSeguridad}
+        onCerrar={() => setMostrarComparativaSeguridad(false)}
+        nombreCliente={detalle?.nombre || "Cliente"}
+        onEnviarImagenDirecta={handleEnviarArchivoDirecto}
       />
 
       {/* Modal de Catálogo Visual de Plantillas de WhatsApp */}

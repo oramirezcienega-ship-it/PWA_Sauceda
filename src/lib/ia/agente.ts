@@ -18,6 +18,8 @@ import { costoUnitarioPorVolumen } from "@/lib/costos-volumen";
 import { cargarServiciosMantenimiento, fichaServicioParaPrompt, servicioDeTipoNegocio } from "@/lib/ia/catalogo-mantenimiento";
 import { formatoPesosEnteros } from "@/lib/costo-inspeccion";
 import { cargarProductosConVideos, videosParaPrompt, enviarVideosCatalogo } from "@/lib/ia/videos-catalogo";
+import { cargarFamiliasSeguridad, familiasParaPrompt } from "@/lib/ia/catalogo-seguridad";
+import { enviarComparativaSeguridad } from "@/lib/ia/seguridad-envios";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { MARCA } from "@/lib/marca";
@@ -346,6 +348,8 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
       : "";
   const fichasPdf = paquetesConFicha(productosImper).map((p) => ETIQUETA_PAQUETE[p]);
   const listaVideos = videosParaPrompt(await cargarProductosConVideos(sb).catch(() => []));
+  // Seguridad: familias del catálogo con precio y aptas para Sofía (cada una tiene su imagen comparativa)
+  const listaFamiliasSeguridad = familiasParaPrompt(await cargarFamiliasSeguridad(sb, { soloAptosIa: true }).catch(() => []));
   const minimosImper = (["acrilico", "estandar", "premium"] as const)
     .map((p) => productosImper[p])
     .filter((p): p is NonNullable<typeof p> => Boolean(p && p.minimoM2 > 0))
@@ -763,7 +767,11 @@ L) Si está interesado en SEGURIDAD o viene de campaña de SEGURIDAD / VIDEOVIGI
      c) Si cuenta con conexión a internet en el lugar (para el monitoreo en tiempo real desde la aplicación en su smartphone).
      d) Colonia o zona de la propiedad en León.
      e) Nombre y número de contacto (si aún no figura registrado).
-  3. Explica los beneficios del producto: manejamos equipos con visión nocturna, detección de movimiento y alertas en tiempo real directo a su celular.
+  3. Explica los beneficios del producto: manejamos equipos con visión nocturna, detección de movimiento y alertas en tiempo real directo a su celular.${listaFamiliasSeguridad ? `
+  3b. OPCIONES CON PRECIO DEL CATÁLOGO: para estas familias ya tenemos opciones con precio y foto:
+${listaFamiliasSeguridad}
+     Cuando el cliente pida cotizar, ver opciones o precios de algo que corresponde a una de estas familias (ej. "quiero cotizar un videoportero", "¿cuánto cuesta una cerradura eléctrica?"), pon en "datosExtraidos" "comparativa_seguridad" con la clave exacta de la familia (lo que va entre comillas) y "tipo_negocio": "seguridad". El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, una imagen comparativa con las opciones, sus fotos y sus precios. En tu texto anúnciala ("te comparto la comparativa con las opciones que manejamos 👇"), NO escribas precios ni montos (vienen en la imagen) y cierra preguntando cuál le interesa más. Una sola vez por familia: si ya la enviaste, no la pongas de nuevo y responde sus dudas con lo que viene en la imagen.
+     Cuando elija una opción o pida algo que combine (ej. videoportero + cerradura eléctrica para abrir desde el monitor), ofrécele la familia complementaria con su comparativa y aplica el paso 4 para que un asesor le arme la propuesta final.` : ""}
   4. PRIMERO LA COTIZACIÓN (aplica la REGLA: PRIMERO LA COTIZACIÓN):
      Dile amablemente que un asesor técnico especializado le preparará la cotización / propuesta a la medida según los puntos a proteger y le contactará por este chat o llamada para darle seguimiento puntual. Pon en "datosExtraidos" "tipo_negocio": "seguridad" y "avisar_asesor": "Cotización de seguridad: [tipo de inmueble y requerimiento]".
 
@@ -936,6 +944,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null",
     "fuera_de_zona": "Boolean (true) si el cliente confirmó que NO tiene propiedades en León y está fuera de nuestra cobertura geográfica, de lo contrario null",
     "fotos_servicio": "true SOLO en mantenimiento de cisternas, tinacos o calentadores, en el mensaje donde el flujo J/K indica compartir las fotos del servicio; de lo contrario null",
+    "comparativa_seguridad": "SOLO en seguridad (flujo L, paso 3b): la clave exacta de la familia cuya comparativa anuncias en este mensaje (ej. 'videoporteros-e-interfones'); de lo contrario null",
     "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al saludar y presentar las 3 opciones para pedir metros), 'paso_2' (al anunciar la comparativa de opciones, o al confirmar el paquete elegido) o 'paso_3' (al confirmar que un asesor le contactará). Si el tipo de negocio no es impermeabilización, pon null",
     "fecha_inspeccion_confirmada": "La fecha en formato YYYY-MM-DD del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.fecha}'), de lo contrario null",
     "cliente_pospone": "true SOLO si en su mensaje actual el cliente pospone o dice que lo retomará más adelante (ver REGLA DE CLIENTE QUE POSPONE); de lo contrario null",
@@ -2423,6 +2432,21 @@ export async function responderConIA(
           expedienteId: ctx.expedienteId ?? null,
           agente: NOMBRE_AGENTE,
           servicio: servicioMant,
+        });
+      }
+    }
+
+    // --- SEGURIDAD: comparativa de la familia que pidió el cliente (sólo WhatsApp, sólo si el texto la anuncia) ---
+    {
+      const familiaSeg = typeof (datosExtraidos as any).comparativa_seguridad === "string" ? (datosExtraidos as any).comparativa_seguridad.trim() : "";
+      const esSeguridad = ((updates.tipo_negocio as string | undefined) || exp?.tipo_negocio) === "seguridad";
+      if (r.ok && !clientePospone && !esMessenger && !esInstagram && esSeguridad && familiaSeg && familiaSeg.toLowerCase() !== "null" && /(comparativa|opciones|👇)/i.test(textoRespuesta)) {
+        await enviarComparativaSeguridad(sb, {
+          canal,
+          telefono: ctx.telefono,
+          expedienteId: ctx.expedienteId ?? null,
+          agente: NOMBRE_AGENTE,
+          familia: familiaSeg,
         });
       }
     }
