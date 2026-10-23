@@ -7,6 +7,13 @@ import { avisarAsesorDesdeIA } from "@/lib/ia/aviso-asesor";
 import { lineaDe } from "@/features/llamadas-ia/lineas";
 import type { LineaLlamada } from "@/features/llamadas-ia/lineas/tipos";
 import type { PrioridadLlamada, SugerenciaLlamada } from "@/features/llamadas-ia/sugerencias";
+import {
+  aperturaSegmento,
+  pasosSegmento,
+  segmentoDe,
+  SEGMENTOS,
+  type SegmentoLlamada,
+} from "@/features/llamadas-ia/segmentos";
 
 /**
  * Llamadas IA salientes (Vapi + Twilio).
@@ -27,6 +34,7 @@ import type { PrioridadLlamada, SugerenciaLlamada } from "@/features/llamadas-ia
 export type EstadoLlamadaIA = "pendiente" | "aprobada" | "en_curso" | "completada" | "fallida" | "cancelada";
 export type ResultadoLlamadaIA =
   | "visita_agendada"
+  | "cotizar"
   | "interesado"
   | "transferido"
   | "duda"
@@ -74,6 +82,7 @@ export interface LlamadaIA {
   error: string | null;
   /** Bandeja de sugeridas (ver sugerencias.ts). */
   prioridad: PrioridadLlamada | null;
+  segmento: SegmentoLlamada | null;
   puntaje: number | null;
   hora_sugerida: string | null;
   sugerencia: SugerenciaLlamada | null;
@@ -213,13 +222,15 @@ function promptLlamada(
     sug?.gancho && !/^sin dato concreto/i.test(sug.gancho) ? sug.gancho : "",
     sug?.punto ? `Dónde se quedó: ${sug.punto}` : "",
     sug?.objecion ? `Freno probable: ${sug.objecion}` : "",
+    sug?.faltan ? `Datos que faltan para cotizarle: ${sug.faltan}` : "",
     sug?.precio_dado
-      ? `PRECIO QUE YA RECIBIÓ POR WHATSAPP: ${sug.precio_dado}. Cuenta como precio conocido. Si pregunta o hace falta, repite ESE precio tal cual se le dio (nunca otro ni uno calculado por ti) y aclara que el precio final se confirma en la visita.`
+      ? `PRECIO QUE YA RECIBIÓ POR WHATSAPP: ${sug.precio_dado}. Cuenta como precio conocido. Si pregunta o hace falta, repite ESE precio tal cual se le dio (nunca otro ni uno calculado por ti) y aclara que el precio final se confirma en la visita. Si no trae cifras, refiérete a "la cotización que le enviamos por WhatsApp" sin decir montos.`
       : "",
   ].filter(Boolean);
   const previo = sabemos.length
     ? `\nLO QUE SABEMOS DE ESTE CLIENTE (úsalo para retomar en DESCUBRIR, con tus palabras; no lo leas tal cual):\n${sabemos.map((x) => `- ${x}`).join("\n")}\n`
     : "";
+  const segmento = segmentoDe(ll);
   const sinRespuesta = hayAsesor
     ? "dile que eso se lo confirma un asesor y ofrece comunicarlo ahora; si acepta, usa la herramienta de transferencia"
     : "dile que eso se lo confirma un asesor hoy por WhatsApp";
@@ -228,7 +239,9 @@ function promptLlamada(
 
 ESTILO (obligatorio): máximo 2 frases cortas por turno y una sola pregunta. Nada de listas ni explicaciones largas. Si te interrumpen, no repitas lo que ya dijiste. Escucha más de lo que hablas. Escribe las cantidades como se dicen ("310 pesos por metro cuadrado", "alrededor de 12 mil 400 pesos"), nunca con signos ni abreviaturas, y todo en español.
 
-CONTEXTO: ${linea.contexto} Tu trabajo es retomar esa conversación, resolver dudas y saber en qué punto está. NO es una llamada para cerrar ni para agendar a la fuerza.
+CONTEXTO GENERAL DE ESTOS CLIENTES: ${linea.contexto}
+
+OBJETIVO DE ESTA LLAMADA (cliente ${SEGMENTOS[segmento].etiqueta.toLowerCase()}): ${SEGMENTOS[segmento].objetivo}. Si el contexto general no coincide con su caso, manda este objetivo. NO es una llamada para cerrar ni para agendar a la fuerza.
 
 DATOS OFICIALES (lo ÚNICO que puedes afirmar):
 - Cliente: ${ll.nombre || "sin nombre"}. Pidió información de ${servicio}${ll.contexto.colonia ? ` en ${ll.contexto.colonia}` : ""}${ll.contexto.metros ? `, unos ${ll.contexto.metros} m²` : ""}.
@@ -238,14 +251,7 @@ ${previo}
 ${linea.conocimiento()}
 
 CÓMO LLEVAR LA LLAMADA (en este orden):
-1. DESCUBRIR: pregunta qué le pareció o en qué punto está. Deja que hable.
-2. ORIENTAR: ${linea.orientar}
-3. RESOLVER: responde dudas con DATOS OFICIALES y PREGUNTAS FRECUENTES. Los precios son sin factura; si necesita factura se agrega el IVA.
-   PRECIO: ${linea.reglaPrecio}
-4. DETECTAR INTENCIÓN con las SEÑALES DE COMPRA.
-   - Sin intención clara: no ofrezcas visita. Usa la respuesta de OBJECIONES que corresponda y pregunta qué le haría falta para decidirse.
-   - PRIMERO EL PRECIO: solo propón la visita si el cliente ya conoce su precio (de la cotización que recibió o porque se lo diste en esta llamada con la regla de PRECIO). Si aún no lo conoce, dáselo primero; si no tienes precio que dar, no ofrezcas visita: dile que un asesor le comparte su presupuesto.
-   - Con precio conocido e intención clara, o si duda de sus medidas y le interesa: propón con suavidad: "${linea.propuestaVisita}"
+${pasosSegmento(segmento, linea, linea.propuestaVisita)}
 5. SOLO SI ACEPTA la visita: primero pregunta qué día y horario le acomoda. Acepta cualquier horario de lunes a sábado entre 9 de la mañana y 6 de la tarde: NUNCA digas que el especialista no puede ni lo obligues a elegir entre opciones. Si no tiene preferencia, sugiérele dos de la lista de abajo. Repite el día y la hora que eligió y di que un asesor se lo confirma por WhatsApp.
 ${horarios ? `   Sugerencias (solo si no tiene preferencia):\n${horarios}` : "   Sin sugerencias cargadas: si no tiene preferencia, di que el asesor le propone fecha por WhatsApp."}
 6. Si pregunta algo que no está en DATOS OFICIALES ni en PREGUNTAS FRECUENTES (incluidos los TEMAS SIN RESPUESTA CONFIRMADA): no lo inventes; ${sinRespuesta}.
@@ -262,6 +268,7 @@ const ESQUEMA_RESULTADO = {
       type: "string",
       enum: [
         "visita_agendada",
+        "cotizar",
         "interesado",
         "transferido",
         "duda",
@@ -272,7 +279,7 @@ const ESQUEMA_RESULTADO = {
         "no_contesta",
       ],
       description:
-        "visita_agendada: aceptó la visita técnica sin costo. interesado: mostró intención pero aún no quiere visita (seguimiento del asesor). transferido: se pasó a un asesor. duda: tiene preguntas que Sofía no pudo resolver o lo está pensando. no_interesado: ya no quiere el servicio. llamar_despues: pidió otra hora. buzon: contestó un buzón o grabación. no_llamar: pidió no ser llamado. no_contesta: nadie habló.",
+        "visita_agendada: aceptó la visita técnica sin costo. cotizar: dio o confirmó sus datos y espera que el asesor le mande su cotización. interesado: mostró intención pero aún no quiere visita (seguimiento del asesor). transferido: se pasó a un asesor. duda: tiene preguntas que Sofía no pudo resolver o lo está pensando. no_interesado: ya no quiere el servicio. llamar_despues: pidió otra hora. buzon: contestó un buzón o grabación. no_llamar: pidió no ser llamado. no_contesta: nadie habló.",
     },
     fecha_visita: {
       type: "string",
@@ -288,6 +295,14 @@ const ESQUEMA_RESULTADO = {
     },
     interes: { type: "integer", minimum: 1, maximum: 5, description: "Nivel de interés del 1 al 5." },
     opcion_interes: { type: "string", description: "Opción o paquete que le interesó, si lo dijo." },
+    datos_cotizar: {
+      type: "string",
+      description: "Datos que dio para su cotización: área, medidas, tipo de suelo o superficie, colonia, lo que quiere (ej. 'cochera 3x5, tierra, col. Granada').",
+    },
+    motivo_silencio: {
+      type: "string",
+      description: "Si no había contestado por WhatsApp, por qué (no le llegó, se le pasó, lo estaba pensando, contrató a otro…).",
+    },
     senal_compra: { type: "string", description: "La señal de intención que dio el cliente, si la hubo (ej. 'preguntó cuándo pueden empezar')." },
     objecion: { type: "string", description: "Objeción o duda principal del cliente, si la hubo." },
     decide_con: { type: "string", description: "Si dijo que lo decide con alguien más (pareja, dueño, administración), con quién." },
@@ -328,7 +343,7 @@ function asistenteLlamada(
 
   return {
     name: `Sofia - ${linea.version}`,
-    firstMessage: paraVoz(linea.apertura(ll.contexto, nombre)),
+    firstMessage: paraVoz(aperturaSegmento(segmentoDe(ll), linea, ll.contexto, nombre)),
     model: {
       provider: "openai",
       // gpt-4o-mini dijo mal un precio en la primera prueba; gpt-4o cuesta ~2 centavos más por llamada.
@@ -360,7 +375,7 @@ function asistenteLlamada(
     },
     server: { url: `${baseUrl()}/api/conmutador/webhook-campana` },
     serverMessages: ["end-of-call-report"],
-    metadata: { llamadaCampanaId: ll.id, esPrueba: ll.es_prueba, guion: linea.version },
+    metadata: { llamadaCampanaId: ll.id, esPrueba: ll.es_prueba, guion: linea.version, segmento: segmentoDe(ll) },
   };
 }
 
@@ -503,7 +518,7 @@ export async function sincronizarConVapi(
   const datos = call.analysis?.structuredData ?? {};
   const motivo = call.endedReason || "";
   const validos: ResultadoLlamadaIA[] = [
-    "visita_agendada", "interesado", "transferido", "duda", "no_interesado", "llamar_despues", "no_contesta", "buzon", "no_llamar",
+    "visita_agendada", "cotizar", "interesado", "transferido", "duda", "no_interesado", "llamar_despues", "no_contesta", "buzon", "no_llamar",
   ];
   let resultado: ResultadoLlamadaIA | "" = validos.includes(datos.resultado as ResultadoLlamadaIA)
     ? (datos.resultado as ResultadoLlamadaIA)
@@ -545,7 +560,7 @@ export async function sincronizarConVapi(
     grabacion_url: grabacion || null,
     duracion_seg: duracion,
     costo_usd: typeof call.cost === "number" ? call.cost : null,
-    datos: { ...datos, endedReason: motivo, guion: lineaDe(ll.contexto).version },
+    datos: { ...datos, endedReason: motivo, guion: lineaDe(ll.contexto).version, segmento: segmentoDe(ll) },
     error: resultado === "error" ? motivo || "Error en la llamada" : null,
   });
 
@@ -561,6 +576,7 @@ export async function sincronizarConVapi(
   const preferencia = fechaVisita ? textoFecha(fechaVisita) : horarioCliente;
   const avisos: Partial<Record<ResultadoLlamadaIA, string>> = {
     visita_agendada: `Llamada IA: aceptó visita técnica sin costo${preferencia ? ` (${preferencia})` : ""}. Confirmar fecha por WhatsApp${ll.cotizacion_id ? ` · ${ll.cotizacion_id}` : ""}.`,
+    cotizar: `Llamada IA: enviar cotización de ${ll.contexto.servicio || "su proyecto"}${typeof datos.datos_cotizar === "string" && datos.datos_cotizar ? ` · ${datos.datos_cotizar}` : ""}.`,
     interesado: `Llamada IA: interesado${typeof datos.opcion_interes === "string" && datos.opcion_interes ? ` en ${datos.opcion_interes}` : ""}, darle seguimiento por WhatsApp${ll.cotizacion_id ? ` · ${ll.cotizacion_id}` : ""}.`,
     duda: `Llamada IA: tiene dudas, llamarle${typeof datos.objecion === "string" && datos.objecion ? ` · ${datos.objecion}` : ""}.`,
   };
@@ -596,6 +612,7 @@ export async function sincronizarConVapi(
   if (ll.prospecto_id && !ll.es_prueba) {
     const etiquetas: Record<ResultadoLlamadaIA, string> = {
       visita_agendada: `Aceptó visita técnica${preferencia ? ` (${preferencia})` : ""}`,
+      cotizar: "Dio sus datos: enviarle cotización",
       interesado: "Interesado: seguimiento del asesor",
       transferido: "Transferido a un asesor",
       duda: "Tiene dudas: un asesor debe llamarle",
@@ -658,6 +675,7 @@ export async function crearLlamadaPrueba(datos: {
   nombre?: string;
   servicio?: string;
   colonia?: string;
+  segmento?: SegmentoLlamada;
   creadoPor?: string | null;
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   const canon = normalizarTelefono(datos.telefono);
@@ -669,6 +687,7 @@ export async function crearLlamadaPrueba(datos: {
       nombre: datos.nombre?.trim() || "Prueba",
       es_prueba: true,
       estado: "aprobada",
+      segmento: datos.segmento ?? "cotizado",
       contexto: {
         servicio: datos.servicio?.trim() || "impermeabilización",
         colonia: datos.colonia?.trim() || "",
@@ -733,12 +752,71 @@ export async function generarListaReagendarVisitas(creadoPor?: string | null): P
         ...(concepto ? { metros: Number(concepto.cantidad) || undefined } : {}),
         ...(paquete ? { paquete: ETIQUETA_PAQUETE[paquete] } : {}),
       },
+      segmento: "cotizado",
       creado_por: creadoPor ?? null,
     });
   }
   if (filas.length) {
     const { error } = await sb.from("llamadas_campana").insert(filas);
     if (error) throw new Error(error.message);
+  }
+  return { agregadas: filas.length };
+}
+
+/** Nombre del servicio para el guion, según el tipo de negocio del prospecto. */
+const SERVICIO_POR_TIPO: Record<string, string> = {
+  "construccion-impermeabilizacion": "impermeabilización",
+  "construccion-piso-estampado": "piso estampado",
+  "construccion-remodelacion": "remodelación",
+  "construccion-mantenimiento-cisternas": "limpieza de cisterna",
+  "construccion-mantenimiento-tinacos": "limpieza de tinaco",
+  "construccion-mantenimiento-calentadores": "mantenimiento de calentador solar",
+  "construccion-mantenimiento-postventa": "mantenimiento de su casa",
+  "construccion-herreria": "herrería",
+};
+
+/**
+ * Arma sugerencias (en 'pendiente', sin marcar) con prospectos de construcción
+ * que escribieron por WhatsApp, no tienen cotización y llevan 2+ días sin
+ * mensajes. El análisis decide si son sin_respuesta, sin_cotizar o cotizado
+ * (si ya se les dio precio en el chat).
+ */
+export async function generarListaProspectosSinCotizacion(
+  tipoNegocio?: string | null,
+  creadoPor?: string | null,
+): Promise<{ agregadas: number }> {
+  const sb = supabaseServidor();
+  const [{ data: pros, error }, { data: enCola }, { data: bloqueados }] = await Promise.all([
+    sb.rpc("prospectos_sin_cotizacion_para_llamar", { p_tipo: tipoNegocio || null }),
+    sb.from("llamadas_campana").select("prospecto_id, telefono").neq("estado", "cancelada").eq("es_prueba", false),
+    sb.from("telefonos_no_llamar").select("telefono"),
+  ]);
+  if (error) throw new Error(error.message);
+  const yaEnCola = new Set((enCola ?? []).flatMap((r) => [r.prospecto_id as string, r.telefono as string]).filter(Boolean));
+  const noLlamar = new Set((bloqueados ?? []).map((r) => r.telefono as string));
+
+  const filas = [];
+  const vistos = new Set<string>();
+  for (const p of (pros ?? []) as { id: string; nombre: string; telefono: string; direccion: string; ciudad: string; tipo_negocio: string }[]) {
+    const tel = normalizarTelefono(p.telefono || "");
+    if (!tel || tel.length < 12 || yaEnCola.has(p.id) || yaEnCola.has(tel) || noLlamar.has(tel) || vistos.has(tel)) continue;
+    vistos.add(tel);
+    filas.push({
+      campana: "seguimiento_prospecto",
+      telefono: tel,
+      nombre: p.nombre || "",
+      prospecto_id: p.id,
+      contexto: {
+        servicio: SERVICIO_POR_TIPO[p.tipo_negocio] ?? "su proyecto",
+        tipoNegocio: p.tipo_negocio,
+        colonia: p.direccion || p.ciudad || "",
+      },
+      creado_por: creadoPor ?? null,
+    });
+  }
+  if (filas.length) {
+    const { error: errInsert } = await sb.from("llamadas_campana").insert(filas);
+    if (errInsert) throw new Error(errInsert.message);
   }
   return { agregadas: filas.length };
 }

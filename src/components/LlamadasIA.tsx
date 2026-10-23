@@ -8,6 +8,7 @@ import {
   aprobarLlamadasIA,
   cancelarLlamadaIA,
   editarSugerenciaIA,
+  generarListaProspectosIA,
   generarListaReagendarIA,
   llamarAhoraIA,
   probarLlamadaIA,
@@ -16,6 +17,7 @@ import {
 } from "@/app/actions/llamadas-ia";
 import type { LlamadaIA, EstadoLlamadaIA, ResultadoLlamadaIA } from "@/features/llamadas-ia/service";
 import type { PrioridadLlamada } from "@/features/llamadas-ia/sugerencias";
+import { SEGMENTOS, SEGMENTOS_LLAMABLES, segmentoDe, type SegmentoLlamada } from "@/features/llamadas-ia/segmentos";
 
 const ESTADOS: Record<EstadoLlamadaIA, { label: string; clase: string }> = {
   pendiente: { label: "Por aprobar", clase: "bg-carbon/5 text-carbon/70 border-carbon/15" },
@@ -28,6 +30,7 @@ const ESTADOS: Record<EstadoLlamadaIA, { label: string; clase: string }> = {
 
 const RESULTADOS: Record<ResultadoLlamadaIA, string> = {
   visita_agendada: "✅ Aceptó visita",
+  cotizar: "📝 Enviar cotización",
   interesado: "🔥 Interesado",
   transferido: "📞 Transferido a asesor",
   duda: "❓ Tiene dudas",
@@ -46,6 +49,25 @@ const PRIORIDADES: Record<PrioridadLlamada, { label: string; clase: string }> = 
 };
 
 type FiltroBandeja = "todas" | PrioridadLlamada | "descartar";
+type FiltroSegmento = "todos" | SegmentoLlamada;
+
+const COLOR_SEGMENTO: Record<SegmentoLlamada, string> = {
+  sin_respuesta: "bg-slate-50 text-slate-700 border-slate-200",
+  sin_cotizar: "bg-orange-50 text-orange-800 border-orange-200",
+  cotizado: "bg-emerald-50 text-emerald-800 border-emerald-200",
+  no_interesado: "bg-carbon/5 text-carbon/50 border-carbon/10",
+};
+
+/** Tipos de negocio que la fuente "prospectos sin cotización" puede traer. */
+const TIPOS_PROSPECTO: { valor: string; etiqueta: string }[] = [
+  { valor: "", etiqueta: "Todos los servicios" },
+  { valor: "construccion-impermeabilizacion", etiqueta: "Impermeabilización" },
+  { valor: "construccion-piso-estampado", etiqueta: "Piso estampado" },
+  { valor: "construccion-remodelacion", etiqueta: "Remodelación" },
+  { valor: "construccion-mantenimiento-cisternas", etiqueta: "Cisternas" },
+  { valor: "construccion-mantenimiento-calentadores", etiqueta: "Calentadores" },
+  { valor: "construccion", etiqueta: "Otros de construcción" },
+];
 type Ejecutar = (accion: () => Promise<{ ok: boolean; error?: string }>, exito: string) => void;
 
 const BTN =
@@ -102,8 +124,16 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
   const [seleccion, setSeleccion] = useState<string[]>([]);
   const [abierta, setAbierta] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<FiltroBandeja>("todas");
+  const [filtroSeg, setFiltroSeg] = useState<FiltroSegmento>("todos");
+  const [tipoProspecto, setTipoProspecto] = useState("");
   const [analizando, setAnalizando] = useState(false);
-  const [prueba, setPrueba] = useState({ telefono: "", nombre: "", servicio: "impermeabilización", colonia: "" });
+  const [prueba, setPrueba] = useState<{ telefono: string; nombre: string; servicio: string; colonia: string; segmento: SegmentoLlamada }>({
+    telefono: "",
+    nombre: "",
+    servicio: "impermeabilización",
+    colonia: "",
+    segmento: "cotizado",
+  });
 
   const configurado = config.vapiApiKey && config.vapiNumero;
   const hayEnCurso = inicial.some((l) => l.estado === "en_curso");
@@ -112,12 +142,13 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
     .filter((l) => l.estado === "pendiente" && !l.es_prueba)
     .sort((a, b) => (b.puntaje ?? -1) - (a.puntaje ?? -1));
   const sinAnalizar = sugeridas.filter((l) => !l.analizada_at).length;
+  const enSegmento = (l: LlamadaIA, f: FiltroSegmento) => f === "todos" || segmentoDe(l) === f;
   const enFiltro = (l: LlamadaIA, f: FiltroBandeja) => {
-    const descartable = !!l.sugerencia?.descartar;
+    const descartable = !!l.sugerencia?.descartar || l.segmento === "no_interesado";
     if (f === "descartar") return descartable;
     return !descartable && (f === "todas" || l.prioridad === f);
   };
-  const visibles = sugeridas.filter((l) => enFiltro(l, filtro));
+  const visibles = sugeridas.filter((l) => enFiltro(l, filtro) && enSegmento(l, filtroSeg));
   const agenda = inicial
     .filter((l) => l.estado === "aprobada" || l.estado === "en_curso")
     .sort((a, b) => Date.parse(a.proximo_intento ?? a.created_at) - Date.parse(b.proximo_intento ?? b.created_at));
@@ -218,6 +249,45 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
           >
             + Traer cotizaciones esperando visita
           </button>
+          <div className="flex items-center overflow-hidden rounded-lg border border-carbon/15 bg-white">
+            <select
+              aria-label="Servicio de los prospectos"
+              value={tipoProspecto}
+              onChange={(e) => setTipoProspecto(e.target.value)}
+              className="border-r border-carbon/10 bg-white px-2 py-1.5 text-xs text-verde-profundo outline-none"
+            >
+              {TIPOS_PROSPECTO.map((t) => (
+                <option key={t.valor} value={t.valor}>
+                  {t.etiqueta}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={pendiente}
+              onClick={() => {
+                setMensaje(null);
+                iniciar(async () => {
+                  const r = await generarListaProspectosIA(tipoProspecto || null);
+                  if (r.ok && r.agregadas) setAnalizando(true);
+                  setMensaje(
+                    r.ok
+                      ? {
+                          ok: true,
+                          texto: r.agregadas
+                            ? `Se agregaron ${r.agregadas} prospectos. La IA los está analizando y clasificando…`
+                            : "No hay prospectos nuevos sin cotización para ese servicio.",
+                        }
+                      : { ok: false, texto: r.error || "Error" },
+                  );
+                  router.refresh();
+                });
+              }}
+              className="px-3 py-1.5 text-xs font-semibold text-verde-profundo transition hover:bg-crema/60 disabled:opacity-40"
+            >
+              + Traer prospectos sin cotización
+            </button>
+          </div>
           {sinAnalizar > 0 && (
             <button
               type="button"
@@ -240,6 +310,27 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
 
         {sugeridas.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 border-b border-carbon/5 px-4 py-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-carbon/40">Segmento</span>
+            {(["todos", ...SEGMENTOS_LLAMABLES] as FiltroSegmento[]).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setFiltroSeg(f)}
+                title={f === "todos" ? undefined : `Objetivo: ${SEGMENTOS[f].objetivo}`}
+                className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold transition ${
+                  filtroSeg === f ? "border-sauce bg-sauce/10 text-verde-profundo" : "border-carbon/10 text-carbon/50 hover:text-verde-profundo"
+                }`}
+              >
+                {f === "todos" ? "Todos" : SEGMENTOS[f].etiqueta} (
+                {sugeridas.filter((l) => enFiltro(l, filtro) && enSegmento(l, f)).length})
+              </button>
+            ))}
+          </div>
+        )}
+
+        {sugeridas.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-carbon/5 px-4 py-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-carbon/40">Prioridad</span>
             {(["todas", "alta", "media", "baja", "descartar"] as FiltroBandeja[]).map((f) => (
               <button
                 key={f}
@@ -249,8 +340,8 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
                   filtro === f ? "border-sauce bg-sauce/10 text-verde-profundo" : "border-carbon/10 text-carbon/50 hover:text-verde-profundo"
                 }`}
               >
-                {f === "todas" ? "Todas" : f === "descartar" ? "No llamar" : PRIORIDADES[f].label} (
-                {sugeridas.filter((l) => enFiltro(l, f)).length})
+                {f === "todas" ? "Todas" : f === "descartar" ? "No interesado" : PRIORIDADES[f].label} (
+                {sugeridas.filter((l) => enFiltro(l, f) && enSegmento(l, filtroSeg)).length})
               </button>
             ))}
             <label className="ml-auto flex items-center gap-1.5 text-xs text-carbon/60">
@@ -375,6 +466,20 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
             <Campo label="Servicio" value={prueba.servicio} onChange={(v) => setPrueba({ ...prueba, servicio: v })} />
             <Campo label="Colonia" value={prueba.colonia} onChange={(v) => setPrueba({ ...prueba, colonia: v })} />
           </div>
+          <label className="mt-3 block max-w-xs">
+            <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">Segmento a probar</span>
+            <select
+              value={prueba.segmento}
+              onChange={(e) => setPrueba({ ...prueba, segmento: e.target.value as SegmentoLlamada })}
+              className="w-full rounded-lg border border-carbon/15 bg-white px-3 py-1.5 text-sm text-verde-profundo outline-none focus:border-sauce"
+            >
+              {SEGMENTOS_LLAMABLES.map((s) => (
+                <option key={s} value={s}>
+                  {SEGMENTOS[s].etiqueta}: {SEGMENTOS[s].objetivo}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <button
               type="submit"
@@ -444,6 +549,14 @@ function TarjetaSugerida({
           ) : (
             <span className="rounded-full border border-carbon/10 px-2 py-0.5 text-[11px] text-carbon/40">Sin analizar</span>
           )}
+          {ll.analizada_at && (
+            <span
+              title={`Objetivo: ${SEGMENTOS[segmentoDe(ll)].objetivo}`}
+              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${COLOR_SEGMENTO[segmentoDe(ll)]}`}
+            >
+              {SEGMENTOS[segmentoDe(ll)].etiqueta}
+            </span>
+          )}
           {sug?.editada && <span className="text-[11px] text-carbon/40">editada</span>}
         </div>
         <ClienteLinea ll={ll} />
@@ -452,6 +565,7 @@ function TarjetaSugerida({
         {sug?.razon && <p className="text-sm text-carbon/80">{sug.razon}</p>}
         {sug?.punto && <p className="text-xs text-carbon/50">Dónde se quedó: {sug.punto}</p>}
         {sug?.precio_dado && <p className="text-xs text-carbon/60">💲 Ya recibió precio: {sug.precio_dado}</p>}
+        {sug?.faltan && <p className="text-xs text-carbon/60">📋 Falta para cotizar: {sug.faltan}</p>}
 
         {editando ? (
           <div className="space-y-2 rounded-lg bg-crema/50 p-3">

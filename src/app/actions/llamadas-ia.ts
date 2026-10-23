@@ -6,11 +6,13 @@ import { usuarioActual, requireAdmin } from "@/lib/supabase/cliente-sesion";
 import {
   crearLlamadaPrueba,
   despacharLlamada,
+  generarListaProspectosSinCotizacion,
   generarListaReagendarVisitas,
   sincronizarConVapi,
   type LlamadaIA,
 } from "@/features/llamadas-ia/service";
 import { analizarPendientes, type SugerenciaLlamada } from "@/features/llamadas-ia/sugerencias";
+import type { SegmentoLlamada } from "@/features/llamadas-ia/segmentos";
 
 const RUTA = "/dashboard/llamadas/ia";
 
@@ -56,6 +58,7 @@ export async function probarLlamadaIA(datos: {
   nombre?: string;
   servicio?: string;
   colonia?: string;
+  segmento?: SegmentoLlamada;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin();
   const user = await usuarioActual();
@@ -197,6 +200,22 @@ export async function generarListaReagendarIA(): Promise<{ ok: boolean; agregada
   const user = await usuarioActual();
   try {
     const { agregadas } = await generarListaReagendarVisitas(user?.id ?? null);
+    if (agregadas) await analizarSugerenciasIA();
+    revalidatePath(RUTA);
+    return { ok: true, agregadas };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "No se pudo generar la lista." };
+  }
+}
+
+/** Trae a la bandeja prospectos de construcción con conversación y sin cotización. */
+export async function generarListaProspectosIA(
+  tipoNegocio?: string | null,
+): Promise<{ ok: boolean; agregadas?: number; error?: string }> {
+  await requireAdmin();
+  const user = await usuarioActual();
+  try {
+    const { agregadas } = await generarListaProspectosSinCotizacion(tipoNegocio, user?.id ?? null);
     if (agregadas) await analizarSugerenciasIA();
     revalidatePath(RUTA);
     return { ok: true, agregadas };
