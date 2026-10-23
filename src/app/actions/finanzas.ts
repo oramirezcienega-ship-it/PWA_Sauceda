@@ -1479,6 +1479,32 @@ export async function obtenerCuentasPendientes(businessUnitId?: string): Promise
 // ESTADO DE RESULTADOS (P&L BASE DEVENGADA)
 // ============================================================
 
+/**
+ * Resumen, estado de resultados, balance y flujo en una sola llamada. Las server actions
+ * invocadas desde el cliente se ejecutan una tras otra, así que pedirlas por separado
+ * sumaba sus tiempos; aquí corren en paralelo en el servidor.
+ */
+export async function obtenerReportesFinanzas(
+  fechaInicio: string,
+  fechaFin: string,
+  fechaCorte: string,
+  businessUnitId?: string
+): Promise<{
+  resumen: ResumenFinanciero;
+  estadoResultados: EstadoResultadosReporte;
+  balance: BalanceGeneralReporte;
+  flujo: FlujoEfectivoReporte;
+}> {
+  await requireAdministrador();
+  const [resumen, estadoResultados, balance, flujo] = await Promise.all([
+    obtenerResumenFinanciero(fechaInicio, fechaFin, undefined, undefined, businessUnitId),
+    obtenerEstadoResultados(fechaInicio, fechaFin, businessUnitId),
+    obtenerBalanceGeneral(fechaCorte, undefined, businessUnitId),
+    obtenerFlujoEfectivo(fechaInicio, fechaFin, businessUnitId),
+  ]);
+  return { resumen, estadoResultados, balance, flujo };
+}
+
 export async function obtenerEstadoResultados(
   fechaInicio: string,
   fechaFin: string,
