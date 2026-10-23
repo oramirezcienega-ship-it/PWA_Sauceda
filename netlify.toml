@@ -13,10 +13,6 @@
 [functions]
   external_node_modules = ["@opentelemetry/api"]
 
-# Llamadas IA: marca las aprobadas cuya hora ya llegó (lun–sáb 10–19 h, lo valida la función).
-[functions."despachar-llamadas-ia"]
-  schedule = "*/5 * * * *"
-
 
 [[headers]]
   for = "/*"

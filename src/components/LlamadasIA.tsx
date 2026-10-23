@@ -266,7 +266,7 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
               disabled={pendiente || seleccionVisible.length === 0}
               onClick={() => {
                 const ids = seleccionVisible;
-                ejecutar(() => aprobarLlamadasIA(ids), `${ids.length} programadas a su hora sugerida.`);
+                ejecutar(() => aprobarLlamadasIA(ids), `${ids.length} pasaron a la agenda con su hora sugerida.`);
                 setSeleccion([]);
               }}
               className="rounded-lg bg-sauce px-3 py-1.5 text-xs font-semibold text-white transition disabled:opacity-40"
@@ -303,7 +303,7 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
         <div className="flex items-center border-b border-carbon/10 px-4 py-3">
           <div className="mr-auto">
             <h2 className="text-sm font-semibold text-verde-profundo">Agenda de llamadas</h2>
-            <p className="text-xs text-carbon/50">Aprobadas: Sofía marca sola a su hora, de lunes a sábado de 10 a 19 h.</p>
+            <p className="text-xs text-carbon/50">Aprobadas, en orden de hora sugerida. Por ahora cada llamada se lanza a mano con “Llamar ahora” (lunes a sábado, 10 a 19 h).</p>
           </div>
           <button
             type="button"
@@ -509,7 +509,7 @@ function TarjetaSugerida({
         )}
       </div>
       <div className="flex shrink-0 flex-col gap-1">
-        <button type="button" className={BTN} disabled={ocupado} onClick={() => ejecutar(() => aprobarLlamadasIA([ll.id]), "Programada.")}>
+        <button type="button" className={BTN} disabled={ocupado} onClick={() => ejecutar(() => aprobarLlamadasIA([ll.id]), "Pasó a la agenda.")}>
           Aprobar
         </button>
         {sug && !editando && (
@@ -550,7 +550,7 @@ function FilaAgenda({ ll, ocupado, configurado, ejecutar }: { ll: LlamadaIA; ocu
     <div className="flex flex-wrap items-start gap-3 px-4 py-3">
       <div className="w-36 shrink-0 text-xs">
         <span className="block font-semibold text-verde-profundo">
-          {ll.proximo_intento ? horaLarga(ll.proximo_intento) : "En cuanto haya horario"}
+          {ll.proximo_intento ? horaLarga(ll.proximo_intento) : "Sin hora"}
         </span>
         <span className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold ${est.clase}`}>{est.label}</span>
       </div>

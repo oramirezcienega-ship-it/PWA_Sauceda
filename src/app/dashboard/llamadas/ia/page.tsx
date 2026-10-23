@@ -29,7 +29,7 @@ export default async function PaginaLlamadasIA() {
         <div className="mb-6">
           <h1 className="font-titular text-3xl font-semibold text-verde-profundo">Llamadas IA</h1>
           <p className="mt-1 text-sm text-carbon/60">
-            La IA sugiere a quién llamar, a qué hora y con qué abrir; tú apruebas y Sofía marca a esa hora por Vapi.
+            La IA sugiere a quién llamar, a qué hora y con qué abrir; tú apruebas y lanzas cada llamada; Sofía la hace por Vapi.
           </p>
         </div>
 

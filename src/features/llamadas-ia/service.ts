@@ -617,7 +617,7 @@ export async function sincronizarConVapi(
   return { ok: true };
 }
 
-/** Despacha las llamadas aprobadas cuyo intento ya toca (lo usa el cron). */
+/** Despacha las llamadas aprobadas cuyo intento ya toca (ruta /api/conmutador/campana; hoy no está programada). */
 export async function despacharPendientes(limite = 3): Promise<{ despachadas: number; errores: string[] }> {
   if (!enHorarioDeLlamadas()) return { despachadas: 0, errores: [] };
   const sb = supabaseServidor();
