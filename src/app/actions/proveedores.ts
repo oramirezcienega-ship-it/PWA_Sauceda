@@ -417,9 +417,23 @@ export async function actualizarDocumentoProveedor(
   if (datos.archivoNombre !== undefined) camposActualizar.archivo_nombre = datos.archivoNombre || null;
   if (datos.notas !== undefined) camposActualizar.notas = datos.notas.trim();
 
-  const { error } = await sb.from("documentos_proveedores").update(camposActualizar).eq("id", id);
+  const { data: doc, error } = await sb
+    .from("documentos_proveedores")
+    .update(camposActualizar)
+    .eq("id", id)
+    .select("orden_trabajo_id, cotizacion_id, origen, monto")
+    .single();
   if (error) {
     throw new Error(`Error al actualizar el documento: ${error.message}`);
+  }
+
+  // La remisión automática refleja el costo pactado de la OT: si se corrige su monto,
+  // la OT se actualiza igual para que no se vuelva a sobrescribir con el costo anterior.
+  if (camposActualizar.monto !== undefined && doc?.origen === "automatico" && doc.orden_trabajo_id) {
+    await sb
+      .from("ordenes_trabajo")
+      .update({ costo_proveedor: camposActualizar.monto, updated_at: new Date().toISOString() })
+      .eq("id", doc.orden_trabajo_id);
   }
 
   // Mantener al día su movimiento en Finanzas (si no lo sustituye una remisión)
@@ -433,6 +447,10 @@ export async function actualizarDocumentoProveedor(
       .eq("origen_modulo", "documento_proveedor")
       .eq("origen_id", id);
   }
+
+  // Si la obra ya tiene remisión de venta, su costo de proveedor se recalcula con el documento corregido
+  const { sincronizarFinanzasPorObra } = await import("@/app/actions/contabilidad-remisiones");
+  await sincronizarFinanzasPorObra(doc?.orden_trabajo_id || null, doc?.cotizacion_id || null);
 }
 
 /** Elimina un documento (factura/remisión) de proveedor. */
@@ -442,7 +460,7 @@ export async function eliminarDocumentoProveedor(id: string): Promise<void> {
 
   const { data: doc } = await sb
     .from("documentos_proveedores")
-    .select("archivo_url")
+    .select("archivo_url, orden_trabajo_id, cotizacion_id")
     .eq("id", id)
     .maybeSingle();
 
@@ -459,6 +477,9 @@ export async function eliminarDocumentoProveedor(id: string): Promise<void> {
   }
 
   await sb.from("transactions").delete().eq("origen_modulo", "documento_proveedor").eq("origen_id", id);
+
+  const { sincronizarFinanzasPorObra } = await import("@/app/actions/contabilidad-remisiones");
+  await sincronizarFinanzasPorObra(doc?.orden_trabajo_id || null, doc?.cotizacion_id || null);
 }
 
 /** Lista mínima de cotizaciones (órdenes de trabajo) para vincular un documento de proveedor. */
