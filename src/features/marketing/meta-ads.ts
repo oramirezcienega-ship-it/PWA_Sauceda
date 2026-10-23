@@ -8,8 +8,8 @@ import { subcuentaPorTexto, type SubcuentaMarketingBase } from "@/lib/subcuentas
  *   analytics_marketing  capa de métricas del Dashboard Inteligente (una fila por día)
  *   transactions         un movimiento por mes y subcuenta (origen 'meta_ads') en el P&L
  *
- * Corre sola cada día (netlify/functions/sincronizar-meta-ads.ts) y también desde
- * el botón "Sincronizar Historial de Publicidad".
+ * Corre sola cada día (tarea programada de Coolify → /api/marketing/cron-meta-ads)
+ * y también desde el botón "Sincronizar Historial de Publicidad".
  *
  * Variables de entorno:
  *   META_ADS_ACCESS_TOKEN  token de un usuario del sistema del Business Manager con
