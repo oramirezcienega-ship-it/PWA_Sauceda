@@ -9,6 +9,7 @@ import { actualizarProveedor, eliminarDocumentoProveedor } from "@/app/actions/p
 import { ModalRegistrarDocumentoProveedor } from "./ModalRegistrarDocumentoProveedor";
 import { OfertasProveedorProducto } from "./proveedores/OfertasProveedorProducto";
 import { CondicionesComercialesProveedor } from "./proveedores/CondicionesComercialesProveedor";
+import { ModalReporteVentasProveedor } from "./proveedores/ModalReporteVentasProveedor";
 
 interface DetalleProveedorProps {
   proveedorInicial: Proveedor;
@@ -24,6 +25,7 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
   const [modalAbierto, setModalAbierto] = useState(false);
   const [documentoEnEdicion, setDocumentoEnEdicion] = useState<DocumentoProveedor | null>(null);
   const [actualizando, setActualizando] = useState(false);
+  const [reporteAbierto, setReporteAbierto] = useState(false);
   const [tabActual, setTabActual] = useState<TabProveedor>(
     documentosIniciales.length > 0 ? "documentos" : "oferta"
   );
@@ -327,6 +329,14 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => setReporteAbierto(true)}
+            disabled={documentos.length === 0}
+            title={documentos.length === 0 ? "Aún no hay remisiones ni facturas para reportar" : "PDF con sus ventas, KPIs y gráficas"}
+            className="rounded-xl bg-dorado/90 hover:bg-dorado px-3.5 py-2.5 text-xs font-bold text-verde-profundo transition shadow-xs disabled:opacity-50"
+          >
+            📊 Reporte de ventas
+          </button>
           <button
             onClick={handleToggleActivo}
             disabled={actualizando}
@@ -913,6 +923,13 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
         proveedorId={proveedor.id}
         proveedorNombre={proveedor.nombre}
         documentoExistente={documentoEnEdicion}
+      />
+
+      <ModalReporteVentasProveedor
+        abierto={reporteAbierto}
+        onCerrar={() => setReporteAbierto(false)}
+        proveedorNombre={proveedor.nombre}
+        documentos={documentos}
       />
     </div>
   );
