@@ -240,7 +240,8 @@ CÓMO LLEVAR LA LLAMADA (en este orden):
    PRECIO: ${linea.reglaPrecio}
 4. DETECTAR INTENCIÓN con las SEÑALES DE COMPRA.
    - Sin intención clara: no ofrezcas visita. Usa la respuesta de OBJECIONES que corresponda y pregunta qué le haría falta para decidirse.
-   - Con intención clara, o si duda de sus medidas y le interesa: propón con suavidad: "${linea.propuestaVisita}"
+   - PRIMERO EL PRECIO: solo propón la visita si el cliente ya conoce su precio (de la cotización que recibió o porque se lo diste en esta llamada con la regla de PRECIO). Si aún no lo conoce, dáselo primero; si no tienes precio que dar, no ofrezcas visita: dile que un asesor le comparte su presupuesto.
+   - Con precio conocido e intención clara, o si duda de sus medidas y le interesa: propón con suavidad: "${linea.propuestaVisita}"
 5. SOLO SI ACEPTA la visita: primero pregunta qué día y horario le acomoda. Acepta cualquier horario de lunes a sábado entre 9 de la mañana y 6 de la tarde: NUNCA digas que el especialista no puede ni lo obligues a elegir entre opciones. Si no tiene preferencia, sugiérele dos de la lista de abajo. Repite el día y la hora que eligió y di que un asesor se lo confirma por WhatsApp.
 ${horarios ? `   Sugerencias (solo si no tiene preferencia):\n${horarios}` : "   Sin sugerencias cargadas: si no tiene preferencia, di que el asesor le propone fecha por WhatsApp."}
 6. Si pregunta algo que no está en DATOS OFICIALES ni en PREGUNTAS FRECUENTES (incluidos los TEMAS SIN RESPUESTA CONFIRMADA): no lo inventes; ${sinRespuesta}.

@@ -26,6 +26,11 @@ const PREGUNTAS_PISO: PreguntaFrecuente[] = [
   },
   ...PREGUNTAS_GENERALES,
   {
+    pregunta: "¿Depende del diseño o modelo el precio?",
+    respuesta:
+      "No, el diseño no cambia el precio; lo que lo define son las características del área y del suelo, por eso el especialista lo revisa en la visita.",
+  },
+  {
     pregunta: "¿Qué incluye?",
     respuesta:
       "Incluye material de alta resistencia, mano de obra especializada, el estampado con la textura que elija, el color y un sellado de alta durabilidad.",
@@ -127,7 +132,7 @@ async function precioPorM2(): Promise<number> {
 
 export const lineaPisoEstampado: LineaLlamada = {
   clave: "piso-estampado",
-  version: "piso-estampado-v3",
+  version: "piso-estampado-v4",
   tipos: ["construccion-piso-estampado"],
   reServicio: /estampad/i,
   contexto:
@@ -138,14 +143,14 @@ export const lineaPisoEstampado: LineaLlamada = {
     const precio = await precioPorM2();
     return `${
       precio
-        ? `- Concreto estampado: ${formatoPesosEnteros(precio)} por m² sin factura. No hay mínimo de metros: también se hacen áreas chicas.`
+        ? `- Concreto estampado: a partir de ${formatoPesosEnteros(precio)} por m² sin factura, como precio de referencia. El precio final depende de las características del área y del suelo (si es tierra, pasto o firme de concreto, niveles y accesos) y se define en la visita. El diseño no cambia el precio. No hay mínimo de metros: también se hacen áreas chicas.`
         : "- No tienes el precio cargado: si preguntan, el precio lo confirma un asesor."
     }
 - Catálogo de diseños en línea: ${CATALOGO_URL} (si lo quiere, dile que se lo compartimos por WhatsApp; no le dictes la dirección).`;
   },
   orientar:
     "pregunta para qué área es (cochera, patio, terraza…) y si ya tiene firme de concreto o es tierra. Si es cochera, confirma si la va a usar para autos (con 10 centímetros aguanta hasta dos vehículos).",
-  reglaPrecio: `da el precio por metro cuadrado. Si conoces sus metros, da el total aproximado (metros por precio, redondeado a cientos, "alrededor de"). Nunca le digas que su área es muy chica ni menciones mínimos. Sobre tierra o sobre concreto se puede colocar; si hay que quitar un piso o nivelar, aclara que eso se revisa y cotiza en la visita. Siempre di que el precio exacto se confirma en la visita.`,
+  reglaPrecio: `da el precio de referencia "a partir de" por metro cuadrado y, si conoces sus metros, el aproximado "desde unos" (metros por precio, redondeado a cientos). En la misma respuesta explica en una frase que el precio final depende de las características del área y del suelo, y pregunta cómo está su suelo (tierra, pasto o firme de concreto). Nunca des un total cerrado ni le digas que su área es muy chica o menciones mínimos.`,
   visita:
     "un especialista le lleva el muestrario físico de texturas y colores, mide el área, revisa la base y le deja el presupuesto exacto",
   propuestaVisita:
