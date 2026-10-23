@@ -6,6 +6,11 @@ import {
   listarFamiliasSeguridad,
   type FamiliaSeguridadResumen,
 } from "@/app/actions/comparativa-seguridad";
+import { COMPLEMENTOS_FAMILIA } from "@/lib/ia/catalogo-seguridad";
+
+const COMPLEMENTO_MOTIVO: Record<string, string> = Object.fromEntries(
+  Object.entries(COMPLEMENTOS_FAMILIA).map(([clave, c]) => [clave, c.motivo])
+);
 
 // Comparativa de Seguridad: una imagen con las opciones de una familia del catálogo
 // (videoporteros, cerraduras…) con foto y precio de venta. La misma imagen que envía Sofía.
@@ -30,6 +35,7 @@ export function ModalComparativaSeguridad({ abierto, onCerrar, nombreCliente, on
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [enviandoFotos, setEnviandoFotos] = useState<string | null>(null);
 
   useEffect(() => {
     if (!abierto) return;
@@ -102,7 +108,35 @@ export function ModalComparativaSeguridad({ abierto, onCerrar, nombreCliente, on
     }
   }
 
+  /** Envía al chat las fotos del producto que eligió el cliente (una imagen por foto). */
+  async function enviarFotos(p: FamiliaSeguridadResumen["productos"][number]) {
+    if (!onEnviarImagenDirecta) return;
+    setEnviandoFotos(p.id);
+    let enviadas = 0;
+    try {
+      for (let i = 0; i < p.fotos.length; i++) {
+        const foto = p.fotos[i];
+        const res = await fetch(foto.url);
+        if (!res.ok) continue;
+        const blob = await res.blob();
+        const ext = blob.type.includes("png") ? "png" : "jpg";
+        const file = new File([blob], `${p.id}-${i + 1}.${ext}`, { type: blob.type || "image/jpeg" });
+        const ok = await onEnviarImagenDirecta(file, `${p.nombre}${foto.titulo ? ` — ${foto.titulo}` : ""}`);
+        if (ok !== false) enviadas++;
+      }
+      setAviso(enviadas > 0 ? `${enviadas} foto(s) enviadas al chat` : "No se pudieron enviar las fotos");
+      setTimeout(() => setAviso(null), 2000);
+    } catch (e) {
+      console.error("Error al enviar las fotos del producto:", e);
+      alert("Hubo un detalle al enviar las fotos al chat.");
+    } finally {
+      setEnviandoFotos(null);
+    }
+  }
+
   const familia = familias.find((f) => f.clave === clave);
+  const claveComplemento = familia ? COMPLEMENTOS_FAMILIA[familia.clave]?.familia : undefined;
+  const complemento = familias.find((f) => f.clave === claveComplemento) || null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-fadeIn">
@@ -155,10 +189,42 @@ export function ModalComparativaSeguridad({ abierto, onCerrar, nombreCliente, on
                 </span>
               </button>
             ))}
-            {familia && familia.productos.some((p) => !p.conFoto) && (
-              <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mt-1">
-                Sin foto: {familia.productos.filter((p) => !p.conFoto).map((p) => p.nombre).join(", ")}. Súbela en Productos.
-              </p>
+            {familia && (
+              <div className="mt-2 border-t border-carbon/10 pt-2 space-y-1.5">
+                <p className="text-[10px] font-bold text-carbon/60 uppercase tracking-wide">Si ya eligió una opción</p>
+                {familia.productos.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg border border-carbon/10 px-2 py-1.5">
+                    <div className="min-w-0">
+                      <span className="block text-[11px] font-bold text-carbon truncate" title={p.nombre}>{p.nombre}</span>
+                      <span className="block text-[10px] text-carbon/60">{formatearDinero(p.precio)}</span>
+                    </div>
+                    {p.fotos.length > 0 ? (
+                      onEnviarImagenDirecta && (
+                        <button
+                          type="button"
+                          onClick={() => enviarFotos(p)}
+                          disabled={enviandoFotos !== null}
+                          title="Enviar al chat las fotos de este producto"
+                          className="shrink-0 px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-carbon cursor-pointer disabled:opacity-50"
+                        >
+                          {enviandoFotos === p.id ? "⏳" : `📷 ${p.fotos.length}`}
+                        </button>
+                      )
+                    ) : (
+                      <span className="shrink-0 text-[10px] text-amber-700">Sin foto</span>
+                    )}
+                  </div>
+                ))}
+                {complemento && (
+                  <button
+                    type="button"
+                    onClick={() => setClave(complemento.clave)}
+                    className="w-full text-left text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-200 rounded p-2 cursor-pointer hover:bg-emerald-100"
+                  >
+                    💡 Ofrécele también <b>{complemento.nombre}</b>, para {COMPLEMENTO_MOTIVO[familia.clave]}. Ver comparativa →
+                  </button>
+                )}
+              </div>
             )}
           </div>
 

@@ -8,7 +8,7 @@ import { generarImagenComparativaSeguridad } from "@/lib/ia/imagen-comparativa-s
 export interface FamiliaSeguridadResumen {
   clave: string;
   nombre: string;
-  productos: { id: string; nombre: string; precio: number; conFoto: boolean }[];
+  productos: { id: string; nombre: string; precio: number; fotos: { url: string; titulo: string }[] }[];
 }
 
 /** Familias de seguridad con productos activos y con precio de venta (para el cotizador del chat). */
@@ -18,7 +18,12 @@ export async function listarFamiliasSeguridad(): Promise<FamiliaSeguridadResumen
   return familias.map((f) => ({
     clave: f.clave,
     nombre: f.nombre,
-    productos: f.productos.slice(0, MAX_OPCIONES_COMPARATIVA).map((p) => ({ id: p.id, nombre: p.nombre, precio: p.precio, conFoto: p.fotos.length > 0 })),
+    productos: f.productos.slice(0, MAX_OPCIONES_COMPARATIVA).map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      precio: p.precio,
+      fotos: p.fotos.map((x) => ({ url: x.url, titulo: x.titulo || "" })),
+    })),
   }));
 }
 

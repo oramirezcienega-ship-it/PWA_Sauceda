@@ -86,9 +86,45 @@ export function buscarFamilia(familias: FamiliaSeguridad[], valor: unknown): Fam
   return familias.find((f) => f.clave === clave) || null;
 }
 
-/** Resumen de las familias para el prompt de Sofía (nombres y opciones, sin precios: los da la imagen). */
+/**
+ * Qué familia se le ofrece al cliente después de elegir una opción de otra (por clave).
+ * Ej. quien elige videoportero suele querer abrir la puerta desde el monitor.
+ */
+export const COMPLEMENTOS_FAMILIA: Record<string, { familia: string; motivo: string }> = {
+  "videoporteros-e-interfones": { familia: "cerraduras-electricas", motivo: "abrir la puerta o el portón desde el monitor o el interfón, sin salir" },
+  "cerraduras-electricas": { familia: "videoporteros-e-interfones", motivo: "ver o escuchar quién llama antes de abrirle desde adentro" },
+};
+
+/** Busca un producto de seguridad por su ID (ej. "CAT-010"). */
+export function buscarProducto(familias: FamiliaSeguridad[], id: unknown): ProductoSeguridad | null {
+  if (typeof id !== "string" || !id.trim()) return null;
+  const clave = id.trim().toUpperCase();
+  for (const f of familias) {
+    const p = f.productos.find((x) => x.id.toUpperCase() === clave);
+    if (p) return p;
+  }
+  return null;
+}
+
+/** Complemento de una familia, sólo si esa familia también tiene opciones con precio. */
+export function complementoDe(familias: FamiliaSeguridad[], claveFam: string): { familia: FamiliaSeguridad; motivo: string } | null {
+  const c = COMPLEMENTOS_FAMILIA[claveFam];
+  const familia = c ? familias.find((f) => f.clave === c.familia) : null;
+  return c && familia ? { familia, motivo: c.motivo } : null;
+}
+
+/** Resumen de las familias para el prompt de Sofía (IDs y nombres, sin precios: los da la imagen). */
 export function familiasParaPrompt(familias: FamiliaSeguridad[]): string {
   return familias
-    .map((f) => `  • "${f.clave}" — ${f.nombre}: ${f.productos.slice(0, MAX_OPCIONES_COMPARATIVA).map((p) => p.nombre).join(" / ")}`)
+    .map((f) => {
+      const comp = complementoDe(familias, f.clave);
+      return [
+        `  • "${f.clave}" — ${f.nombre}:`,
+        ...f.productos.slice(0, MAX_OPCIONES_COMPARATIVA).map((p) => `      ${p.id}: ${p.nombre}${p.fotos.length > 0 ? "" : " (sin fotos)"}`),
+        comp ? `      Complemento: "${comp.familia.clave}" (${comp.familia.nombre}), para ${comp.motivo}.` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
     .join("\n");
 }
