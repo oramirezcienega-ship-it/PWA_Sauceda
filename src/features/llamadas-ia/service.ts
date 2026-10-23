@@ -2,10 +2,11 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { registrarActividad } from "@/lib/actividades";
 import { normalizarTelefono } from "@/lib/telefono";
 import { obtenerAgenteDisponible, registrarInicioLlamada } from "@/features/conmutador/service";
-import { cargarProductosImper, ETIQUETA_PAQUETE, paqueteDeNombre } from "@/lib/ia/catalogo-imper";
-import { formatoPesosEnteros } from "@/lib/costo-inspeccion";
+import { ETIQUETA_PAQUETE, paqueteDeNombre } from "@/lib/ia/catalogo-imper";
 import { avisarAsesorDesdeIA } from "@/lib/ia/aviso-asesor";
-import { conocimientoParaPrompt } from "@/features/llamadas-ia/conocimiento";
+import { lineaDe } from "@/features/llamadas-ia/lineas";
+import type { LineaLlamada } from "@/features/llamadas-ia/lineas/tipos";
+import type { PrioridadLlamada, SugerenciaLlamada } from "@/features/llamadas-ia/sugerencias";
 
 /**
  * Llamadas IA salientes (Vapi + Twilio).
@@ -17,9 +18,10 @@ import { conocimientoParaPrompt } from "@/features/llamadas-ia/conocimiento";
  *   VAPI_API_KEY             llave privada de Vapi
  *   VAPI_PHONE_NUMBER_ID     número de Twilio importado en Vapi (usar uno distinto
  *                            al del conmutador: importarlo cambia su webhook de voz)
- *   VAPI_CAMPANA_MODELO      opcional, modelo de OpenAI (default gpt-4o-mini)
+ *   VAPI_CAMPANA_MODELO      opcional, modelo de OpenAI (default gpt-4o)
  *   VAPI_CAMPANA_VOZ_PROVEEDOR / VAPI_CAMPANA_VOZ_ID   opcional (default azure es-MX-DaliaNeural)
  *   CAMPANA_VISITAS_MAX_DIA  opcional, tope de visitas por día que Sofía puede agendar (default 4)
+ *   CAMPANA_LLAMADAS_MAX_DIA opcional, tope de llamadas reales que el despachador marca al día (default 40)
  */
 
 export type EstadoLlamadaIA = "pendiente" | "aprobada" | "en_curso" | "completada" | "fallida" | "cancelada";
@@ -47,8 +49,6 @@ export interface ContextoLlamadaIA {
   paquete?: string;
 }
 
-/** Versión del guion: se guarda con cada resultado para comparar versiones. */
-export const GUION_VERSION = "seguimiento-v4";
 
 export interface LlamadaIA {
   id: string;
@@ -72,6 +72,12 @@ export interface LlamadaIA {
   duracion_seg: number | null;
   costo_usd: number | null;
   error: string | null;
+  /** Bandeja de sugeridas (ver sugerencias.ts). */
+  prioridad: PrioridadLlamada | null;
+  puntaje: number | null;
+  hora_sugerida: string | null;
+  sugerencia: SugerenciaLlamada | null;
+  analizada_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -93,7 +99,7 @@ function e164(tel: string): string {
 }
 
 /** Partes de una fecha en hora de México. */
-function partesMX(d: Date): { fecha: string; hora: number; diaSemana: number } {
+export function partesMX(d: Date): { fecha: string; hora: number; diaSemana: number } {
   const f = new Intl.DateTimeFormat("en-CA", {
     timeZone: ZONA,
     year: "numeric",
@@ -173,101 +179,75 @@ const TIPO_POR_SERVICIO: Record<string, string> = {
   otro: "construccion",
 };
 
-/** Qué revisa el especialista en la visita, por línea (mismo texto que usa Sofía en WhatsApp). */
-const QUE_REVISA: Record<string, string> = {
-  "construccion-impermeabilizacion": "el estado de la losa, grietas, humedad, filtraciones y desagües, y confirma medidas",
-  "construccion-remodelacion": "el espacio, las medidas y lo que hace falta para el proyecto",
-  construccion: "el lugar y el origen real del problema",
-};
-
-interface ConocimientoLlamada {
-  esImper: boolean;
-  precios: string;
-  minimo: string;
-  queRevisa: string;
+/**
+ * Texto apto para voz: el modelo y la voz leen mal "$310", "m²" o "3.5" (en la
+ * primera prueba dijo "13" y "three point five").
+ */
+function paraVoz(texto: string): string {
+  return texto
+    .replace(/\$\s?(\d[\d,]*)/g, "$1 pesos")
+    .replace(/por m²/g, "por metro cuadrado")
+    .replace(/m²|m2\b/g, "metros cuadrados")
+    .replace(/\b3\.5\b/g, "tres punto cinco")
+    .replace(/\b4\.0\b/g, "cuatro punto cero")
+    .replace(/(\d+)–(\d+)/g, "$1 a $2");
 }
 
 /**
- * Datos oficiales que Sofía puede decir: precios por m², garantía y propuesta de
- * valor de cada opción del catálogo (Productos y Servicios). Lo que no esté aquí ni
- * en conocimiento.ts, Sofía no lo afirma.
+ * Base común del guion para todas las líneas: estilo, flujo (descubrir →
+ * orientar → resolver → intención → visita sin costo), candados y despedida.
+ * Lo propio de cada línea viene de su módulo en lineas/.
  */
-async function conocimientoLlamada(ll: LlamadaIA): Promise<ConocimientoLlamada> {
-  const sb = supabaseServidor();
-  const tipo =
-    ll.contexto.tipoNegocio ||
-    (/imper/i.test(ll.contexto.servicio || "") ? "construccion-impermeabilizacion" : "construccion");
-  const esImper = tipo === "construccion-impermeabilizacion";
-  const productos = esImper ? await cargarProductosImper(sb) : {};
-
-  const lineas: string[] = [];
-  const minimos: number[] = [];
-  for (const p of ["acrilico", "estandar", "premium"] as const) {
-    const prod = productos[p];
-    if (!prod || !prod.aptoParaIa || prod.precioM2 <= 0) continue;
-    // La acrílica dice 3 años en el catálogo y 2 en la comparativa y cotizaciones: no se afirma hasta confirmarla.
-    const garantia = p === "acrilico" ? undefined : prod.nombre.match(/garant[ií]a\s*(?:de\s*)?(\d+)\s*a[ñn]os?/i)?.[1];
-    const volumen = prod.preciosVolumen.length
-      ? `; desde ${prod.preciosVolumen.map((t) => `${t.desde} m² baja a ${formatoPesosEnteros(t.precio)}`).join(", ")}`
-      : "";
-    const valor = prod.descripcionValor.trim().split(/(?<=[.!?])\s/)[0];
-    lineas.push(
-      `${ETIQUETA_PAQUETE[p]}: ${formatoPesosEnteros(prod.precioM2)} por m² sin factura${garantia ? `, garantía ${garantia} años por escrito` : ""}${volumen}${valor ? `. ${valor}` : ""}`,
-    );
-    if (prod.minimoM2 > 0) minimos.push(prod.minimoM2);
-  }
-
-  return {
-    esImper,
-    precios: lineas.join("\n- "),
-    minimo: minimos.length ? `${Math.round(Math.min(...minimos))}–${Math.round(Math.max(...minimos))} m²` : "",
-    queRevisa: QUE_REVISA[tipo] ?? QUE_REVISA.construccion,
-  };
-}
-
-function promptReagendarVisita(
+function promptLlamada(
   ll: LlamadaIA,
+  linea: LineaLlamada,
+  datosLinea: string,
   espacios: { iso: string; texto: string }[],
   hayAsesor: boolean,
-  k: ConocimientoLlamada,
 ): string {
   const servicio = ll.contexto.servicio || "su proyecto";
   const horarios = espacios.map((e) => `- ${e.texto} (valor para fecha_visita: ${e.iso})`).join("\n");
+  const sug = ll.sugerencia;
+  const previo = sug?.gancho && !/^sin dato concreto/i.test(sug.gancho)
+    ? `
+LO QUE SABEMOS DE ESTE CLIENTE (úsalo para retomar en DESCUBRIR, con tus palabras; no lo leas tal cual):
+- ${sug.gancho}${sug.punto ? `
+- Dónde se quedó: ${sug.punto}` : ""}${sug.objecion ? `
+- Freno probable: ${sug.objecion}` : ""}
+`
+    : "";
   const sinRespuesta = hayAsesor
     ? "dile que eso se lo confirma un asesor y ofrece comunicarlo ahora; si acepta, usa la herramienta de transferencia"
     : "dile que eso se lo confirma un asesor hoy por WhatsApp";
-  const estimado = ll.contexto.monto
-    ? `alrededor de ${formatoPesosEnteros(ll.contexto.monto)} sin factura${ll.contexto.paquete ? ` con la opción ${ll.contexto.paquete}` : ""}${ll.contexto.metros ? ` para ${ll.contexto.metros} m²` : ""}`
-    : "";
 
-  return `Eres Sofía, asistente virtual de Sauceda, en una llamada telefónica. Español de México, cálida, natural y sin presión.
+  return paraVoz(`Eres Sofía, asistente virtual de Sauceda, en una llamada telefónica. Español de México, cálida, natural y sin presión.
 
-ESTILO (obligatorio): máximo 2 frases cortas por turno y una sola pregunta. Nada de listas ni explicaciones largas. Si te interrumpen, no repitas lo que ya dijiste. Escucha más de lo que hablas.
+ESTILO (obligatorio): máximo 2 frases cortas por turno y una sola pregunta. Nada de listas ni explicaciones largas. Si te interrumpen, no repitas lo que ya dijiste. Escucha más de lo que hablas. Escribe las cantidades como se dicen ("310 pesos por metro cuadrado", "alrededor de 12 mil 400 pesos"), nunca con signos ni abreviaturas, y todo en español.
 
-CONTEXTO: la mayoría de los clientes pidió precio por WhatsApp, recibió la comparativa y dejó de contestar. No es que no les interese: muchos se quedaron con dudas (cuál opción conviene, si incluye IVA, qué material es) o lo están platicando en casa. Tu trabajo es retomar esa conversación, resolver dudas y saber en qué punto está. NO es una llamada para cerrar ni para agendar a la fuerza.
+CONTEXTO: ${linea.contexto} Tu trabajo es retomar esa conversación, resolver dudas y saber en qué punto está. NO es una llamada para cerrar ni para agendar a la fuerza.
 
 DATOS OFICIALES (lo ÚNICO que puedes afirmar):
-- Cliente: ${ll.nombre || "sin nombre"}. Pidió cotización de ${servicio}${ll.contexto.colonia ? ` en ${ll.contexto.colonia}` : ""}.
-${estimado ? `- Su estimado: ${estimado}. Es un estimado con las medidas que nos dio.\n` : ""}${
-    k.precios
-      ? `- Opciones (catálogo):\n- ${k.precios}${k.minimo ? `\n- Para superficies pequeñas hay un mínimo de cobro de ${k.minimo}.` : ""}\n`
-      : "- No tienes precios de este servicio: si preguntan, el precio lo confirma un asesor.\n"
-  }- Visita técnica (SIN COSTO): un especialista revisa ${k.queRevisa}, y deja el precio final.
+- Cliente: ${ll.nombre || "sin nombre"}. Pidió información de ${servicio}${ll.contexto.colonia ? ` en ${ll.contexto.colonia}` : ""}${ll.contexto.metros ? `, unos ${ll.contexto.metros} m²` : ""}.
+${datosLinea}
+- Visita (SIN COSTO): ${linea.visita}.
+${previo}
+${linea.conocimiento()}
 
-${k.esImper ? `${conocimientoParaPrompt()}\n\n` : ""}CÓMO LLEVAR LA LLAMADA (en este orden):
-1. DESCUBRIR: pregunta si pudo revisar la cotización y qué le pareció. Deja que hable.
-2. ORIENTAR: si no ha elegido opción, pregunta cómo está su azotea (¿ya tiene goteras o es preventivo?) y recomienda UNA opción en una frase según su respuesta.
+CÓMO LLEVAR LA LLAMADA (en este orden):
+1. DESCUBRIR: pregunta qué le pareció o en qué punto está. Deja que hable.
+2. ORIENTAR: ${linea.orientar}
 3. RESOLVER: responde dudas con DATOS OFICIALES y PREGUNTAS FRECUENTES. Los precios son sin factura; si necesita factura se agrega el IVA.
+   PRECIO: ${linea.reglaPrecio}
 4. DETECTAR INTENCIÓN con las SEÑALES DE COMPRA.
    - Sin intención clara: no ofrezcas visita. Usa la respuesta de OBJECIONES que corresponda y pregunta qué le haría falta para decidirse.
-   - Con intención clara, o si duda de sus medidas y le interesa: propón con suavidad: "Si le parece, el siguiente paso es que un especialista pase a revisar y confirmar medidas, sin costo, para dejarle el precio final. ¿Le gustaría?"
-5. SOLO SI ACEPTA la visita: ofrece dos horarios de esta lista. Si elige uno, repítelo y di que un asesor le confirma por WhatsApp. Si ninguno le queda, pregunta qué día y hora prefiere y di que el asesor se lo confirma.
-${horarios ? `   Horarios disponibles:\n${horarios}` : "   No hay horarios cargados: di que un asesor le propone fecha por WhatsApp."}
+   - Con intención clara, o si duda de sus medidas y le interesa: propón con suavidad: "${linea.propuestaVisita}"
+5. SOLO SI ACEPTA la visita: primero pregunta qué día y horario le acomoda. Acepta cualquier horario de lunes a sábado entre 9 de la mañana y 6 de la tarde: NUNCA digas que el especialista no puede ni lo obligues a elegir entre opciones. Si no tiene preferencia, sugiérele dos de la lista de abajo. Repite el día y la hora que eligió y di que un asesor se lo confirma por WhatsApp.
+${horarios ? `   Sugerencias (solo si no tiene preferencia):\n${horarios}` : "   Sin sugerencias cargadas: si no tiene preferencia, di que el asesor le propone fecha por WhatsApp."}
 6. Si pregunta algo que no está en DATOS OFICIALES ni en PREGUNTAS FRECUENTES (incluidos los TEMAS SIN RESPUESTA CONFIRMADA): no lo inventes; ${sinRespuesta}.
 7. Si se molesta o pide hablar con una persona: ${hayAsesor ? "transfiérelo a un asesor" : "dile que un asesor le llama hoy"}.
 8. "Llámame después" o lo va a platicar: pregunta qué día le marcamos y despídete. "No me vuelvan a llamar": discúlpate, confirma que no se le llamará más y cuelga.
 9. Si contesta un buzón de voz, una grabación o un menú automático: cuelga de inmediato sin decir nada.
-10. Cierra con la herramienta para colgar. La llamada no debe pasar de 2 minutos.`;
+10. DESPEDIDA: cuando ya quedó claro el siguiente paso, despídete UNA sola vez con "Gracias, que tenga buen día" y usa de inmediato la herramienta para colgar. No respondas a más despedidas. La llamada no debe pasar de 2 minutos.`);
 }
 
 const ESQUEMA_RESULTADO = {
@@ -318,14 +298,14 @@ const ESQUEMA_RESULTADO = {
   required: ["resultado"],
 };
 
-function asistenteReagendarVisita(
+function asistenteLlamada(
   ll: LlamadaIA,
+  linea: LineaLlamada,
+  datosLinea: string,
   espacios: { iso: string; texto: string }[],
   asesorTel: string | null,
-  k: ConocimientoLlamada,
 ) {
   const nombre = (ll.nombre || "").split(" ")[0];
-  const servicio = ll.contexto.servicio || "su proyecto";
   const tools: Record<string, unknown>[] = [{ type: "endCall" }];
   if (asesorTel) {
     tools.push({
@@ -342,14 +322,15 @@ function asistenteReagendarVisita(
   }
 
   return {
-    name: "Sofia - Seguimiento de cotizacion",
-    firstMessage: `Hola${nombre ? ` ${nombre}` : ""}, le habla Sofía, asistente virtual de Sauceda; esta llamada se graba. Le llamo por la cotización de ${servicio}${ll.contexto.metros ? ` para sus ${ll.contexto.metros} metros` : ""} que le enviamos por WhatsApp, ¿pudo revisarla?`,
+    name: `Sofia - ${linea.version}`,
+    firstMessage: paraVoz(linea.apertura(ll.contexto, nombre)),
     model: {
       provider: "openai",
-      model: process.env.VAPI_CAMPANA_MODELO || "gpt-4o-mini",
+      // gpt-4o-mini dijo mal un precio en la primera prueba; gpt-4o cuesta ~2 centavos más por llamada.
+      model: process.env.VAPI_CAMPANA_MODELO || "gpt-4o",
       temperature: 0.3,
       maxTokens: 150,
-      messages: [{ role: "system", content: promptReagendarVisita(ll, espacios, !!asesorTel, k) }],
+      messages: [{ role: "system", content: promptLlamada(ll, linea, datosLinea, espacios, !!asesorTel) }],
       tools,
     },
     voice: {
@@ -361,13 +342,20 @@ function asistenteReagendarVisita(
     maxDurationSeconds: 180,
     silenceTimeoutSeconds: 10,
     voicemailDetection: { provider: "vapi" },
+    // Al decir la despedida se cuelga solo (evita el "hasta luego… adiós…").
+    endCallPhrases: ["que tenga buen día", "que tenga un buen día"],
+    // Responder antes: en la primera prueba cada turno tardaba 3–4 s.
+    startSpeakingPlan: {
+      waitSeconds: 0.3,
+      transcriptionEndpointingPlan: { onPunctuationSeconds: 0.1, onNoPunctuationSeconds: 0.9, onNumberSeconds: 0.6 },
+    },
     analysisPlan: {
       summaryPlan: { enabled: true },
       structuredDataPlan: { enabled: true, schema: ESQUEMA_RESULTADO },
     },
     server: { url: `${baseUrl()}/api/conmutador/webhook-campana` },
     serverMessages: ["end-of-call-report"],
-    metadata: { llamadaCampanaId: ll.id, esPrueba: ll.es_prueba, guion: GUION_VERSION },
+    metadata: { llamadaCampanaId: ll.id, esPrueba: ll.es_prueba, guion: linea.version },
   };
 }
 
@@ -426,10 +414,11 @@ export async function despacharLlamada(id: string): Promise<{ ok: boolean; error
   const numero = e164(ll.telefono);
   if (!numero) return { ok: false, error: "Teléfono no válido." };
 
-  const [espacios, agente, conocimiento] = await Promise.all([
+  const linea = lineaDe(ll.contexto);
+  const [espacios, agente, datosLinea] = await Promise.all([
     espaciosDeVisita(),
     obtenerAgenteDisponible(),
-    conocimientoLlamada(ll),
+    linea.datosOficiales(ll.contexto),
   ]);
   const asesorTel = agente?.telefono_desvio ? e164(agente.telefono_desvio) || null : null;
 
@@ -441,7 +430,7 @@ export async function despacharLlamada(id: string): Promise<{ ok: boolean; error
       body: JSON.stringify({
         phoneNumberId,
         customer: { number: numero, ...(ll.nombre ? { name: ll.nombre.slice(0, 40) } : {}) },
-        assistant: asistenteReagendarVisita(ll, espacios, asesorTel, conocimiento),
+        assistant: asistenteLlamada(ll, linea, datosLinea, espacios, asesorTel),
       }),
     });
     await actualizar(id, { vapi_call_id: call.id });
@@ -481,20 +470,30 @@ function siguienteIntento(horas: number): string {
  * visita en la cotización, lista de no llamar, actividad del prospecto e historial
  * del conmutador. Idempotente: si ya se aplicó, no repite efectos.
  */
-export async function sincronizarConVapi(vapiCallId: string): Promise<{ ok: boolean; error?: string }> {
+export async function sincronizarConVapi(
+  vapiCallId: string,
+  opciones: { esperarFin?: boolean } = {},
+): Promise<{ ok: boolean; error?: string }> {
   const sb = supabaseServidor();
   const { data } = await sb.from("llamadas_campana").select("*").eq("vapi_call_id", vapiCallId).maybeSingle();
   const ll = data as LlamadaIA | null;
   if (!ll) return { ok: false, error: "La llamada no pertenece a una campaña." };
   if (ll.estado !== "en_curso") return { ok: true };
 
-  let call: LlamadaVapi;
-  try {
-    call = await vapi<LlamadaVapi>(`/call/${encodeURIComponent(vapiCallId)}`);
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "No se pudo consultar Vapi." };
+  // El aviso de fin de llamada puede llegar antes de que Vapi la marque como
+  // terminada: en ese caso se reintenta unos segundos.
+  let call: LlamadaVapi | null = null;
+  const intentos = opciones.esperarFin ? 6 : 1;
+  for (let i = 0; i < intentos; i++) {
+    try {
+      call = await vapi<LlamadaVapi>(`/call/${encodeURIComponent(vapiCallId)}`);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "No se pudo consultar Vapi." };
+    }
+    if (call.status === "ended") break;
+    if (i < intentos - 1) await new Promise((r) => setTimeout(r, 2500));
   }
-  if (call.status !== "ended") return { ok: true };
+  if (!call || call.status !== "ended") return { ok: true };
 
   const datos = call.analysis?.structuredData ?? {};
   const motivo = call.endedReason || "";
@@ -541,7 +540,7 @@ export async function sincronizarConVapi(vapiCallId: string): Promise<{ ok: bool
     grabacion_url: grabacion || null,
     duracion_seg: duracion,
     costo_usd: typeof call.cost === "number" ? call.cost : null,
-    datos: { ...datos, endedReason: motivo, guion: GUION_VERSION },
+    datos: { ...datos, endedReason: motivo, guion: lineaDe(ll.contexto).version },
     error: resultado === "error" ? motivo || "Error en la llamada" : null,
   });
 
@@ -617,13 +616,26 @@ export async function sincronizarConVapi(vapiCallId: string): Promise<{ ok: bool
 export async function despacharPendientes(limite = 3): Promise<{ despachadas: number; errores: string[] }> {
   if (!enHorarioDeLlamadas()) return { despachadas: 0, errores: [] };
   const sb = supabaseServidor();
+
+  // Candado de costo: tope diario de llamadas reales.
+  const tope = Number(process.env.CAMPANA_LLAMADAS_MAX_DIA) || 40;
+  const inicioDia = new Date(`${partesMX(new Date()).fecha}T00:00:00${OFFSET_MX}`).toISOString();
+  const { count } = await sb
+    .from("llamadas_campana")
+    .select("id", { count: "exact", head: true })
+    .eq("es_prueba", false)
+    .not("vapi_call_id", "is", null)
+    .gte("updated_at", inicioDia);
+  const disponibles = Math.min(limite, tope - (count ?? 0));
+  if (disponibles <= 0) return { despachadas: 0, errores: [`Tope diario de ${tope} llamadas alcanzado.`] };
+
   const { data } = await sb
     .from("llamadas_campana")
     .select("id")
     .eq("estado", "aprobada")
     .or(`proximo_intento.is.null,proximo_intento.lte.${new Date().toISOString()}`)
-    .order("created_at", { ascending: true })
-    .limit(limite);
+    .order("proximo_intento", { ascending: true, nullsFirst: true })
+    .limit(disponibles);
 
   let despachadas = 0;
   const errores: string[] = [];

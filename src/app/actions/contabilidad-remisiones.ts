@@ -89,7 +89,8 @@ export async function sincronizarFinanzasRemision(
       if (errOt) throw new Error(`Orden de trabajo: ${errOt.message}`);
       ot = data;
     }
-    const costoProveedorCapturado = Number(rem.costo_proveedor || ot?.costo_proveedor || 0);
+    const costoProveedorRemision = Number(rem.costo_proveedor || 0);
+    const costoProveedorPactado = Number(ot?.costo_proveedor || 0);
 
     let cot: any = null;
     if (rem.cotizacion_id) {
@@ -315,12 +316,15 @@ export async function sincronizarFinanzasRemision(
 
     // Costo de proveedor: la remisión sustituye a los documentos de proveedor de la misma obra.
     const docsObra = await documentosProveedorDeObra(sb, rem.orden_trabajo_id, rem.cotizacion_id);
-    // Si la remisión no trae costo de proveedor capturado, se usa lo que suman
-    // los documentos del proveedor de la obra para no perder ese costo.
+    // Prioridad: el costo capturado en la remisión, luego lo que suman las facturas/remisiones
+    // reales del proveedor de la obra y, al final, el costo pactado en la OT.
+    const costoDocumentos = r2(docsObra.reduce((acc, d) => acc + Number(d.monto || 0), 0));
     const costoProveedor =
-      costoProveedorCapturado > 0
-        ? costoProveedorCapturado
-        : r2(docsObra.reduce((acc, d) => acc + Number(d.monto || 0), 0));
+      costoProveedorRemision > 0
+        ? costoProveedorRemision
+        : costoDocumentos > 0
+        ? costoDocumentos
+        : costoProveedorPactado;
     let proveedorLiquidado = false;
     let fechaPagoProveedor: string | null = null;
     if (docsObra.length > 0) {
@@ -645,6 +649,26 @@ export async function sincronizarFinanzasPorOrdenTrabajo(ordenTrabajoId: string)
     }
   } catch (err: any) {
     console.warn("Aviso al sincronizar Finanzas por orden de trabajo:", err?.message);
+  }
+}
+
+/** Sincroniza las remisiones de una obra (OT o cotización), p. ej. tras editar un documento del proveedor. */
+export async function sincronizarFinanzasPorObra(
+  ordenTrabajoId: string | null,
+  cotizacionId: string | null
+): Promise<void> {
+  const filtros: string[] = [];
+  if (ordenTrabajoId) filtros.push(`orden_trabajo_id.eq.${ordenTrabajoId}`);
+  if (cotizacionId) filtros.push(`cotizacion_id.eq.${cotizacionId}`);
+  if (filtros.length === 0) return;
+  try {
+    const sb = supabaseServidor();
+    const { data } = await sb.from("remisiones_facturas").select("id").or(filtros.join(","));
+    for (const r of data || []) {
+      await sincronizarFinanzasRemision(r.id);
+    }
+  } catch (err: any) {
+    console.warn("Aviso al sincronizar Finanzas por obra:", err?.message);
   }
 }
 

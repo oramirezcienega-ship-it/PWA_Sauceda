@@ -1,33 +1,29 @@
-/**
- * Base de conocimiento de las llamadas IA de impermeabilización.
- *
- * Sale del análisis de ~2,000 mensajes de WhatsApp de 168 leads de
- * impermeabilización (oct 2026): lo que de verdad preguntan, cómo objetan y qué
- * dijeron los que sí contrataron. Es la pieza que el agente de calidad irá
- * ajustando: cada cambio se aprueba y sube la versión del guion.
- *
- * Regla: aquí solo va lo confirmado. Lo que no esté, Sofía no lo afirma y lo
- * pasa al asesor (queda en `pregunta_sin_respuesta` para completar esta base).
- */
+import { supabaseServidor } from "@/lib/supabase/server";
+import { cargarProductosImper, ETIQUETA_PAQUETE } from "@/lib/ia/catalogo-imper";
+import { formatoPesosEnteros } from "@/lib/costo-inspeccion";
+import {
+  conocimientoParaPrompt,
+  preguntasParaPrompt,
+  PREGUNTAS_GENERALES,
+  type LineaLlamada,
+  type Objecion,
+  type PreguntaFrecuente,
+} from "@/features/llamadas-ia/lineas/tipos";
 
-export interface PreguntaFrecuente {
-  /** Cómo lo preguntan los clientes (ejemplos reales). */
-  pregunta: string;
-  /** Respuesta de 1–2 frases para teléfono. */
-  respuesta: string;
-}
+/**
+ * Impermeabilización. Sale del análisis de ~2,000 mensajes de WhatsApp de 168
+ * leads (oct 2026): lo que de verdad preguntan, cómo objetan y qué dijeron los
+ * que sí contrataron. Aquí solo va lo confirmado; lo demás se pasa al asesor.
+ * Sofía en WhatsApp usa las mismas preguntas frecuentes (preguntasImperParaPrompt).
+ */
 
 export const PREGUNTAS_IMPER: PreguntaFrecuente[] = [
   {
     pregunta: "¿Cuál es la diferencia entre las opciones? / ¿Cuál me recomiendas? / Explícame cada una",
     respuesta:
-      "Acrílica: la más económica, es líquida, con garantía por escrito. Estándar 3.5: la más solicitada, rollo con gravilla, 5 años, para azoteas en buen estado. Premium 4.0 poliéster: rollo con gravilla, 10 años, la de mayor durabilidad. Para recomendar: azotea en buen estado, la estándar; si ya tiene filtraciones, la han reparado antes o quiere olvidarse por más tiempo, la Premium.",
+      "Acrílica: la más económica, es líquida, garantía de 2 años. Estándar 3.5: la más solicitada, rollo con gravilla, 5 años, para azoteas en buen estado. Premium 4.0 poliéster: rollo con gravilla, 10 años, la de mayor durabilidad. Para recomendar: azotea en buen estado, la estándar; si ya tiene filtraciones, la han reparado antes o quiere olvidarse por más tiempo, la Premium.",
   },
-  {
-    pregunta: "¿El precio incluye IVA? / Con IVA cuánto sería / Si no necesito factura…",
-    respuesta:
-      "Los precios son sin factura; si necesita factura, se agrega el IVA. El monto exacto con factura se lo confirma el asesor.",
-  },
+  ...PREGUNTAS_GENERALES,
   {
     pregunta: "¿Es carpeta, tapete, rollo o líquido? / ¿Qué es la gravilla?",
     respuesta:
@@ -49,17 +45,11 @@ export const PREGUNTAS_IMPER: PreguntaFrecuente[] = [
   },
   {
     pregunta: "¿Tiene garantía? / ¿Me garantizan que se acaba la gotera?",
-    respuesta: "Sí, la garantía es por escrito: 5 años la estándar y 10 años la Premium; la de la acrílica se la confirma el asesor.",
-  },
-  {
-    pregunta: "¿Aceptan tarjeta? / ¿Hay meses sin intereses?",
-    respuesta:
-      "Sí aceptamos tarjeta, además de efectivo y transferencia. No manejamos meses sin intereses; con Mercado Pago se puede pagar a meses con intereses.",
+    respuesta: "Sí, la garantía es por escrito: 2, 5 o 10 años según la opción.",
   },
   {
     pregunta: "¿Quitan la carpeta o membrana que ya tengo?",
-    respuesta:
-      "Sí, nosotros la retiramos; tiene un costo adicional pequeño que el especialista confirma en la visita.",
+    respuesta: "Sí, nosotros la retiramos; tiene un costo adicional pequeño que el especialista confirma en la visita.",
   },
   {
     pregunta: "¿Cuánto tardan? / ¿En un día lo ponen?",
@@ -67,8 +57,7 @@ export const PREGUNTAS_IMPER: PreguntaFrecuente[] = [
   },
   {
     pregunta: "¿Se puede sobre lámina? / ¿Encima del piso? / Tengo paneles solares",
-    respuesta:
-      "Se aplica sobre losa o piso, no sobre lámina. Si tiene paneles solares, nosotros los podemos mover para trabajar.",
+    respuesta: "Se aplica sobre losa o piso, no sobre lámina. Si tiene paneles solares, nosotros los podemos mover para trabajar.",
   },
   {
     pregunta: "¿Pueden hacerlo solo en una parte de la azotea?",
@@ -97,18 +86,13 @@ export const PREGUNTAS_IMPER: PreguntaFrecuente[] = [
 ];
 
 /** Preguntas reales que aún no tienen respuesta confirmada: Sofía las pasa al asesor. */
-export const PENDIENTES_DE_CONFIRMAR = [
+export const PENDIENTES_IMPER = [
   "Marca de la opción acrílica",
   "Monto exacto con factura",
   "Costo de retirar la carpeta, de mover paneles o de reparar humedades interiores",
   "Si llegamos a una ciudad específica fuera de León",
   "Descuentos",
 ];
-
-export interface Objecion {
-  cuando: string;
-  respuesta: string;
-}
 
 export const OBJECIONES_IMPER: Objecion[] = [
   {
@@ -143,7 +127,7 @@ export const OBJECIONES_IMPER: Objecion[] = [
 ];
 
 /** Frases de clientes que sí avanzaron: señales de compra para detectar intención. */
-export const SENALES_COMPRA = [
+export const SENALES_IMPER = [
   "elige una opción (\"la de 10 años\", \"la estándar\", \"la tercera\")",
   "pregunta cuándo lo pueden aplicar o cuánto tardan",
   "dice que le urge o que ya tiene goteras dentro de la casa",
@@ -152,27 +136,54 @@ export const SENALES_COMPRA = [
   "da su dirección o pide que vayan a medir",
 ];
 
-/**
- * Preguntas frecuentes y temas pendientes: la misma base para la llamada y para
- * Sofía en WhatsApp, para que ambos canales respondan igual.
- */
+/** Preguntas frecuentes de impermeabilización para Sofía en WhatsApp (misma base que la llamada). */
 export function preguntasImperParaPrompt(): string {
-  const faq = PREGUNTAS_IMPER.map((p) => `- ${p.pregunta} → ${p.respuesta}`).join("\n");
-  return `PREGUNTAS FRECUENTES (respuestas confirmadas):
-${faq}
-
-TEMAS SIN RESPUESTA CONFIRMADA (no los respondas; pásalos al asesor):
-${PENDIENTES_DE_CONFIRMAR.map((p) => `- ${p}`).join("\n")}`;
+  return preguntasParaPrompt(PREGUNTAS_IMPER, PENDIENTES_IMPER);
 }
 
-/** Bloque para el prompt de Sofía en llamada. */
-export function conocimientoParaPrompt(): string {
-  const obj = OBJECIONES_IMPER.map((o) => `- ${o.cuando} → ${o.respuesta}`).join("\n");
-  return `${preguntasImperParaPrompt()}
-
-OBJECIONES REALES Y CÓMO RESPONDER:
-${obj}
-
-SEÑALES DE COMPRA (cuentan como intención clara):
-${SENALES_COMPRA.map((s) => `- ${s}`).join("\n")}`;
-}
+export const lineaImpermeabilizacion: LineaLlamada = {
+  clave: "impermeabilizacion",
+  version: "impermeabilizacion-v5",
+  tipos: ["construccion-impermeabilizacion"],
+  reServicio: /imper/i,
+  contexto:
+    "la mayoría de los clientes pidió precio por WhatsApp, recibió la comparativa y dejó de contestar. No es que no les interese: muchos se quedaron con dudas (cuál opción conviene, si incluye IVA, qué material es) o lo están platicando en casa.",
+  apertura: (ctx, nombre) =>
+    `Hola${nombre ? ` ${nombre}` : ""}, le habla Sofía, asistente virtual de Sauceda; esta llamada se graba. Le llamo por la cotización de impermeabilización${ctx.metros ? ` para sus ${ctx.metros} metros` : ""} que le enviamos por WhatsApp, ¿pudo revisarla?`,
+  async datosOficiales(ctx) {
+    const productos = await cargarProductosImper(supabaseServidor());
+    const lineas: string[] = [];
+    const minimos: number[] = [];
+    for (const p of ["acrilico", "estandar", "premium"] as const) {
+      const prod = productos[p];
+      if (!prod || !prod.aptoParaIa || prod.precioM2 <= 0) continue;
+      const garantia = prod.nombre.match(/garant[ií]a\s*(?:de\s*)?(\d+)\s*a[ñn]os?/i)?.[1];
+      const volumen = prod.preciosVolumen.length
+        ? `; desde ${prod.preciosVolumen.map((t) => `${t.desde} m² baja a ${formatoPesosEnteros(t.precio)}`).join(", ")}`
+        : "";
+      const valor = prod.descripcionValor.trim().split(/(?<=[.!?])\s/)[0];
+      lineas.push(
+        `${ETIQUETA_PAQUETE[p]}: ${formatoPesosEnteros(prod.precioM2)} por m² sin factura${garantia ? `, garantía ${garantia} años por escrito` : ""}${volumen}${valor ? `. ${valor}` : ""}`,
+      );
+      if (prod.minimoM2 > 0) minimos.push(prod.minimoM2);
+    }
+    const estimado = ctx.monto
+      ? `- Su estimado: alrededor de ${formatoPesosEnteros(ctx.monto)} sin factura${ctx.paquete ? ` con la opción ${ctx.paquete}` : ""}${ctx.metros ? ` para ${ctx.metros} m²` : ""}. Es un estimado con las medidas que nos dio.\n`
+      : "";
+    const minimo = minimos.length
+      ? `\n- Para superficies pequeñas hay un mínimo de cobro de ${Math.round(Math.min(...minimos))}–${Math.round(Math.max(...minimos))} m².`
+      : "";
+    return lineas.length
+      ? `${estimado}- Opciones (catálogo):\n- ${lineas.join("\n- ")}${minimo}`
+      : `${estimado}- No tienes precios cargados: si preguntan, el precio lo confirma un asesor.`;
+  },
+  orientar:
+    "si no ha elegido opción, pregunta cómo está su azotea (¿ya tiene goteras o es preventivo?) y recomienda UNA opción en una frase según su respuesta.",
+  reglaPrecio:
+    "si pregunta cuánto cuesta y conoces sus metros, da el total aproximado de la opción de la que hablan: metros por precio por metro cuadrado (si son menos del mínimo de cobro, usa el mínimo), redondeado a cientos y diciendo \"alrededor de\". Si no conoces sus metros, da el precio por metro cuadrado y pregunta cuántos metros tiene su azotea para darle el aproximado.",
+  visita:
+    "un especialista revisa el estado de la losa, grietas, humedad, filtraciones y desagües, confirma medidas y deja el precio final",
+  propuestaVisita:
+    "Si le parece, el siguiente paso es que un especialista pase a revisar y confirmar medidas, sin costo, para dejarle el precio final. ¿Le gustaría?",
+  conocimiento: () => conocimientoParaPrompt(PREGUNTAS_IMPER, PENDIENTES_IMPER, OBJECIONES_IMPER, SENALES_IMPER),
+};

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import type {
   BusinessUnit,
   MoneyAccount,
@@ -12,10 +12,7 @@ import type {
 } from "@/app/actions/finanzas";
 import {
   obtenerCatalogosFinanzas,
-  obtenerResumenFinanciero,
-  obtenerEstadoResultados,
-  obtenerBalanceGeneral,
-  obtenerFlujoEfectivo
+  obtenerReportesFinanzas
 } from "@/app/actions/finanzas";
 import { conciliarRemisionesPendientes } from "@/app/actions/contabilidad-remisiones";
 
@@ -102,27 +99,19 @@ export function FinanzasClient() {
     setCargandoDatos(true);
     try {
       const bu = businessUnitId === "todas" ? undefined : businessUnitId;
-      const [resResumen, resPnL, resBal, resFlujo] = await Promise.all([
-        obtenerResumenFinanciero(fechaInicio, fechaFin, undefined, undefined, bu),
-        obtenerEstadoResultados(fechaInicio, fechaFin, bu),
-        obtenerBalanceGeneral(fechaCorte, undefined, bu),
-        obtenerFlujoEfectivo(fechaInicio, fechaFin, bu)
-      ]);
+      // Una sola server action: el cliente las ejecuta en serie si se piden por separado
+      const reportes = await obtenerReportesFinanzas(fechaInicio, fechaFin, fechaCorte, bu);
 
-      setResumen(resResumen);
-      setEstadoResultados(resPnL);
-      setBalance(resBal);
-      setFlujo(resFlujo);
+      setResumen(reportes.resumen);
+      setEstadoResultados(reportes.estadoResultados);
+      setBalance(reportes.balance);
+      setFlujo(reportes.flujo);
     } catch (err: any) {
       console.error("Error al consultar datos financieros:", err);
     } finally {
       setCargandoDatos(false);
     }
   }, [fechaInicio, fechaFin, fechaCorte, businessUnitId]);
-
-  useEffect(() => {
-    cargarCatalogos();
-  }, [cargarCatalogos]);
 
   // Restaurar los filtros guardados (persisten al recargar la página).
   // Los periodos predefinidos se recalculan para que "Este mes" siga siendo el mes en curso.
@@ -156,21 +145,21 @@ export function FinanzasClient() {
     } catch {}
   }, [filtrosRestaurados, presetPeriodo, fechaInicio, fechaFin, businessUnitId, activeTab]);
 
+  // Las server actions del cliente corren en fila: primero los reportes (lo que se ve),
+  // después los catálogos y al final la conciliación de remisiones pendientes
+  // (venta, proveedor, terminal y comisión), que refresca solo si hubo cambios.
+  const cargaInicialHecha = useRef(false);
   useEffect(() => {
     if (!filtrosRestaurados) return;
-    cargarDatos();
-  }, [filtrosRestaurados, cargarDatos]);
-
-  // Al abrir Finanzas, reflejar las remisiones que aún no estén conciliadas
-  // (venta, proveedor, terminal y comisión) y refrescar si hubo cambios.
-  useEffect(() => {
-    conciliarRemisionesPendientes()
-      .then((res) => {
-        if (res.procesadas > 0) cargarDatos();
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const primera = !cargaInicialHecha.current;
+    cargaInicialHecha.current = true;
+    cargarDatos().then(async () => {
+      if (!primera) return;
+      await cargarCatalogos();
+      const res = await conciliarRemisionesPendientes().catch(() => null);
+      if (res && res.procesadas > 0) cargarDatos();
+    });
+  }, [filtrosRestaurados, cargarDatos, cargarCatalogos]);
 
   // Cambiar fechas por preset
   const aplicarPreset = (p: typeof presetPeriodo) => {

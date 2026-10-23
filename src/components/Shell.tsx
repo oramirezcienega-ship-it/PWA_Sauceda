@@ -607,7 +607,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           esAdminOnly: true,
         },
         {
-          href: "/dashboard/llamadas",
+          href: "/dashboard/llamadas/ia",
           label: "Llamadas",
           icono: IconoLlamadas,
           esAdminOnly: true,
@@ -689,6 +689,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
     if (href === "/reportes") {
       return currentPath === "/reportes";
+    }
+
+    // Llamadas abre en la pestaña IA; el historial del conmutador también la marca.
+    if (href === "/dashboard/llamadas/ia") {
+      return currentPath.startsWith("/dashboard/llamadas");
     }
 
     if (href.startsWith("/construccion")) {

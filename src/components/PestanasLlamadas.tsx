@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const PESTANAS = [
-  { href: "/dashboard/llamadas", label: "Historial del Conmutador" },
   { href: "/dashboard/llamadas/ia", label: "Llamadas IA" },
+  { href: "/dashboard/llamadas", label: "Historial del Conmutador" },
 ];
 
 /** Subsecciones de Llamadas. */
