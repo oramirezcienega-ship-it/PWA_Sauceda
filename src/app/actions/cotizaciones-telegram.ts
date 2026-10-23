@@ -150,6 +150,12 @@ export async function enviarAutorizacionCostosAction(
 }
 
 export interface AutorizacionProveedor {
+  /** autorizacion = autorización de costo de una cotización; especial = cotización especial (fuera de catálogo). */
+  tipo: "autorizacion" | "especial";
+  /** Folio visible: id de la cotización o CE-AAAA-NNNN. */
+  folio: string;
+  /** Dónde se gestiona: detalle de la cotización o la conversación del cliente. */
+  href: string;
   cotizacionId: string;
   cliente: string;
   servicio: string;
@@ -158,7 +164,9 @@ export interface AutorizacionProveedor {
   proveedor: string;
   /** Entregado = Telegram aceptó el mensaje; no_entregado = falló el envío (sin Telegram, bot bloqueado, etc.). */
   entrega: "entregado" | "no_entregado";
-  estado: "esperando" | "autorizado" | "rechazado" | "error";
+  estado: "esperando" | "autorizado" | "rechazado" | "cotizado" | "visita" | "error";
+  /** Lo que respondió el proveedor en una cotización especial (precio, tiempo). */
+  detalleRespuesta?: string;
   enviadoAt: string;
   vistoAt: string | null;
   respondidoAt: string | null;
@@ -171,12 +179,13 @@ export interface AutorizacionProveedor {
 export async function listarAutorizacionesProveedoresAction(): Promise<{ filas: AutorizacionProveedor[]; slaHoras: number }> {
   await requireAdmin();
   const sb = supabaseServidor();
-  const [{ data, error }, slaHoras] = await Promise.all([
+  const [{ data, error }, slaHoras, especiales] = await Promise.all([
     sb
       .from("cotizaciones")
       .select("id, servicio_tipo, estatus, precio_final, cliente_nombre_personalizado, autorizacion_costos, prospectos:prospecto_id(nombre, primer_apellido, segundo_apellido)")
       .not("autorizacion_costos", "is", null),
     obtenerSlaAutorizacionHoras(sb),
+    filasCotizacionesEspeciales(sb),
   ]);
   if (error) throw new Error(error.message);
 
@@ -191,6 +200,9 @@ export async function listarAutorizacionesProveedoresAction(): Promise<{ filas: 
     for (const reg of Object.values(registros)) {
       if (reg?.tipo !== "proveedor") continue;
       filas.push({
+        tipo: "autorizacion",
+        folio: c.id,
+        href: `/construccion/${c.id}`,
         cotizacionId: c.id,
         cliente,
         servicio: SERVICIOS[c.servicio_tipo] || c.servicio_tipo || "—",
@@ -207,8 +219,63 @@ export async function listarAutorizacionesProveedoresAction(): Promise<{ filas: 
       });
     }
   }
+  filas.push(...especiales);
   filas.sort((a, b) => a.enviadoAt.localeCompare(b.enviadoAt));
   return { filas, slaHoras };
+}
+
+/**
+ * Respuestas de proveedores a cotizaciones especiales. El SLA es el plazo que se fijó al
+ * mandarla (fecha_limite); "visto" = el proveedor ya tocó un botón (Cotizar, visita o no lo hago).
+ */
+async function filasCotizacionesEspeciales(sb: ReturnType<typeof supabaseServidor>): Promise<AutorizacionProveedor[]> {
+  const { data, error } = await sb
+    .from("cotizaciones_especiales_respuestas")
+    .select(
+      "id, estado, precio, tiempo, fecha_limite, enviada_at, respondida_at, created_at, updated_at, proveedores:proveedor_id ( nombre ), cotizaciones_especiales:cotizacion_especial_id ( id, folio, titulo, zona, tipo_negocio, estado, telefono_cliente )"
+    );
+  if (error) {
+    console.error("[Proveedores] Error al listar cotizaciones especiales:", error.message);
+    return [];
+  }
+  const filas: AutorizacionProveedor[] = [];
+  for (const r of (data || []) as any[]) {
+    const ce = Array.isArray(r.cotizaciones_especiales) ? r.cotizaciones_especiales[0] : r.cotizaciones_especiales;
+    const prov = Array.isArray(r.proveedores) ? r.proveedores[0] : r.proveedores;
+    if (!ce || ce.estado === "cancelada") continue;
+    const entregado = Boolean(r.enviada_at) && r.estado !== "sin_telegram";
+    const enviadoAt: string = r.enviada_at || r.created_at;
+    const estado: AutorizacionProveedor["estado"] = !entregado
+      ? "error"
+      : r.estado === "cotizada"
+        ? "cotizado"
+        : r.estado === "requiere_visita"
+          ? "visita"
+          : r.estado === "rechazada"
+            ? "rechazado"
+            : "esperando";
+    const respondio = estado !== "esperando" && estado !== "error";
+    filas.push({
+      tipo: "especial",
+      folio: ce.folio,
+      href: `/conversaciones?tel=${encodeURIComponent(ce.telefono_cliente)}`,
+      cotizacionId: ce.id,
+      cliente: ce.titulo,
+      servicio: ce.zona || "—",
+      estatusCotizacion: ce.estado,
+      precioFinal: Number(r.precio || 0),
+      proveedor: prov?.nombre || "Proveedor",
+      entrega: entregado ? "entregado" : "no_entregado",
+      estado,
+      detalleRespuesta: estado === "cotizado" && r.tiempo ? `Tiempo: ${r.tiempo}` : undefined,
+      enviadoAt,
+      vistoAt: respondio ? r.respondida_at || r.updated_at : r.estado === "cotizando" ? r.updated_at : null,
+      respondidoAt: respondio ? r.respondida_at || r.updated_at : null,
+      slaVenceAt: r.fecha_limite || enviadoAt,
+      error: entregado ? undefined : "Sin Telegram vinculado o el envío falló",
+    });
+  }
+  return filas;
 }
 
 /** Cambia las horas de SLA para que los proveedores respondan (aplica a todo el equipo). */
