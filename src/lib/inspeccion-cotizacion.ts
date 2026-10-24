@@ -126,6 +126,8 @@ export async function sincronizarInspeccionConCotizaciones(
           .from("visitas_reportes")
           .select("id, inspector_id, fecha_inspeccion, observaciones_tecnicas, condiciones_sitio, medidas, fotos")
           .eq("cotizacion_id", cot.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
           .maybeSingle();
 
         const medidasActuales = (repExistente?.medidas as any) || {};
@@ -216,6 +218,8 @@ export async function asegurarReporteVisitaParaCotizacion(
       .from("visitas_reportes")
       .select("id, cotizacion_id, fecha_inspeccion, observaciones_tecnicas, condiciones_sitio, medidas, fotos, created_at, perfiles:inspector_id(nombre)")
       .eq("cotizacion_id", cot.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (repExistente) {

@@ -93,7 +93,7 @@ export async function armarPaqueteAutorizacion(sb: SupabaseClient, cotizacionId:
     .order("created_at", { ascending: true });
   const conceptos: CotizacionConcepto[] = (concFilas || []).map(aCotizacionConcepto);
 
-  const { data: rep } = await sb.from("visitas_reportes").select("id").eq("cotizacion_id", cotizacionId).maybeSingle();
+  const { data: rep } = await sb.from("visitas_reportes").select("id").eq("cotizacion_id", cotizacionId).order("created_at", { ascending: false }).limit(1).maybeSingle();
   const siteUrl = process.env.SITE_URL || "https://crm.saucedamx.com";
   const pdf = Buffer.from(generarPdfCotizacion(cotizacion, conceptos, siteUrl, Boolean(rep)).output("arraybuffer"));
 
