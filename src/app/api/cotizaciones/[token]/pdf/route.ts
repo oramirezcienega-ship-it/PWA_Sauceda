@@ -44,6 +44,8 @@ export async function GET(
         .from("visitas_reportes")
         .select("*, perfiles(nombre)")
         .eq("cotizacion_id", cotizacion.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (!repFila) {
@@ -86,6 +88,8 @@ export async function GET(
       .from("visitas_reportes")
       .select("id")
       .eq("cotizacion_id", cotizacion.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     let tieneReporte = Boolean(repFilaVisita);

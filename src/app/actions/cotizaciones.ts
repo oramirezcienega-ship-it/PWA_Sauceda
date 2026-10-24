@@ -295,6 +295,8 @@ export async function obtenerCotizacionPorId(
     .from("visitas_reportes")
     .select("*, perfiles:inspector_id(nombre)")
     .eq("cotizacion_id", id)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (errRep) throw new Error(errRep.message);
@@ -441,6 +443,8 @@ export async function obtenerCotizacionPorToken(
     .from("visitas_reportes")
     .select("id, cotizacion_id, fecha_inspeccion, observaciones_tecnicas, condiciones_sitio, medidas, fotos, created_at, perfiles:inspector_id(nombre)")
     .eq("cotizacion_id", cot.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (errRep) throw new Error(errRep.message);
@@ -566,6 +570,8 @@ export async function obtenerReporteVisitaPorToken(
     .from("visitas_reportes")
     .select("id, cotizacion_id, fecha_inspeccion, observaciones_tecnicas, condiciones_sitio, medidas, fotos, created_at, perfiles:inspector_id(nombre)")
     .eq("cotizacion_id", cot.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (errRep) throw new Error(errRep.message);
@@ -643,6 +649,8 @@ export async function guardarReporteVisita(
     .from("visitas_reportes")
     .select("id")
     .eq("cotizacion_id", cotizacionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   let res;
@@ -657,7 +665,7 @@ export async function guardarReporteVisita(
         fotos: datosReporte.fotos,
         fecha_inspeccion: datosReporte.fechaInspeccion || new Date().toISOString()
       })
-      .eq("cotizacion_id", cotizacionId)
+      .eq("id", existente.id)
       .select("*, perfiles:inspector_id(nombre)")
       .single();
     if (error) throw new Error(error.message);
@@ -2802,6 +2810,8 @@ export async function enviarCotizacionPorCorreo(datos: {
       .from("visitas_reportes")
       .select("id")
       .eq("cotizacion_id", cotizacion.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     const docPdf = generarPdfCotizacion(cotizacion, conceptos, siteUrl, Boolean(repFila));
@@ -3055,6 +3065,8 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
         .from("visitas_reportes")
         .select("id")
         .eq("cotizacion_id", datos.cotizacionId)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       const docPdf = generarPdfCotizacion(cotizacion, conceptos, siteUrl, Boolean(repFila));
