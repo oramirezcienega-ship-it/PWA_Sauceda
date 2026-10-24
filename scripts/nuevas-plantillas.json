@@ -209,5 +209,119 @@
         ]
       }
     ]
+  },
+  {
+    "name": "correccion_cotizacion_piso_estampado",
+    "category": "MARKETING",
+    "language": "es_MX",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Hola {{1}}, te escribe el equipo técnico de SAUCEDA Construcción. 📐\n\nTe contactamos para hacerte una corrección técnica importante sobre tu cotización de piso estampado:\n\nEl sistema automatizado te cotizó por error una obra pesada de colado de concreto de 10 cm (diseñada para tierra virgen). Sin embargo, al validar tu proyecto, la técnica adecuada es nuestro Revestimiento Estampado de Alta Adherencia (2 cm sobre tu piso actual sin demoler).\n\nCon esta corrección, tu presupuesto real queda en:\n👉 {{2}} (todo incluido con garantía de 2 años por escrito).\n\n¿Deseas que nuestro técnico pase a revisar tu firme con el muestrario físico de texturas (Piedra, Madera, Cantera) sin costo?",
+        "example": {
+          "body_text": [
+            [
+              "Angélica",
+              ",200 MXN para tus 80 m² (/m² en vez de ,000)"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "BUTTONS",
+        "buttons": [
+          {
+            "type": "QUICK_REPLY",
+            "text": "Agendar visita técnica"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Ver fotos de texturas"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "No por ahora, gracias"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "actualizacion_cotizacion_impermeabilizacion",
+    "category": "MARKETING",
+    "language": "es_MX",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Hola {{1}}, te escribe el equipo técnico de SAUCEDA Construye. ☔\n\nRevisando tu proyecto de impermeabilización para tu azotea de {{2}}, te contactamos porque esta semana abrimos un nuevo convenio de volumen directo con fabricante para cierre de temporada:\n\n📉 Tu cotización anterior era de: {{3}}\n👉 Tu presupuesto preferencial actualizado queda en: {{4}} (un ahorro directo de {{5}}).\n\nIncluye retiro de material suelto, sellado de grietas con cemento plástico, imprimación, mano de obra con soplete a fuego y garantía por escrito de 5 años.\n\n¿Deseas que nuestro asesor técnico Alejandro pase hoy o mañana a confirmar medidas en tu domicilio sin costo ni compromiso?",
+        "example": {
+          "body_text": [
+            [
+              "Carlos",
+              "70 m²",
+              "$17,150 MXN",
+              "$14,350 MXN",
+              "$2,800 MXN"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "BUTTONS",
+        "buttons": [
+          {
+            "type": "QUICK_REPLY",
+            "text": "Agendar visita sin costo"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Ver opciones de pago"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "No por ahora, gracias"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "actualizacion_cotizacion_piso_estampado",
+    "category": "MARKETING",
+    "language": "es_MX",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Hola {{1}}, te escribe el equipo técnico de SAUCEDA Construcción. 📐\n\nTe contactamos para hacerte una corrección técnica favorable sobre tu cotización de piso estampado de {{2}}:\n\nEl sistema automatizado te cotizó inicialmente un colado pesado de concreto de 10 cm (diseñado para tierra virgen). Al validar tu caso, la técnica ideal es nuestro Revestimiento Estampado de Alta Adherencia (2 cm sobre tu firme actual sin demoler):\n\n📉 Cotización anterior: {{3}}\n👉 Presupuesto corregido: {{4}} (un ahorro directo de {{5}}).\n\nIncluye preparación mecánica, puente de adherencia, mortero polimérico, textura con molde, color y doble sellador acrílico con garantía por escrito.\n\n¿Deseas que nuestro técnico pase a revisar tu firme con el muestrario físico de texturas sin costo?",
+        "example": {
+          "body_text": [
+            [
+              "Angélica",
+              "50 m²",
+              "$57,500 MXN",
+              "$27,000 MXN",
+              "$30,500 MXN"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "BUTTONS",
+        "buttons": [
+          {
+            "type": "QUICK_REPLY",
+            "text": "Agendar visita sin costo"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Ver fotos de texturas"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "No por ahora, gracias"
+          }
+        ]
+      }
+    ]
   }
 ]
