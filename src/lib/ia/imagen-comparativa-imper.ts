@@ -26,13 +26,15 @@ function tarjeta(pkg: PaqueteInfo, m2: number): Nodo {
   const premium = !!pkg.destacado;
   const { total, m2Cobrados, precioM2, aplicaMinimo } = cotizarPaquete(pkg, m2);
   const acento = premium ? DORADO_OSC : VERDE_CLARO;
+  const aniosGarantia = pkg.id === "premium" ? 10 : pkg.id === "estandar" ? 5 : 3;
+  const costoMes = Math.round(total / (aniosGarantia * 12));
 
   return h(
     "div",
     {
       flexDirection: "column",
       width: 346,
-      height: 585,
+      height: 595,
       padding: 22,
       borderRadius: 20,
       backgroundColor: premium ? "#FAF7EE" : "#FFFFFF",
@@ -63,29 +65,58 @@ function tarjeta(pkg: PaqueteInfo, m2: number): Nodo {
         : null,
       h("div", { color: acento, fontSize: 12, fontWeight: 800 }, pkg.badge),
       h("div", { color: "#0F172A", fontSize: 20, fontWeight: 800, marginTop: 6, lineHeight: 1.15, maxWidth: premium ? 250 : 300 }, pkg.titulo),
-      h("div", { color: "#64748B", fontSize: 13, marginTop: 6 }, pkg.subtitulo),
-      // Precio total
-      h("div", { alignItems: "flex-end", marginTop: 14, color: premium ? DORADO_OSC : VERDE }, [
-        h("div", { fontSize: 20, fontWeight: 800, marginBottom: 6, marginRight: 4 }, "$"),
-        h("div", { fontSize: 42, fontWeight: 800, lineHeight: 1 }, dinero(total)),
-        h("div", { fontSize: 14, fontWeight: 800, color: "#64748B", marginLeft: 6, marginBottom: 5 }, "MXN"),
+      h("div", { color: "#64748B", fontSize: 13, marginTop: 4 }, pkg.subtitulo),
+      // 1. Tarifa por m² (Hero principal accesible)
+      h("div", { alignItems: "flex-end", marginTop: 12, color: premium ? DORADO_OSC : VERDE }, [
+        h("div", { fontSize: 18, fontWeight: 800, marginBottom: 4, marginRight: 2 }, "$"),
+        h("div", { fontSize: 36, fontWeight: 800, lineHeight: 1 }, dinero(precioM2)),
+        h("div", { fontSize: 14, fontWeight: 700, color: "#64748B", marginLeft: 4, marginBottom: 4 }, "MXN / m²"),
       ]),
+      // 2. Total estimado para los metros (Caja clara y transparente)
       h(
         "div",
-        { color: aplicaMinimo ? "#B45309" : "#64748B", fontSize: 13, marginTop: 8, fontWeight: aplicaMinimo ? 800 : 400 },
-        aplicaMinimo
-          ? `Mínimo de cobro: ${m2Cobrados} m²  ·  $${dinero(precioM2)} por m²`
-          : `$${dinero(precioM2)} por m²  ·  ${m2} m²`
+        {
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginTop: 8,
+          backgroundColor: premium ? "#FAF0D7" : "#F1F5F9",
+          padding: "5px 10px",
+          borderRadius: 8,
+          border: `1px solid ${premium ? "#E2D7BE" : "#E2E8F0"}`,
+        },
+        [
+          h(
+            "div",
+            { color: aplicaMinimo ? "#B45309" : "#475569", fontSize: 11.5, fontWeight: 600 },
+            aplicaMinimo ? `Total est. (mín. ${m2Cobrados} m²):` : `Total est. (${m2} m²):`
+          ),
+          h(
+            "div",
+            { color: premium ? DORADO_OSC : VERDE, fontSize: 13.5, fontWeight: 800 },
+            `$${dinero(total)} MXN`
+          ),
+        ]
       ),
-      h("div", { height: 1, backgroundColor: "#E2E8F0", marginTop: 14, marginBottom: 12 }),
+      // 3. Amortización / cuota mensual psicológica
+      h(
+        "div",
+        {
+          color: "#64748B",
+          fontSize: 11,
+          marginTop: 6,
+          fontWeight: 600,
+        },
+        `Equivale a ~$${dinero(costoMes)} MXN / mes (${aniosGarantia} años de protección)`
+      ),
+      h("div", { height: 1, backgroundColor: "#E2E8F0", marginTop: 10, marginBottom: 10 }),
       // Incluye
       h(
         "div",
         { flexDirection: "column", flexGrow: 1 },
         pkg.incluye.map((item) =>
-          h("div", { marginBottom: 6 }, [
+          h("div", { marginBottom: 5 }, [
             h("div", { width: 7, height: 7, borderRadius: 4, backgroundColor: VERDE_CLARO, marginTop: 5, marginRight: 9, flexShrink: 0 }),
-            h("div", { color: "#334155", fontSize: 12.5, flexGrow: 1, flexShrink: 1, lineHeight: 1.25 }, item),
+            h("div", { color: "#334155", fontSize: 12, flexGrow: 1, flexShrink: 1, lineHeight: 1.25 }, item),
           ])
         )
       ),
@@ -94,29 +125,29 @@ function tarjeta(pkg: PaqueteInfo, m2: number): Nodo {
         "div",
         {
           flexDirection: "column",
-          padding: "8px 10px",
+          padding: "6px 10px",
           borderRadius: 8,
           backgroundColor: premium ? "#FAF0D7" : "#F8FAFC",
           border: `1px solid ${premium ? "#E2D7BE" : "#E2E8F0"}`,
         },
         [
           h("div", { color: "#64748B", fontSize: 9.5, fontWeight: 800 }, "GARANTÍA POR ESCRITO"),
-          h("div", { color: VERDE, fontSize: 15, fontWeight: 800, marginTop: 2 }, pkg.garantia),
+          h("div", { color: VERDE, fontSize: 14, fontWeight: 800, marginTop: 1 }, pkg.garantia),
         ]
       ),
       // Mejor para
       h(
         "div",
         {
-          marginTop: 8,
-          padding: "8px 10px",
+          marginTop: 6,
+          padding: "6px 10px",
           borderRadius: 8,
           backgroundColor: premium ? "#FFFFFF" : "#F8FAFC",
           border: `1px solid ${premium ? "#E2D7BE" : "#E2E8F0"}`,
           color: "#475569",
-          fontSize: 11.5,
-          lineHeight: 1.3,
-          height: 62,
+          fontSize: 11,
+          lineHeight: 1.25,
+          height: 52,
         },
         `Mejor para: ${pkg.mejorPara}`
       ),
@@ -130,7 +161,7 @@ export async function generarImagenComparativaImper(paquetes: PaqueteInfo[], m2:
   const sharp = (await import("sharp")).default;
 
   const textoPill = `Propuesta para: ${m2} m²`;
-  const alto = 770;
+  const alto = 780;
 
   const arbol = h(
     "div",
@@ -143,11 +174,11 @@ export async function generarImagenComparativaImper(paquetes: PaqueteInfo[], m2:
         ]),
         h("div", { backgroundColor: VERDE_CLARO, color: "#FFFFFF", fontSize: 19, fontWeight: 800, padding: "11px 22px", borderRadius: 24 }, textoPill),
       ]),
-      h("div", { padding: "22px 54px 0", justifyContent: "space-between" }, paquetes.map((p) => tarjeta(p, m2))),
+      h("div", { padding: "20px 54px 0", justifyContent: "space-between" }, paquetes.map((p) => tarjeta(p, m2))),
       h(
         "div",
-        { justifyContent: "center", marginTop: 14, color: "#64748B", fontSize: 13 },
-        "Precios sin factura (con factura se agrega IVA) · Diagnóstico técnico gratuito en sitio"
+        { justifyContent: "center", marginTop: 12, color: "#64748B", fontSize: 12.5 },
+        "Precios sin factura (con factura se agrega IVA) · Medición exacta y diagnóstico técnico sin costo en tu domicilio"
       ),
     ]
   );
