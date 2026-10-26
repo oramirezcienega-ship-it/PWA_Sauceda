@@ -87,24 +87,46 @@ export async function enviarWhatsAppProveedor(
 
   if (await ventanaAbiertaProveedor(sb, prov.id)) {
     const r = await enviarWhatsAppTexto(prov.telefono, texto);
-    await sb.from("mensajes_whatsapp").insert({
-      telefono: prov.telefono,
-      texto,
-      direccion: "out",
-      proveedor_id: prov.id,
-      estado: estadoDe(r),
-      agente,
-      wa_message_id: r.messageId || null,
-    });
-    return r.ok ? { ok: true, via: "texto" } : { ok: false, error: r.errorDetail || r.error || "No se pudo enviar." };
+    if (r.ok) {
+      await sb.from("mensajes_whatsapp").insert({
+        telefono: prov.telefono,
+        texto,
+        direccion: "out",
+        proveedor_id: prov.id,
+        estado: "enviado",
+        agente,
+        wa_message_id: r.messageId || null,
+      });
+      return { ok: true, via: "texto" };
+    }
   }
 
-  // Ventana cerrada: aviso por plantilla y el mensaje completo queda en espera.
+  // Prioridad Proveedores / Rescate: Evolution API (Línea Móvil Secundaria sin restricción de 24 h)
+  try {
+    const { enviarMensajeTextoEvolution } = await import("@/lib/evolution-api");
+    const evoRes = await enviarMensajeTextoEvolution(prov.telefono, texto);
+    if (evoRes.ok) {
+      await sb.from("mensajes_whatsapp").insert({
+        telefono: prov.telefono,
+        texto,
+        direccion: "out",
+        proveedor_id: prov.id,
+        estado: "enviado",
+        agente,
+        wa_message_id: (evoRes as any).id || null,
+      });
+      return { ok: true, via: "texto" };
+    }
+  } catch (err) {
+    console.warn("[WhatsApp proveedores] Falló envío por Evolution API, intentando plantilla Meta:", err);
+  }
+
+  // Fallback si Evolution no está disponible: aviso por plantilla Meta y el mensaje queda en espera
   const nombre = (prov.contactoNombre || prov.nombre).split(/\s+/)[0];
   const resumen = d.resumen.replace(/\s+/g, " ").trim().slice(0, 900) || "tienes un aviso nuevo";
   const r = await enviarWhatsAppPlantilla(prov.telefono, PLANTILLA_AVISO, IDIOMA_PLANTILLA, [nombre, resumen]);
   if (!r.ok) {
-    return { ok: false, error: `No se pudo mandar la plantilla "${PLANTILLA_AVISO}" (¿ya la aprobó Meta?): ${r.errorDetail || r.error || "error"}` };
+    return { ok: false, error: `No se pudo mandar el mensaje al proveedor por Evolution ni por plantilla Meta: ${r.errorDetail || r.error || "error"}` };
   }
   await sb.from("mensajes_whatsapp").insert([
     {
