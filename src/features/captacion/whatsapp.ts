@@ -317,6 +317,29 @@ export async function guardarMensajeEntrante(
     // error (p. ej. choque del índice único) => ya existía, no es nuevo.
     const esNuevo = !error;
     if (esNuevo) {
+      // Extracción automática determinista de Google Maps y Ubicación en Expediente y Prospecto
+      try {
+        const urlMapsMatch = datos.texto.match(/https?:\/\/(?:www\.)?(?:maps\.google\.|google\.[a-z.]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl)\/[^\s]+/i);
+        const locMatch = datos.texto.match(/\[location:([^,]+),([^\|]+)\|([^\|]*)\|([^\]]*)\]/i);
+
+        if (urlMapsMatch || locMatch) {
+          const linkMaps = urlMapsMatch ? urlMapsMatch[0] : `https://maps.google.com/?q=${locMatch![1]},${locMatch![2]}`;
+          const dirDetalle = locMatch ? [locMatch[3], locMatch[4]].filter(Boolean).join(", ") : "";
+
+          if (datos.expedienteId) {
+            const expUpd: Record<string, any> = { link_google_maps: linkMaps };
+            if (dirDetalle) expUpd.direccion_propiedad = dirDetalle;
+            void sb.from("expedientes").update(expUpd).eq("id", datos.expedienteId);
+          }
+          if (datos.prospectoId) {
+            const proUpd: Record<string, any> = { direccion: dirDetalle || linkMaps };
+            void sb.from("prospectos").update(proUpd).eq("id", datos.prospectoId);
+          }
+        }
+      } catch (errGeo) {
+        console.error("Error al auto-sincronizar geolocalización de mensaje entrante:", errGeo);
+      }
+
       await comprobarYSalirDeSecuenciaPorMensaje(sb, datos.telefono);
       // Notificación in-app para todos los asesores activos
       try {
