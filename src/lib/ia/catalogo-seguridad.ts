@@ -96,6 +96,7 @@ export function buscarFamilia(familias: FamiliaSeguridad[], valor: unknown): Fam
 export const COMPLEMENTOS_FAMILIA: Record<string, { familia: string; motivo: string }> = {
   "videoporteros-e-interfones": { familia: "cerraduras-electricas", motivo: "abrir la puerta o el portón desde el monitor o el interfón, sin salir" },
   "cerraduras-electricas": { familia: "videoporteros-e-interfones", motivo: "ver o escuchar quién llama antes de abrirle desde adentro" },
+  "camaras-de-seguridad-y-cctv": { familia: "videoporteros-e-interfones", motivo: "atender la puerta y ver quién timbra directamente desde tu celular o monitor interior" },
 };
 
 /** Busca un producto de seguridad por su ID (ej. "CAT-010"). */
