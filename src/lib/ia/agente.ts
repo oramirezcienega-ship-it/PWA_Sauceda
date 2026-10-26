@@ -949,6 +949,17 @@ REGLA DE CONTRAOFERTAS Y NEGOCIACIÓN (CRÍTICA — EJ. OFERTAS DE CONTADO):
   * NUNCA lo dejes en espera diciendo "un asesor lo revisará" ni cierres la puerta.
   * Valida su propuesta positivamente: "¡Me parece una excelente propuesta! Si confirmamos para programar tu obra con anticipo del 50% y finiquito al término, te respetamos los $X MXN cerrados llave en mano. ¿En qué colonia o domicilio se ubica tu casa para agendar la visita técnica sin costo y formalizarlo?"
 
+REGLA DE PROTECCIÓN DE OPORTUNIDADES EN TODA LA LÍNEA DE CONSTRUCCIÓN Y MANTENIMIENTO (CRÍTICA — NUNCA DESCARTES NI NIEGUES UN SERVICIO):
+- SAUCEDA maneja y ofrece TODA la línea integral de CONSTRUCCIÓN, EDIFICACIÓN, OBRA CIVIL, ACABADOS, REMODELACIÓN Y MANTENIMIENTO RESIDENCIAL E INDUSTRIAL (ej. colocación de piso cerámico, porcelanato, azulejo, cantera, loseta, muros de contención, albercas, bardas, techados, estructuras metálicas, tablaroca, remodelación completa de baños o cocinas, pintura, herrería, plomería, electricidad, cisternas/aljibes, etc.).
+- Queda ESTRICTAMENTE PROHIBIDO que Sofía niegue un servicio, diga que "no lo manejamos", "no nos dedicamos a eso", "por ahora solo hacemos X" o descarte cualquier trabajo de construcción, obra o acabados. Esas consultas son oportunidades comerciales de alto valor para toda nuestra empresa.
+- CUANDO EL CLIENTE PREGUNTE POR CUALQUIER SERVICIO SIMILAR O COMPLEMENTARIO DE CONSTRUCCIÓN O MANTENIMIENTO FUERA DE LOS FLUJOS RÍGIDOS AUTOMATIZADOS:
+  1. Sofía NO debe dar respuestas negativas ni rechazar el proyecto.
+  2. Debe confirmar con entusiasmo que en SAUCEDA sí cubrimos proyectos integrales de construcción y acabados, y canalizar de inmediato con el asesor especialista para que revise las especificaciones técnicas y cotice:
+     "¡Por supuesto! En SAUCEDA contamos con soluciones integrales para toda nuestra línea de construcción, acabados y remodelaciones. Canalizo tu solicitud directamente con nuestro asesor especialista en obra para que revise los detalles de tu proyecto y te prepare la cotización adecuada por este mismo chat. En un momento te contacta. 👷✨"
+  3. En "datosExtraidos":
+     - Pon "avisar_asesor": "Oportunidad comercial en línea de construcción/mantenimiento: [pregunta o servicio específico del cliente]"
+     - Pon "pausar_ia": true (para que el sistema pause a Sofía de inmediato y el asesor humano tome el control de la conversación y no se pierda la venta).
+
 REGLA DE INSTALACIONES SUBTERRÁNEAS (GAS, AGUA, REGISTROS):
 - Si el cliente menciona que tiene tuberías, mangueras de gas o registros por debajo del suelo o cerca de la barda:
   * Dale tranquilidad técnica inmediata: "No te preocupes por las instalaciones de gas o agua; nuestro especialista técnico las revisa durante la visita técnica sin costo para asegurar que queden debidamente encamisadas y protegidas antes del colado."
@@ -1023,6 +1034,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "metros_claros": "true SOLO si el cliente dio de forma clara los metros cuadrados de su azotea en el mensaje actual o antes (un número); false o null en cualquier otro caso",
     "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null",
     "fuera_de_zona": "Boolean (true) si la obra o propiedad del cliente se ubica fuera de nuestra cobertura geográfica (fuera de León y zona conurbada en construcción; fuera de León en bienes raíces), de lo contrario null",
+    "pausar_ia": "Boolean (true) si el cliente preguntó por servicios de construcción, obra, acabados o mantenimiento complementarios, o si se requiere atención humana para cerrar una venta especial, de lo contrario null",
     "fotos_servicio": "true SOLO en mantenimiento de cisternas, tinacos o calentadores, en el mensaje donde el flujo J/K indica compartir las fotos del servicio; de lo contrario null",
     "comparativa_seguridad": "SOLO en seguridad (flujo L, paso 3b): la clave exacta de la familia cuya comparativa anuncias en este mensaje (ej. 'videoporteros-e-interfones'); de lo contrario null",
     "producto_seguridad_elegido": "SOLO en seguridad (flujo L, paso 3c): el ID de la opción que el cliente eligió CLARAMENTE en el mensaje actual (ej. 'CAT-010'); de lo contrario null",
@@ -2438,6 +2450,20 @@ export async function responderConIA(
         asesorId: exp?.asesor_id ?? null,
         nombreCliente: [exp?.cliente, exp?.primer_apellido].filter(Boolean).join(" "),
       });
+
+      // Si es una oportunidad comercial de construcción/mantenimiento o se solicitó pausar_ia, pausar a Sofía de inmediato
+      const esOportunidadConstruccion =
+        (datosExtraidos as any).pausar_ia === true ||
+        /oportunidad comercial|construcción|mantenimiento|cerámico|remodelación|alberca|tablaroca|acabados|porcelanato/i.test(motivoAviso);
+      if (esOportunidadConstruccion) {
+        try {
+          const { setConversacionPausada } = await import("@/lib/ia/control-pausa");
+          await setConversacionPausada(sb, ctx.telefono, true, ctx.expedienteId, exp?.prospecto_id);
+          console.log(`[Oportunidad Construcción] IA pausada automáticamente para ${ctx.telefono} para atención directa del asesor humano.`);
+        } catch (errPausa) {
+          console.error("[Oportunidad Construcción] Error al pausar IA automáticamente:", errPausa);
+        }
+      }
     }
 
     // --- ENVÍO DEL MENSAJE POR WHATSAPP/MESSENGER/INSTAGRAM ---
