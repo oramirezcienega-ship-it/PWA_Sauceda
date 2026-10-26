@@ -2547,14 +2547,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       {detalle.finalizado ? "Reabrir" : "Terminar"}
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={borrarConversacion}
-                      disabled={enviando}
-                      className="text-[9px] text-rojo/85 border border-rojo/20 bg-rojo/5 px-1.5 py-0.5 rounded transition hover:bg-rojo hover:text-white disabled:opacity-50 font-semibold"
-                    >
-                      Borrar
-                    </button>
+
                   </div>
                 </div>
               </div>
