@@ -684,7 +684,7 @@ G) Si está interesado en PISO ESTAMPADO / CONCRETO ESTAMPADO (Servicio de Concr
   En cuanto conozcas los m² aproximados (o dimensiones) y si el suelo tiene firme de concreto o es tierra/pasto, ENTREGA DE INMEDIATO el rango de inversión oficial al cliente. NUNCA lo dejes en visto ni digas que 'un asesor le mandará la cotización después'. Entrega la cifra tú misma de forma transparente.
 
   TABULADOR OFICIAL AUTORIZADO DE PISOS ESTAMPADOS SAUCEDA (PVP AL CLIENTE):
-  1) SOBRE FIRME DE CEMENTO EXISTENTE (Overlay polimérico modificado de 1.5 a 2 cm de alta adherencia, color base, molde estampado, desmoldante y doble sellador acrílico protector):
+  1) SOBRE FIRME DE CEMENTO EXISTENTE (Ahorro directo porque la base ya está firme y no requiere excavación ni terracerías; incluye preparación de la base, refuerzo con malla, colado de concreto al espesor adecuado, color base, molde estampado, desmoldante y doble sellador acrílico protector):
      • Menos de 25 m²: $750 MXN / m² (Salida mínima garantizada para menos de 15 m²: $12,900 MXN)
      • De 25 a 50 m²: $620 MXN / m²
      • De 51 a 99 m²: $550 MXN / m²
