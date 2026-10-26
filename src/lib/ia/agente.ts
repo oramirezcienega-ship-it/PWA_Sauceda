@@ -1397,7 +1397,14 @@ export async function responderConIA(
     const humanoReciente = historia.some((m) => {
       if (m.direccion !== "out" || !m.agente) return false;
       const ag = m.agente.toLowerCase();
-      const esBot = ag === NOMBRE_AGENTE.toLowerCase() || ag === "ia" || ag === "bot" || ag.includes("mautic") || ag.includes("sin registro");
+      const esBot =
+        ag === NOMBRE_AGENTE.toLowerCase() ||
+        ag === "ia" ||
+        ag === "bot" ||
+        ag.includes("mautic") ||
+        ag.includes("sin registro") ||
+        ag.includes("paulina") ||
+        ag.includes("sofia");
       if (esBot) return false;
       const t = m.created_at ? new Date(m.created_at).getTime() : 0;
       return ahoraMs - t < 4 * 60 * 60 * 1000;
