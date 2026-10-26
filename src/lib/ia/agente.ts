@@ -1656,15 +1656,6 @@ export async function responderConIA(
       .replace(/\*\*([^*\n]+)\*\*/g, "*$1*")
       .replace(/^#{1,6}\s+/gm, "");
 
-    // --- BLOQUEO DE PRECIOS EN TEXTO (construcción) ---
-    // Sofía no da precios en texto; la única vía es la imagen comparativa de impermeabilización.
-    if ((exp?.tipo_negocio || "").startsWith("construccion")) {
-      const reMonto = /\$\s?\d[\d,.]*(?:\s?(?:MXN|pesos))?(?:\s?(?:más|mas|\+)\s?IVA)?|\b\d[\d,.]*\s?(?:MXN|pesos)\b/gi;
-      if (reMonto.test(textoRespuesta)) {
-        console.warn(`[Precios] Sofía escribió un monto en texto; se reemplaza. Expediente ${ctx.expedienteId}`);
-        textoRespuesta = textoRespuesta.replace(reMonto, "(monto que te confirma el asesor)");
-      }
-    }
 
     // Borrador para el asesor: se detiene antes de guardar datos o enviar.
     if (ctx.soloBorrador) return textoRespuesta;
