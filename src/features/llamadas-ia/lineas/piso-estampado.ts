@@ -20,7 +20,7 @@ const MUNICIPIOS = "Silao, Irapuato, Guanajuato y Lagos de Moreno";
 const PREGUNTAS_PISO: PreguntaFrecuente[] = [
   {
     pregunta: "¿Cuánto cuesta el metro? / ¿Precio por metro terminado? / ¿Cuánto me dijeron?",
-    respuesta: "Usa la regla de PRECIO: sin cifras.",
+    respuesta: "El precio oficial depende del metraje y si es sobre firme ($420-$750/m²) o colado nuevo sobre tierra ($840-$1,290/m²). Se le ofrece la visita técnica sin costo para revisar niveles y presupuesto exacto.",
   },
   ...PREGUNTAS_GENERALES,
   {
@@ -41,7 +41,7 @@ const PREGUNTAS_PISO: PreguntaFrecuente[] = [
   {
     pregunta: "¿Qué diseños o colores tienen? / ¿Tienen catálogo? / Quiero algo liso, tipo piedra, madera…",
     respuesta:
-      "Tenemos varias texturas, moldes y colores; puede verlos en el catálogo en línea que le compartimos por WhatsApp, y en la visita le llevamos el muestrario físico para que los vea en persona.",
+      "Tenemos varias texturas, moldes y colores; puede verlos en el catálogo en línea que le compartimos por WhatsApp, y en la visita técnica sin costo revisamos sus medidas y niveles para dejarle el presupuesto exacto.",
   },
   {
     pregunta: "Mi área es chica / ¿Hacen espacios pequeños?",
@@ -49,7 +49,7 @@ const PREGUNTAS_PISO: PreguntaFrecuente[] = [
   },
   {
     pregunta: "¿Tiene costo el presupuesto o la visita?",
-    respuesta: "No, la visita con el muestrario y el presupuesto son sin costo.",
+    respuesta: "No, la visita técnica de medición, niveles y el presupuesto son totalmente sin costo.",
   },
   {
     pregunta: "¿Dónde están? / ¿Van a mi ciudad?",
@@ -91,7 +91,7 @@ const OBJECIONES_PISO: Objecion[] = [
   {
     cuando: "\"Estoy pidiendo presupuestos\" / \"estoy comparando\"",
     respuesta:
-      "Está bien comparar. Ofrece la visita con el muestrario para que tenga un presupuesto exacto con sus medidas y pueda comparar parejo.",
+      "Está bien comparar. Ofrece la visita técnica de medición y niveles sin costo para que tenga un presupuesto exacto con sus medidas y pueda comparar parejo.",
   },
   {
     cuando: "\"Lo checo\" / \"déjame ver\" / \"más adelante\"",
@@ -114,7 +114,7 @@ const SENALES_PISO = [
   "da el área y sus medidas y pregunta el precio",
   "dice que ya tiene el firme o la base lista",
   "describe el diseño o color que quiere (\"algo liso\", \"gris\", \"tipo piedra\", \"ladrillo\")",
-  "pide que vayan a medir, a cotizar o a mostrarle el muestrario",
+  "pide que vayan a medir, a revisar niveles o a cotizar en sitio",
   "pregunta cuándo pueden hacerlo o cuánto tardan",
   "pregunta cómo se paga",
 ];
@@ -136,8 +136,8 @@ export const lineaPisoEstampado: LineaLlamada = {
     "pregunta para qué área es (cochera, patio, terraza…) y si ya tiene firme de concreto o es tierra. Si es cochera, confirma si la va a usar para autos (con 10 centímetros aguanta hasta dos vehículos).",
   reglaPrecio: `NUNCA inventes ni calcules cifras: ni precio por metro, ni rangos, ni "desde", ni totales. Si en LO QUE SABEMOS DE ESTE CLIENTE aparece el PRECIO QUE YA RECIBIÓ POR WHATSAPP, usa SOLO ese, tal cual se le dio, y aclara que el final depende del área y del suelo; cuenta como precio conocido. Si no ha recibido precio: explica en una frase que depende de las características del área y del suelo, confirma sus metros, pregunta cómo está su suelo (tierra, pasto o firme de concreto) y dile que un asesor le manda su presupuesto por WhatsApp, donde puede mandar una foto del área. Nunca le digas que su área es muy chica ni menciones mínimos.`,
   visita:
-    "un especialista le lleva el muestrario físico de texturas y colores, mide el área, revisa la base y le deja el presupuesto exacto",
+    "un especialista mide el área, valida niveles y caídas pluviales, revisa la base y le deja el presupuesto exacto sin costo",
   propuestaVisita:
-    "Si le parece, el siguiente paso es llevarle el muestrario de texturas y colores a su casa, sin costo, para medir y dejarle el presupuesto exacto. ¿Le gustaría?",
+    "Si le parece, el siguiente paso es agendar la visita técnica a su casa, sin costo, para medir niveles y dejarle el presupuesto exacto. ¿Le gustaría?",
   conocimiento: () => conocimientoParaPrompt(PREGUNTAS_PISO, PENDIENTES_PISO, OBJECIONES_PISO, SENALES_PISO),
 };
