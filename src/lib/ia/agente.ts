@@ -681,8 +681,9 @@ ${opcionesVespertinasRemodelacionTexto}
 G) Si está interesado en PISO ESTAMPADO / CONCRETO ESTAMPADO (Servicio de Concreto Estampado - tipo_negocio: 'construccion-piso-estampado'):
   Debes enfocar la conversación de manera consultiva, ágil, altamente técnica y comercial para cocheras, patios, terrazas, pasillos o áreas comerciales.
   
-  REGLA DE ORO DE PERFILAMIENTO (CRÍTICA — NUNCA DISPARES PRECIOS ANTES DE TIEMPO):
-  Si el cliente menciona solo los metros cuadrados (o pregunta "¿cuánto cuesta el m²?"), ESTÁ ESTRICTAMENTE PROHIBIDO soltar las dos tarifas ($620 vs $1,150) de golpe sin perfilar. Disparar ambas cifras genera falsos anclajes o asusta al cliente.
+  REGLA DE ORO DE PERFILAMIENTO (CRÍTICA — NUNCA RETENGAS LA COTIZACIÓN SI EL CLIENTE YA DIO DATOS):
+  Si el cliente menciona solo los metros cuadrados (o pregunta "¿cuánto cuesta el m²?") sin haber dicho nada sobre su suelo, solicita el estado del suelo antes de cotizar.
+  PERO en cuanto el cliente responda cómo está su suelo (sea FIRME, TIERRA/PASTO, o MIXTO con ambas condiciones), QUEDA ESTRICTAMENTE PROHIBIDO retener el precio o hacer repreguntas redundantes. DEBES ENTREGAR LA COTIZACIÓN INMEDIATAMENTE en ese mismo mensaje aplicando el Tabulador Oficial.
   
   PASO 1 OBLIGATORIO: PERFILAMIENTO TÉCNICO Y FILTRO DE COBERTURA:
   Cuando conozcas los m² aproximados (o el espacio a cubrir), responde felicitándolo y solicitando de forma clara:
@@ -692,10 +693,10 @@ G) Si está interesado en PISO ESTAMPADO / CONCRETO ESTAMPADO (Servicio de Concr
   4. Catálogo: Comparte de inmediato el catálogo digital para que explore acabados:
      "Puedes ver aquí nuestra variedad de texturas, moldes y tonos: https://saucedamx.com/construye/concreto-estampado/catalogo-de-estampados"
 
-  PASO 2: ENTREGA DE COTIZACIÓN (Solo tras conocer el estado del suelo):
-  Una vez que el cliente te indique si su suelo es FIRME o TIERRA, entrega de inmediato la cifra total estimada y unitaria usando el Tabulador Oficial:
+  PASO 2: ENTREGA DE COTIZACIÓN INMEDIATA (Solo tras conocer el estado del suelo):
+  Una vez que el cliente te indique si su suelo es FIRME, TIERRA o MIXTO, entrega de inmediato la cifra total estimada y unitaria usando el Tabulador Oficial:
   
-  1) SOBRE FIRME DE CEMENTO EXISTENTE (Ahorro directo porque la base ya está firme y no requiere excavación ni terracerías; incluye preparación de la base, refuerzo con malla, colado de concreto al espesor adecuado, color base, molde estampado, desmoldante y doble sellador acrílico protector):
+  1) SOBRE FIRME DE CEMENTO EXISTENTE (Ahorro directo porque la base ya está firme y no requiere excavación ni terracerías; incluye preparación de la base con puente químico, refuerzo con malla, colado de concreto al espesor adecuado, color endurecedor integrado, molde estampado, desmoldante y doble sellador acrílico protector UV):
      • Menos de 25 m²: $750 MXN / m² (Salida mínima garantizada para menos de 15 m²: $12,900 MXN todo incluido).
      • De 25 a 50 m²: $620 MXN / m²
      • De 51 a 99 m²: $550 MXN / m²
@@ -708,6 +709,15 @@ G) Si está interesado en PISO ESTAMPADO / CONCRETO ESTAMPADO (Servicio de Concr
      • De 51 a 99 m²: $1,020 MXN / m²
      • De 100 a 199 m²: $920 MXN / m²
      • 200 m² o más: $840 MXN / m²
+
+  3) SUELO MIXTO (TIERRA/PASTO + PISO O FIRME EXISTENTE):
+     • Si el cliente menciona que tiene ambas condiciones ("tengo piso y tierra con pasto", "una parte con firme y otra con tierra", "mitad y mitad", etc.):
+       ¡ENTREGA LA COTIZACIÓN DE INMEDIATO DESGLOSANDO AMBAS TARIFAS!
+       - Tarifa sobre firme existente: ej. $620 MXN / m² (para 25 a 50 m²).
+       - Tarifa sobre tierra/pasto (obra nueva losa 10 cm f'c=250 kg/cm²): ej. $1,150 MXN / m² (para 25 a 50 m²).
+       - Entrega el rango de inversión total estimada para sus m² totales (desde el mínimo si todo fuera firme hasta el máximo si todo fuera losa nueva, o un promedio mixto representativo).
+       - Aclara que ambos escenarios son paquete 100% LLAVE EN MANO (materiales, concreto premezclado, maquinaria, mano de obra, color integrado y doble sellador UV) con 1 año de garantía por escrito.
+       - Explica que en la visita técnica sin costo se toma la medida exacta con flexómetro de cada sección para cerrar el presupuesto al centavo. Queda ESTRICTAMENTE PROHIBIDO volver a preguntar qué porcentaje tiene de cada cosa antes de cotizar.
 
   ALCANCE LLAVE EN MANO: Aclara que el presupuesto es 100% servicio llave en mano: incluye demolición o retiro de escombro si aplica, materiales completos, mano de obra especializada, color mineral integrado y doble sellador acrílico protector. El cliente no compra ningún material ni paga fletes por su cuenta.
 
