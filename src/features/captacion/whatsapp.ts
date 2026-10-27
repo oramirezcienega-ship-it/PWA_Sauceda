@@ -24,7 +24,7 @@ export async function triggerResponderBackground(
   debounceMap.set(telNormalizado, timestampLlegada);
 
   // Breve espera de 3s para permitir que mensajes en ráfaga del cliente se consoliden
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  await new Promise((resolve) => setTimeout(resolve, 5000));
 
   // Si llegó un mensaje más reciente para el mismo número durante la espera, ceder el paso
   if (debounceMap.get(telNormalizado) !== timestampLlegada) {

@@ -69,7 +69,7 @@ export async function enviarYRegistrar(
     return false;
   }
   const r = await enviarWhatsAppDocumento(ctx.canal, up.mediaId, nombre, caption, mime);
-  await sb.from("mensajes_whatsapp").insert({
+  const { error: insErr } = await sb.from("mensajes_whatsapp").insert({
     telefono: ctx.telefono,
     texto: `[image:${up.mediaId}] ${caption}`,
     direccion: "out",
@@ -78,6 +78,9 @@ export async function enviarYRegistrar(
     wa_message_id: r.messageId ?? null,
     agente: ctx.agente,
   });
+  if (insErr) {
+    console.error("[enviarYRegistrar] Error insertando en mensajes_whatsapp:", insErr);
+  }
   return r.ok;
 }
 
