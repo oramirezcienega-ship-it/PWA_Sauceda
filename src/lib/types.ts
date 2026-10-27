@@ -234,8 +234,32 @@ export function detectarTipoNegocio(
     return "construccion";
   }
 
-  // 5. Trámite, Acompañamiento y Asesoría INFONAVIT / Compra
-  // (Debe evaluarse ANTES de traspaso_compra para que las campañas y consultas de crédito/trámite no caigan en traspaso)
+  // 5. Promoción de Venta / Captación Inversa de Viviendas (VENDEDORES)
+  // Debe evaluarse ANTES de solo_tramite para que las personas que quieren vender su casa
+  // o provienen del anuncio de Captación Inversa no caigan en el embudo de compradores.
+  if (
+    campLower.includes("captacion") ||
+    campLower.includes("captación") ||
+    campLower.includes("vende tu casa") ||
+    campLower.includes("vender casa") ||
+    campLower.includes("venta de casa") ||
+    texto.includes("vender mi casa") ||
+    texto.includes("vender casa") ||
+    texto.includes("vender la casa") ||
+    texto.includes("quiero vender") ||
+    texto.includes("venda mi casa") ||
+    texto.includes("vender depto") ||
+    texto.includes("vender departamento") ||
+    texto.includes("vender mi propiedad") ||
+    texto.includes("promocion") ||
+    texto.includes("promoción") ||
+    texto.includes("promover")
+  ) {
+    return "promocion_venta";
+  }
+
+  // 6. Trámite, Acompañamiento y Asesoría INFONAVIT / Compra (COMPRADORES)
+  // (Debe evaluarse después de promocion_venta para que no absorba a los vendedores)
   if (
     campLower.includes("tramite") ||
     campLower.includes("trámite") ||
