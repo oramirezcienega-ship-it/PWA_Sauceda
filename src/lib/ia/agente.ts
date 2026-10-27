@@ -986,6 +986,15 @@ REGLA DE PROTECCIÓN DE OPORTUNIDADES EN TODA LA LÍNEA DE CONSTRUCCIÓN Y MANTE
      - Pon "avisar_asesor": "Oportunidad comercial en línea de construcción/mantenimiento: [pregunta o servicio específico del cliente]"
      - Pon "pausar_ia": true (para que el sistema pause a Sofía de inmediato y el asesor humano tome el control de la conversación y no se pierda la venta).
 
+REGLA DE RECLAMOS DE SERVICIO Y GARANTÍAS (CRÍTICA — MÁXIMA PRIORIDAD OPERATIVA):
+- Si el cliente indica que ya se le realizó un servicio o trabajo en SAUCEDA y reporta un problema, inconformidad, falla, goteo, fuga, avería, mal funcionamiento o solicita hacer válida una garantía:
+  1. Queda ESTRICTAMENTE PROHIBIDO tratarlo como un prospecto nuevo, volverle a cotizar o pedirle datos de venta.
+  2. Responde con empatía, profesionalismo y máxima contención inmediata (SLA < 2 min):
+     "Lamento mucho este inconveniente con tu servicio. En este momento registro tu reporte de garantía con prioridad alta y lo transfiero directamente con la Dirección de Operaciones para revisarlo con el técnico especialista asignado y darte atención puntual. En breve te contactamos."
+  3. En "datosExtraidos":
+     - Pon "avisar_asesor": "🚨 RECLAMO DE GARANTÍA: Cliente reporta falla en servicio previo ([resumen del problema o equipo])"
+     - Pon "pausar_ia": true (para pausar a Sofía de inmediato y que la Dirección de Operaciones / asesor humano tome el control total del chat).
+
 REGLA DE INSTALACIONES SUBTERRÁNEAS (GAS, AGUA, REGISTROS):
 - Si el cliente menciona que tiene tuberías, mangueras de gas o registros por debajo del suelo o cerca de la barda:
   * Dale tranquilidad técnica inmediata: "No te preocupes por las instalaciones de gas o agua; nuestro especialista técnico las revisa durante la visita técnica sin costo para asegurar que queden debidamente encamisadas y protegidas antes del colado."
@@ -1071,7 +1080,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "pospone_fecha": "Si cliente_pospone: la fecha que dijo como 'YYYY-MM' o 'YYYY-MM-DD' (en el futuro); null si no dio fecha",
     "pospone_motivo": "Si cliente_pospone: el motivo en pocas palabras (ej. 'hasta diciembre por presupuesto'); de lo contrario null",
     "cliente_retoma": "true SOLO si el negocio está EN PAUSA y el cliente muestra intención clara de retomar ya; de lo contrario null",
-    "avisar_asesor": "Motivo breve (máx. 200 caracteres) SOLO en estos casos: (a) el MÓDULO: VISITA TÉCNICA EN SITIO indique avisar a un asesor en este turno, (b) el cliente está molesto, se queja, reclama una cita/visita no atendida o una cotización no entregada, o (c) hay un tema de pago/anticipo que debe resolver un humano. NO lo uses para pedidos rutinarios (catálogo, fotos, ejemplos, horario preferido de contacto, que retoma el proyecto, datos del proyecto): el asesor ya ve esa información en el CRM. Si ya avisaste en un turno anterior de esta conversación por el mismo tema, pon null. En cualquier otro caso null",
+    "avisar_asesor": "Motivo breve (máx. 200 caracteres) SOLO en estos casos: (a) el MÓDULO: VISITA TÉCNICA EN SITIO indique avisar a un asesor en este turno, (b) el cliente reporta un problema, falla, queja, inconformidad o solicita hacer válida una garantía de un servicio ya realizado, (c) el cliente está molesto, se queja, reclama una cita/visita no atendida o una cotización no entregada, o (d) hay un tema de pago/anticipo que debe resolver un humano. NO lo uses para pedidos rutinarios (catálogo, fotos, ejemplos, horario preferido de contacto, que retoma el proyecto, datos del proyecto): el asesor ya ve esa información en el CRM. Si ya avisaste en un turno anterior de esta conversación por el mismo tema, pon null. En cualquier otro caso null",
     "hora_inspeccion_confirmada": "La hora de inicio en formato HH:MM:SS del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.hora}'), de lo contrario null",
     "opciones_remodelacion_cliente": "Arreglo con los 2 números o códigos de opciones de inspección vespertina elegidas por el cliente (ej. ['1', '3']), de lo contrario null",
     "nss": "Número de Seguridad Social (NSS de 11 dígitos, solo números) si el cliente lo proporcionó para Infonavit, de lo contrario null",
@@ -2478,17 +2487,17 @@ export async function responderConIA(
         nombreCliente: [exp?.cliente, exp?.primer_apellido].filter(Boolean).join(" "),
       });
 
-      // Si es una oportunidad comercial de construcción/mantenimiento o se solicitó pausar_ia, pausar a Sofía de inmediato
-      const esOportunidadConstruccion =
+      // Si es una oportunidad comercial de construcción/mantenimiento, garantía o se solicitó pausar_ia, pausar a Sofía de inmediato
+      const esAtencionHumanaRequerida =
         (datosExtraidos as any).pausar_ia === true ||
-        /oportunidad comercial|construcción|mantenimiento|cerámico|remodelación|alberca|tablaroca|acabados|porcelanato/i.test(motivoAviso);
-      if (esOportunidadConstruccion) {
+        /oportunidad comercial|construcción|mantenimiento|cerámico|remodelación|alberca|tablaroca|acabados|porcelanato|garant[ií]a|reclamo|incidencia|falla/i.test(motivoAviso);
+      if (esAtencionHumanaRequerida) {
         try {
           const { setConversacionPausada } = await import("@/lib/ia/control-pausa");
           await setConversacionPausada(sb, ctx.telefono, true, ctx.expedienteId, exp?.prospecto_id);
-          console.log(`[Oportunidad Construcción] IA pausada automáticamente para ${ctx.telefono} para atención directa del asesor humano.`);
+          console.log(`[Atención Humana / Garantía] IA pausada automáticamente para ${ctx.telefono} para atención directa del asesor/Operaciones.`);
         } catch (errPausa) {
-          console.error("[Oportunidad Construcción] Error al pausar IA automáticamente:", errPausa);
+          console.error("[Atención Humana / Garantía] Error al pausar IA automáticamente:", errPausa);
         }
       }
     }

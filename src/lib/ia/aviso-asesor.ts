@@ -13,7 +13,7 @@ const VENTANA_DEDUPE_URGENTE_MS = 60 * 60 * 1000;
 const PREFIJO_TITULO = "🙋 Sofía pide apoyo";
 
 /** Cliente molesto, cita/visita o pago: siempre amerita interrumpir al asesor. */
-const RE_URGENTE = /molest|inconform|queja|reclam|no lleg|no asisti|cancel|liga de (mercado )?pago|anticipo|visita t[eé]cnica|urgente/i;
+const RE_URGENTE = /molest|inconform|queja|reclam|no lleg|no asisti|cancel|liga de (mercado )?pago|anticipo|visita t[eé]cnica|urgente|garant[ií]a|falla|gote|fuga|descompuest|no prende|problema|aver[ií]a|vicio/i;
 
 /** Avisos que ameritan Telegram; el resto se queda como notificación in-app. */
 function clasificarAviso(motivo: string): { urgente: boolean; telegram: boolean } {
@@ -90,12 +90,14 @@ export async function avisarAsesorDesdeIA(
     const chatId = asesor?.telegram_chat_id || chatIdGrupo;
     if (telegram && botToken && chatId) {
       const siteUrl = process.env.SITE_URL || "https://crm.saucedamx.com";
+      const esGarantia = /garant[ií]a|falla|gote|fuga|descompuest|aver[ií]a/i.test(motivo);
+      const encabezado = esGarantia ? `🚨 <b>INCIDENCIA / GARANTÍA URGENTE</b>` : `🙋 <b>Sofía pide apoyo de un asesor</b>`;
       await enviarMensajeTelegram({
         botToken,
         chatId,
         parseMode: "HTML",
         texto:
-          `🙋 <b>Sofía pide apoyo de un asesor</b>\n` +
+          `${encabezado}\n` +
           `👤 ${escaparHtml(datos.nombreCliente || "Cliente")} · ${escaparHtml(datos.telefono)}\n` +
           `📝 ${escaparHtml(motivo)}\n` +
           `💬 ${siteUrl}${enlace}`,
