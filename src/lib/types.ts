@@ -107,8 +107,8 @@ export function detectarTipoNegocio(
   // 0. Seguridad / Videovigilancia / Cámaras / Alarmas (Campaña de Meta o palabras clave)
   const esHerreriaExpl = /herreri|port[oó]n|barandal|techumbre|saguan|zagu[aá]n|protecci[oó]n/i.test(texto);
   const esSeguridadSocial = /seguridad\s+social|nss/i.test(texto);
-  const campSeguridad = /seguridad|c[aá]mara|cctv|alarma|videovigilancia/i.test(campLower);
-  const textoSeguridadDispositivos = /cctv|videovigilancia|videoportero|interf[oó]n|cerco\s+el[eé]ctrico|cerca\s+el[eé]ctrica|malla\s+electrificada|c[aá]maras?|alarmas?/i.test(texto);
+  const campSeguridad = /seguridad|\bprotege\b|c[aá]mara|cctv|alarma|videovigilancia/i.test(campLower);
+  const textoSeguridadDispositivos = /\bprotege\b|cctv|videovigilancia|videoportero|interf[oó]n|cerco\s+el[eé]ctrico|cerca\s+el[eé]ctrica|malla\s+electrificada|c[aá]maras?|alarmas?/i.test(texto);
 
   if (
     campSeguridad ||

@@ -56,3 +56,12 @@ test("detectarTipoNegocio: Campañas o mensajes de Seguridad y Videovigilancia c
   assert.equal(detectarTipoNegocio("Quiero consultar mis puntos con mi número de seguridad social"), "solo_tramite");
 });
 
+
+
+test("detectarTipoNegocio: Atribución orgánica del sitio web clasifica correctamente con contexto de página", () => {
+  assert.equal(detectarTipoNegocio("Hola SAUCEDA 👋, quisiera recibir asesoría y cotización.", "Google SEO León", "saucedamx.com", "Página Impermeabilización"), "construccion-impermeabilizacion");
+  assert.equal(detectarTipoNegocio("Hola SAUCEDA 👋, quisiera recibir asesoría y cotización.", "Google SEO León", "saucedamx.com", "Página Concreto Estampado"), "construccion-piso-estampado");
+  assert.equal(detectarTipoNegocio("Hola SAUCEDA 👋, quisiera recibir asesoría y cotización.", "Google SEO León", "saucedamx.com", "Página Herrería"), "construccion-herreria");
+  assert.equal(detectarTipoNegocio("Hola SAUCEDA Protege 🛡️, quisiera asesoría y cotización.", "Google SEO León", "saucedamx.com", "Página Protege"), "seguridad");
+  assert.equal(detectarTipoNegocio("Hola SAUCEDA 👋, quisiera recibir asesoría y cotización.", "Google SEO León", "saucedamx.com", "Página Trámite"), "solo_tramite");
+});

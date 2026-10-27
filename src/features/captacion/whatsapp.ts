@@ -678,30 +678,63 @@ export async function registrarLeadWhatsApp(
   } else {
     // Detección automática de leads orgánicos provenientes de saucedamx.com (Google SEO León)
     const textoMensaje = (lead.mensaje || "").toLowerCase();
-    if (
+    const esTraficoWeb =
       textoMensaje.includes("página web") ||
       textoMensaje.includes("pagina web") ||
       textoMensaje.includes("saucedamx") ||
-      textoMensaje.includes("sauceda.mx")
-    ) {
+      textoMensaje.includes("sauceda.mx") ||
+      textoMensaje.includes("hola sauceda") ||
+      textoMensaje.includes("hola sofía") ||
+      textoMensaje.includes("hola sofia") ||
+      textoMensaje.includes("sauceda protege") ||
+      textoMensaje.includes("sauceda construye") ||
+      textoMensaje.includes("revisé el catálogo") ||
+      textoMensaje.includes("revise el catalogo") ||
+      textoMensaje.includes("estoy viendo su catálogo") ||
+      textoMensaje.includes("estoy viendo su catalogo") ||
+      textoMensaje.includes("catálogo de concreto") ||
+      textoMensaje.includes("catalogo de concreto") ||
+      textoMensaje.includes("catálogo de baños") ||
+      textoMensaje.includes("catalogo de banos") ||
+      textoMensaje.includes("catálogo de cocinas") ||
+      textoMensaje.includes("catalogo de cocinas") ||
+      textoMensaje.includes("leí su artículo") ||
+      textoMensaje.includes("lei su articulo") ||
+      textoMensaje.includes("leí su guía") ||
+      textoMensaje.includes("lei su guia") ||
+      textoMensaje.includes("guía de precios") ||
+      textoMensaje.includes("guia de precios") ||
+      textoMensaje.includes("acabo de registrar mis datos en el sitio web");
+
+    if (esTraficoWeb) {
       origenLead = "sitio-web";
       campaign_name = "Google SEO León";
       adset_name = "saucedamx.com";
 
       if (textoMensaje.includes("impermeabili") || textoMensaje.includes("manto") || textoMensaje.includes("azotea") || textoMensaje.includes("gotera")) {
         ad_name = "Página Impermeabilización";
-      } else if (textoMensaje.includes("concreto") || textoMensaje.includes("estampado") || textoMensaje.includes("cochera")) {
+      } else if (textoMensaje.includes("concreto") || textoMensaje.includes("estampado") || textoMensaje.includes("cochera") || textoMensaje.includes("premezclado")) {
         ad_name = "Página Concreto Estampado";
       } else if (textoMensaje.includes("herreria") || textoMensaje.includes("herrería") || textoMensaje.includes("portón") || textoMensaje.includes("porton") || textoMensaje.includes("pérgola") || textoMensaje.includes("pergola")) {
         ad_name = "Página Herrería";
-      } else if (textoMensaje.includes("infonavit") || textoMensaje.includes("trámite") || textoMensaje.includes("tramite")) {
-        ad_name = "Página Trámite";
-      } else if (textoMensaje.includes("vender") || textoMensaje.includes("vende")) {
-        ad_name = "Página Vende";
-      } else if (textoMensaje.includes("protege") || textoMensaje.includes("alarma") || textoMensaje.includes("cámara") || textoMensaje.includes("camara") || textoMensaje.includes("cerca")) {
+      } else if (textoMensaje.includes("protege") || textoMensaje.includes("alarma") || textoMensaje.includes("cámara") || textoMensaje.includes("camara") || textoMensaje.includes("cctv") || textoMensaje.includes("cerca") || textoMensaje.includes("videoportero") || textoMensaje.includes("electroimán") || textoMensaje.includes("electroiman") || textoMensaje.includes("seguridad")) {
         ad_name = "Página Protege";
+      } else if (textoMensaje.includes("cocina") || textoMensaje.includes("baño") || textoMensaje.includes("bano") || textoMensaje.includes("remodela")) {
+        ad_name = "Página Remodelación";
+      } else if (textoMensaje.includes("acabado") || textoMensaje.includes("yeso") || textoMensaje.includes("pintura")) {
+        ad_name = "Página Acabados";
+      } else if (textoMensaje.includes("electric")) {
+        ad_name = "Página Electricidad";
+      } else if (textoMensaje.includes("fontaner")) {
+        ad_name = "Página Fontanería";
+      } else if (textoMensaje.includes("mantenimiento") && !textoMensaje.includes("tinaco") && !textoMensaje.includes("cisterna")) {
+        ad_name = "Página Mantenimiento";
+      } else if (textoMensaje.includes("infonavit") || textoMensaje.includes("trámite") || textoMensaje.includes("tramite") || textoMensaje.includes("notaría") || textoMensaje.includes("notaria")) {
+        ad_name = "Página Trámite";
+      } else if (textoMensaje.includes("vender") || textoMensaje.includes("vende") || textoMensaje.includes("traspaso") || textoMensaje.includes("traspasar") || textoMensaje.includes("adeudo")) {
+        ad_name = "Página Vende";
       } else {
-        ad_name = "Página Web General";
+        ad_name = "Página Web General (Header / Portada)";
       }
     }
   }

@@ -1132,9 +1132,11 @@ Contacto SAUCEDA: WhatsApp ${MARCA.whatsappTexto} · ${MARCA.web}`;
       nombre && `Nombre del cliente: ${nombre}`,
       `Teléfono de contacto: ${telReal}`,
       exp.canal_id && `Canal vinculado: ${exp.canal_id}`,
-      exp.campaign_name && `Campaña Meta de origen: ${exp.campaign_name}`,
-      exp.adset_name && `Grupo de anuncios de origen: ${exp.adset_name}`,
-      exp.ad_name && `Anuncio de origen: ${exp.ad_name}`,
+      exp.campaign_name === "Google SEO León"
+        ? `Origen de adquisición: Tráfico Orgánico del Sitio Web Oficial (saucedamx.com · Google SEO León) - Sección: ${exp.ad_name || "General"}. Trátalo como un usuario que visitó la web y dio clic a WhatsApp.`
+        : (exp.campaign_name ? `Campaña Meta de origen: ${exp.campaign_name}` : null),
+      exp.campaign_name !== "Google SEO León" && exp.adset_name ? `Grupo de anuncios de origen: ${exp.adset_name}` : null,
+      exp.campaign_name !== "Google SEO León" && exp.ad_name ? `Anuncio de origen: ${exp.ad_name}` : null,
       exp.fraccionamiento &&
         exp.fraccionamiento !== "Por definir" &&
         `Fraccionamiento/zona: ${exp.fraccionamiento}`,
