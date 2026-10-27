@@ -2025,6 +2025,24 @@ export async function responderConIA(
         }
       }
 
+      // Persistencia de Promoción de Venta Inmobiliaria (Captación Inversa)
+      const esPromocionVenta =
+        updates.tipo_negocio === "promocion_venta" ||
+        exp?.tipo_negocio === "promocion_venta";
+
+      if (esPromocionVenta) {
+        if (dInf.valor_estimado) {
+          updates.valor_estimado = Math.round(Number(dInf.valor_estimado));
+        }
+        if (dInf.saldo_deuda) {
+          updates.saldo_deuda = Math.round(Number(dInf.saldo_deuda));
+        }
+        const col = dInf.colonia || dInf.fraccionamiento || updates.fraccionamiento || exp?.fraccionamiento || "";
+        const valStr = dInf.valor_estimado ? `$${Number(dInf.valor_estimado).toLocaleString("es-MX")}` : "Precio por definir";
+        const deudaStr = dInf.saldo_deuda ? ` (Adeudo: $${Number(dInf.saldo_deuda).toLocaleString("es-MX")})` : "";
+        updates.necesidad = `Promoción de Venta Inmobiliaria - ${valStr}${deudaStr}${col ? ` en ${col}` : ""}`;
+      }
+
       const esImper = exp?.tipo_negocio === "construccion-impermeabilizacion" || updates.tipo_negocio === "construccion-impermeabilizacion";
       
       // Formatear necesidad si tenemos datos técnicos de impermeabilización
