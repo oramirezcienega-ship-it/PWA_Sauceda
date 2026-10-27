@@ -7,7 +7,8 @@ import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { transcribirAudioMeta } from "@/lib/ia/audio";
 import { procesarRetroAsesorWhatsApp } from "@/lib/retro-whatsapp";
 import { detectarTipoNegocio, OrigenAdquisicion } from "@/lib/types";
-import { obtenerIdAsesorGerardo } from "@/lib/asesores";
+import { obtenerIdAsesorGerardo, obtenerIdAsesorInmobiliario } from "@/lib/asesores";
+import { analizarImagenMeta } from "@/lib/ia/vision-documentos";
 import { interpretarErrorMeta } from "@/lib/whatsapp";
 import { insertarExpedienteSeguro } from "@/lib/expedientes-insert";
 
@@ -63,6 +64,7 @@ export interface MensajeWhatsApp {
   /** Id del mensaje en Meta (para no duplicarlo si reintenta el webhook). */
   waMessageId?: string;
   audioId?: string;
+  imageId?: string;
   referral?: {
     source_url?: string;
     source_id?: string;
@@ -187,6 +189,7 @@ export function extraerMensajes(payload: PayloadWhatsApp): MensajeWhatsApp[] {
           audioId: m.type === "audio"
             ? m.audio?.id
             : m.type === "document" && m.document?.mime_type?.startsWith("audio/") ? m.document.id : undefined,
+          imageId: m.type === "image" ? m.image?.id : undefined,
           referral: m.referral,
         });
       }
@@ -272,7 +275,8 @@ async function obtenerOCrearProspecto(
   }
 
   const id = await siguienteIdProspecto(sb);
-  const asesorId = await obtenerIdAsesorGerardo(sb);
+  const esInmobiliario = tipoNegocio === "promocion_venta" || tipoNegocio === "asesoria_compra" || tipoNegocio === "traspaso_compra";
+  const asesorId = esInmobiliario ? await obtenerIdAsesorInmobiliario(sb) : await obtenerIdAsesorGerardo(sb);
   await sb.from("prospectos").insert({
     id,
     nombre: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
@@ -613,6 +617,21 @@ export async function registrarLeadWhatsApp(
     }
   }
 
+  // Si es una imagen (foto o documento), analizarla con Visión Multimodal / OCR (Gemini)
+  if (lead.imageId) {
+    try {
+      console.log(`[WhatsApp Inbound Vision] Se detectó imagen ${lead.imageId} para ${lead.telefono}. Analizando con IA multimodal...`);
+      const vision = await analizarImagenMeta(lead.imageId);
+      if (vision?.resumen_descriptivo) {
+        const prefijo = vision.es_documento ? "[DOCUMENTO DETECTADO]" : "[FOTO DE PROPIEDAD]";
+        lead.mensaje = `[image:${lead.imageId}] ${prefijo} ${vision.resumen_descriptivo}`;
+        console.log(`[WhatsApp Inbound Vision] Análisis visual completado: ${lead.mensaje}`);
+      }
+    } catch (err) {
+      console.error("[WhatsApp Inbound Vision] Error al analizar imagen con visión:", err);
+    }
+  }
+
   // Asesor dando retroalimentación de sus clientes (escribió "RETRO"): no es un lead.
   try {
     const consumido = await procesarRetroAsesorWhatsApp(sb, {
@@ -927,7 +946,8 @@ export async function registrarLeadWhatsApp(
   }
 
   const id = await siguienteId(sb);
-  const asesorId = await obtenerIdAsesorGerardo(sb);
+  const esInmobiliario = tipoNegocio === "promocion_venta" || tipoNegocio === "asesoria_compra" || tipoNegocio === "traspaso_compra";
+  const asesorId = esInmobiliario ? await obtenerIdAsesorInmobiliario(sb) : await obtenerIdAsesorGerardo(sb);
   const tipoNegocio = detectarTipoNegocio(
     lead.mensaje ?? "",
     [campaign_name, adset_name, ad_name].filter(Boolean).join(" ")

@@ -78,3 +78,29 @@ export async function obtenerIdAsesorGerardo(
   return obtenerIdAsesorDefault(sb);
 }
 
+
+
+/**
+ * Busca y retorna el ID de la asesora titular para servicios inmobiliarios (Paulina).
+ * Fallback a obtenerIdAsesorDefault si no se encuentra.
+ */
+export async function obtenerIdAsesorInmobiliario(
+  sb: SupabaseClient<any, any, any>
+): Promise<string | null> {
+  try {
+    const { data: paulina, error } = await sb
+      .from("perfiles")
+      .select("id")
+      .ilike("nombre", "%paulina%")
+      .eq("activo", true)
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && paulina?.id) {
+      return paulina.id as string;
+    }
+  } catch (err) {
+    console.error("Error al obtener ID de asesora inmobiliaria:", err);
+  }
+  return obtenerIdAsesorDefault(sb);
+}

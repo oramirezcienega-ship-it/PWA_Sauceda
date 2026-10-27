@@ -19,7 +19,7 @@ export function transcripcionDisponible(): boolean {
 }
 
 /** Descarga un archivo multimedia de WhatsApp (audio) desde Meta. */
-async function descargarMediaMeta(mediaId: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
+export async function descargarMediaMeta(mediaId: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
   const token = process.env.WHATSAPP_TOKEN;
   if (!token) {
     console.error("[Audio STT] Falta WHATSAPP_TOKEN.");
