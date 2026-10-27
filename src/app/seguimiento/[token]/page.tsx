@@ -1,18 +1,33 @@
 import type { Metadata } from "next";
 import { obtenerPortalCliente } from "@/app/actions/asesoria-compra";
 import { TusOpciones } from "@/components/asesoria-compra/TusOpciones";
+import { PortalVendedor } from "@/components/portal-vendedor/PortalVendedor";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Tu proceso · SAUCEDA",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata({ params }: { params: { token: string } }): Promise<Metadata> {
+  try {
+    const portal = await obtenerPortalCliente(params.token);
+    if (portal?.tipoNegocio === "promocion_venta" || portal?.tipoNegocio === "traspaso_compra") {
+      return {
+        title: "Portal del Propietario · SAUCEDA Bienes Raíces",
+        robots: { index: false, follow: false },
+      };
+    }
+  } catch {
+    // fallback
+  }
+  return {
+    title: "Tu proceso · SAUCEDA",
+    robots: { index: false, follow: false },
+  };
+}
 
 /**
- * Portal del cliente por `expedientes.token` (es el enlace que se envía en la
- * bienvenida y en las notificaciones). Muestra el avance del proceso y, en la
- * asesoría de compra, la sección "Tus opciones".
+ * Portal del cliente por `expedientes.token` (enlace universal enviado por WhatsApp).
+ * - En Vendedores (promocion_venta / traspaso_compra): Muestra el Portal del Propietario
+ *   con el Radar de Compradores en Espera, galería de fotos y Bóveda Notarial con PIN.
+ * - En Asesoría de compra: Muestra el avance y la sección "Tus opciones".
  */
 export default async function PaginaSeguimiento({ params }: { params: { token: string } }) {
   const portal = await obtenerPortalCliente(params.token);
@@ -29,6 +44,12 @@ export default async function PaginaSeguimiento({ params }: { params: { token: s
     );
   }
 
+  // ─── 1. MODO PROPIETARIO / VENDEDOR (CAPTACIÓN INVERSA) ──────────────────────
+  if (portal.tipoNegocio === "promocion_venta" || portal.tipoNegocio === "traspaso_compra") {
+    return <PortalVendedor portal={portal} token={params.token} />;
+  }
+
+  // ─── 2. MODO ASESORÍA DE COMPRA / TRÁMITE INFONAVIT ────────────────────────
   return (
     <main className="min-h-screen bg-crema pb-12">
       <header className="bg-verde-profundo px-4 py-5 text-crema">

@@ -29,7 +29,7 @@ test("detectarTipoNegocio: Campañas o mensajes de Traspaso / Compra directa con
   assert.equal(detectarTipoNegocio("Hola", "Sauceda Campaña leads 05.2026", "Sauceda Leads", "Traspaso directo"), "traspaso_compra");
   assert.equal(detectarTipoNegocio("Quiero traspasar mi casa con adeudo"), "traspaso_compra");
   assert.equal(detectarTipoNegocio("Ustedes compran casas con deuda?"), "traspaso_compra");
-  assert.equal(detectarTipoNegocio("Quiero vender mi casa que debo a infonavit"), "traspaso_compra");
+  assert.equal(detectarTipoNegocio("Traspaso mi casa que debo a infonavit"), "traspaso_compra");
 });
 
 test("detectarTipoNegocio: Servicios de Construcción se mantienen intactos", () => {

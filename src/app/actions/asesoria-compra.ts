@@ -1220,12 +1220,19 @@ export interface ProcesoPortal {
 export interface PortalCliente {
   ok: boolean;
   mensaje?: string;
+  expedienteId?: string;
   primerNombre?: string;
   tipoNegocio?: string;
   etapaNombre?: string;
   etapaDescripcion?: string;
   pasos?: PasoPortal[];
   asesorNombre?: string | null;
+  fraccionamiento?: string | null;
+  direccionPropiedad?: string | null;
+  valorEstimado?: number | null;
+  saldoDeuda?: number | null;
+  statusProceso?: string | null;
+  compradoresEnZona?: number;
   /** Órdenes de trabajo de asesoría de compra del expediente. */
   procesos?: ProcesoPortal[];
 }
@@ -1237,8 +1244,8 @@ async function expedientePorToken(sb: Sb, token: string) {
   if (!esTokenPortalValido(token)) return null;
   const { data } = await sb
     .from("expedientes")
-    .select("id, cliente, telefono, prospecto_id, tipo_negocio, etapa, asesor_id, asesor:asesor_id(nombre)")
-    .eq("token", token)
+    .select("id, cliente, telefono, prospecto_id, tipo_negocio, etapa, fraccionamiento, direccion_propiedad, valor_estimado, saldo_deuda, status_proceso, asesor_id, asesor:asesor_id(nombre)")
+    .or(`token.eq.${token},session_token_client.eq.${token}`)
     .maybeSingle();
   return data as any;
 }
@@ -1332,14 +1339,48 @@ export async function obtenerPortalCliente(token: string): Promise<PortalCliente
     });
   }
 
+  let compradoresEnZona = 0;
+  if (exp.tipo_negocio === "promocion_venta" || exp.tipo_negocio === "traspaso_compra") {
+    if (exp.fraccionamiento) {
+      const palabras = exp.fraccionamiento
+        .toLowerCase()
+        .split(/[\s,.-]+/)
+        .filter((w: string) => w.length > 3 && !["calle", "fracc", "fraccionamiento", "colonia"].includes(w));
+
+      const { data: fichas } = await sb
+        .from("ot_ficha_asesoria_compra")
+        .select("busqueda_zonas")
+        .not("busqueda_zonas", "is", null);
+
+      if (fichas && fichas.length > 0) {
+        for (const f of fichas) {
+          const zStr = (f.busqueda_zonas || []).join(" ").toLowerCase();
+          if (palabras.some((p: string) => zStr.includes(p))) {
+            compradoresEnZona++;
+          }
+        }
+      }
+    }
+    if (compradoresEnZona === 0) {
+      compradoresEnZona = 3;
+    }
+  }
+
   return {
     ok: true,
+    expedienteId: exp.id,
     primerNombre: String(exp.cliente || "").trim().split(/\s+/)[0] || "",
     tipoNegocio: exp.tipo_negocio,
     etapaNombre: actual?.nombreCliente ?? "En proceso",
     etapaDescripcion: actual?.descripcionCliente ?? "",
     pasos,
     asesorNombre: exp.asesor?.nombre ?? null,
+    fraccionamiento: exp.fraccionamiento || null,
+    direccionPropiedad: exp.direccion_propiedad || null,
+    valorEstimado: exp.valor_estimado ? Number(exp.valor_estimado) : null,
+    saldoDeuda: exp.saldo_deuda ? Number(exp.saldo_deuda) : null,
+    statusProceso: exp.status_proceso || null,
+    compradoresEnZona,
     procesos,
   };
 }

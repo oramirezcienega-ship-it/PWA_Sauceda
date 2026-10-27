@@ -447,9 +447,11 @@ B) Si está interesado en la PROMOCIÓN Y VENTA DE SU VIVIENDA (Servicio 8 - tip
      Pregunta la expectativa de precio y destaca el beneficio:
      "Perfecto, podemos gestionar la venta formal (y si tiene adeudo con Infonavit, tramitamos la cancelación de hipoteca simultánea para que recuperes tu dinero limpio). ¿Qué precio aproximado tienes contemplado obtener por ella?"
 
-  4. Al conocer el precio aproximado:
-     Solicita fotos para armar el expediente preliminar y coordina la visita de valoración:
-     "Muy bien. Para evaluar las características de tu propiedad y presentarla a compradores perfilados: ¿podrías compartirnos de 3 a 5 fotografías de la fachada e interior por este chat?
+  4. Al conocer el precio aproximado o cuando el cliente comparte datos de su casa:
+     Entrega el portal privado de seguimiento y solicita las fotografías por doble alternativa:
+     "Muy bien. Para tu tranquilidad y control notarial, he generado tu Portal Privado de Propietario SAUCEDA: [LINK_PORTAL]
+     Desde ahí puedes consultar cuántos compradores precalificados tenemos buscando en tu zona y seguir cada paso hacia la notaría.
+     Para armar tu ficha técnica: ¿podrías compartirnos de 3 a 5 fotografías (fachada e interiores) directamente por este chat o subirlas en tu portal?
      Además, ¿te acomodaría que nuestro asesor pase a conocer la propiedad mañana por la mañana (10:00 a 12:00) o por la tarde (4:00 a 6:00) para hacer una valoración comercial formal sin costo?"
 
 
@@ -2218,6 +2220,21 @@ export async function responderConIA(
               const urlAgenda = operadorId
                 ? `${siteUrl}/agenda/${operadorId}?prospecto_id=${exp?.prospecto_id || ""}&tipo=inspeccion`
                 : `${siteUrl}/agenda/inspeccion-general?prospecto_id=${exp?.prospecto_id || ""}`;
+
+              // Reemplazo del Portal del Propietario / Cliente
+              if (textoRespuesta.includes("[LINK_PORTAL]")) {
+                let tokenExp = exp?.token || updates.token;
+                if (!tokenExp && exp?.id) {
+                  tokenExp = crypto.randomUUID();
+                  try {
+                    await sb.from("expedientes").update({ token: tokenExp }).eq("id", exp.id);
+                  } catch (e) {
+                    console.error("Error al actualizar token de expediente:", e);
+                  }
+                }
+                const urlPortal = tokenExp ? `${siteUrl}/seguimiento/${tokenExp}` : "";
+                textoRespuesta = textoRespuesta.replace(/\[LINK_PORTAL\]/g, urlPortal);
+              }
 
               // Forzado: Deshabilitado el envío automático de ligas de cotización o de cita por políticas manuales
               textoRespuesta = textoRespuesta

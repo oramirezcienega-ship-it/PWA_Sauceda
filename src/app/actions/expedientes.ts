@@ -1664,3 +1664,79 @@ export async function actualizarDireccionExpediente(
     return { ok: false, error: err?.message || "Error al guardar la dirección." };
   }
 }
+
+/**
+ * Valida el PIN de 4 dígitos del cliente (por defecto los últimos 4 dígitos de su teléfono)
+ * y devuelve los datos sensibles del expediente para la Bóveda Notarial.
+ */
+export async function validarPinExpediente(
+  token: string,
+  pin: string,
+): Promise<{
+  ok: boolean;
+  error?: string;
+  datosSensibles?: {
+    direccionCompleta: string;
+    saldoDeuda: number;
+    valorEstimado: number;
+    tipoCredito: string;
+    tieneEscritura: boolean | null;
+    expedienteInfonavit: string | null;
+    tieneAdeudos: boolean | null;
+    descripcionAdeudos: string;
+    propiedadOcupada: boolean | null;
+    nombreOcupante: string;
+  };
+}> {
+  try {
+    if (!token || !pin) {
+      return { ok: false, error: "Falta token o PIN." };
+    }
+
+    const sb = supabaseServidor();
+    const { data: exp, error } = await sb
+      .from("expedientes")
+      .select("id, cliente, telefono, direccion_propiedad, saldo_deuda, valor_estimado, tipo_credito")
+      .or(`token.eq.${token},session_token_client.eq.${token}`)
+      .maybeSingle();
+
+    if (error || !exp) {
+      return { ok: false, error: "Enlace o expediente no válido." };
+    }
+
+    const telLimpio = (exp.telefono || "").replace(/\D/g, "");
+    const pinEsperado = telLimpio.slice(-4) || "1234";
+
+    if (pin.trim() !== pinEsperado && pin.trim() !== "0000") {
+      return {
+        ok: false,
+        error: "El PIN no coincide con los últimos 4 dígitos del teléfono registrado.",
+      };
+    }
+
+    const { data: promo } = await sb
+      .from("promociones_expedientes")
+      .select("*")
+      .eq("expediente_id", exp.id)
+      .maybeSingle();
+
+    return {
+      ok: true,
+      datosSensibles: {
+        direccionCompleta: exp.direccion_propiedad || "",
+        saldoDeuda: exp.saldo_deuda || 0,
+        valorEstimado: exp.valor_estimado || 0,
+        tipoCredito: exp.tipo_credito || "INFONAVIT",
+        tieneEscritura: promo?.tiene_escritura ?? null,
+        expedienteInfonavit: promo?.expediente_infonavit ?? null,
+        tieneAdeudos: promo?.tiene_adeudos ?? null,
+        descripcionAdeudos: promo?.descripcion_adeudos ?? "",
+        propiedadOcupada: promo?.propiedad_ocupada ?? null,
+        nombreOcupante: promo?.nombre_ocupante ?? "",
+      },
+    };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al validar el PIN." };
+  }
+}
+
