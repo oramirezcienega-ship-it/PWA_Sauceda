@@ -20,7 +20,7 @@ const MUNICIPIOS = "Silao, Irapuato, Guanajuato y Lagos de Moreno";
 const PREGUNTAS_PISO: PreguntaFrecuente[] = [
   {
     pregunta: "¿Cuánto cuesta el metro? / ¿Precio por metro terminado? / ¿Cuánto me dijeron?",
-    respuesta: "El precio oficial depende del metraje y si es sobre firme ($420-$750/m²) o colado nuevo sobre tierra ($840-$1,290/m²). Se le ofrece la visita técnica sin costo para revisar niveles y presupuesto exacto.",
+    respuesta: "El precio oficial depende del metraje y si es sobre firme ($750-$950/m²) o colado nuevo sobre tierra ($970-$1,390/m²). Se le ofrece la visita técnica sin costo para revisar niveles y presupuesto exacto.",
   },
   ...PREGUNTAS_GENERALES,
   {

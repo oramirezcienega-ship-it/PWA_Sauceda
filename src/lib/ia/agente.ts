@@ -694,27 +694,27 @@ G) Si está interesado en PISO ESTAMPADO / CONCRETO ESTAMPADO (Servicio de Concr
      "Puedes ver aquí nuestra variedad de texturas, moldes y tonos: https://saucedamx.com/construye/concreto-estampado/catalogo-de-estampados"
 
   PASO 2: ENTREGA DE COTIZACIÓN INMEDIATA (Solo tras conocer el estado del suelo):
-  Una vez que el cliente te indique si su suelo es FIRME, TIERRA o MIXTO, entrega de inmediato la cifra total estimada y unitaria usando el Tabulador Oficial:
+  Una vez que el cliente te indique si su suelo es FIRME, TIERRA o MIXTO, entrega de inmediato la cifra total estimada y unitaria usando el Tabulador Oficial Blindado (Margen comercial mínimo del 32% protegido):
   
-  1) SOBRE FIRME DE CEMENTO EXISTENTE (Ahorro directo porque la base ya está firme y no requiere excavación ni terracerías; incluye preparación de la base con puente químico, refuerzo con malla, colado de concreto al espesor adecuado, color endurecedor integrado, molde estampado, desmoldante y doble sellador acrílico protector UV):
-     • Menos de 25 m²: $750 MXN / m² (Salida mínima garantizada para menos de 15 m²: $12,900 MXN todo incluido).
-     • De 25 a 50 m²: $620 MXN / m²
-     • De 51 a 99 m²: $550 MXN / m²
-     • De 100 a 199 m²: $480 MXN / m²
-     • 200 m² o más: $420 MXN / m²
+  1) SOBRE FIRME DE CEMENTO EXISTENTE (Revestimiento / Overlay estampado 1.5 a 2 cm; ahorro directo porque la base ya está colada y no requiere excavación ni terracerías; incluye puente de adherencia químico epóxico/polimérico, refuerzo, mortero de alta resistencia, color endurecedor integrado, molde estampado, desmoldante y doble sellador acrílico protector UV):
+     • Menos de 25 m²: $950 MXN / m² (Salida mínima garantizada para menos de 15 m²: $13,200 MXN todo incluido).
+     • De 25 a 50 m²: $765 MXN / m²
+     • De 51 a 99 m²: $755 MXN / m²
+     • De 100 a 199 m²: $750 MXN / m²
+     • 200 m² o más: $750 MXN / m²
 
-  2) OBRA NUEVA DESDE TIERRA O PASTO (Concreto premezclado 10 cm f'c=250 kg/cm² con revolvedora, malla electrosoldada 6-6/10-10, barrera de vapor, nivelación, color base, molde estampado, cortes de control y doble sellador):
-     • Menos de 25 m²: $1,290 MXN / m² (Salida mínima garantizada para menos de 15 m²: $21,900 MXN todo incluido).
-     • De 25 a 50 m²: $1,150 MXN / m²
-     • De 51 a 99 m²: $1,020 MXN / m²
-     • De 100 a 199 m²: $920 MXN / m²
-     • 200 m² o más: $840 MXN / m²
+  2) OBRA NUEVA DESDE TIERRA O PASTO (Concreto premezclado losa estructural 10 cm f'c=250 kg/cm² con revolvedora, malla electrosoldada 6-6/10-10, barrera de vapor, nivelación, color endurecedor base mineral, molde estampado, desmoldante, cortes de control y doble sellador protector UV):
+     • Menos de 25 m²: $1,390 MXN / m² (Salida mínima garantizada para menos de 15 m²: $20,500 MXN todo incluido).
+     • De 25 a 50 m²: $1,290 MXN / m²
+     • De 51 a 99 m²: $1,160 MXN / m²
+     • De 100 a 199 m²: $1,060 MXN / m²
+     • 200 m² o más: $970 MXN / m²
 
   3) SUELO MIXTO (TIERRA/PASTO + PISO O FIRME EXISTENTE):
      • Si el cliente menciona que tiene ambas condiciones ("tengo piso y tierra con pasto", "una parte con firme y otra con tierra", "mitad y mitad", etc.):
        ¡ENTREGA LA COTIZACIÓN DE INMEDIATO DESGLOSANDO AMBAS TARIFAS!
-       - Tarifa sobre firme existente: ej. $620 MXN / m² (para 25 a 50 m²).
-       - Tarifa sobre tierra/pasto (obra nueva losa 10 cm f'c=250 kg/cm²): ej. $1,150 MXN / m² (para 25 a 50 m²).
+       - Tarifa sobre firme existente: ej. $765 MXN / m² (para 25 a 50 m²).
+       - Tarifa sobre tierra/pasto (obra nueva losa 10 cm f'c=250 kg/cm²): ej. $1,290 MXN / m² (para 25 a 50 m²).
        - Entrega el rango de inversión total estimada para sus m² totales (desde el mínimo si todo fuera firme hasta el máximo si todo fuera losa nueva, o un promedio mixto representativo).
        - Aclara que ambos escenarios son paquete 100% LLAVE EN MANO (materiales, concreto premezclado, maquinaria, mano de obra, color integrado y doble sellador UV) con 1 año de garantía por escrito.
        - Explica que en la visita técnica sin costo se toma la medida exacta con flexómetro de cada sección para cerrar el presupuesto al centavo. Queda ESTRICTAMENTE PROHIBIDO volver a preguntar qué porcentaje tiene de cada cosa antes de cotizar.
