@@ -1,6 +1,5 @@
 import { obtenerUsuarioActual, listarAsesoresActivos } from "@/app/actions/usuarios";
-import { AgendaDashboard } from "@/components/AgendaDashboard";
-import { Encabezado } from "@/components/Encabezado";
+import { AgendaContenedorTabs } from "@/components/AgendaContenedorTabs";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -26,9 +25,8 @@ export default async function PaginaAgendaAdministrativa() {
 
   return (
     <main className="min-h-screen pb-10">
-      <Encabezado />
-      <div className="mx-auto max-w-[1200px] px-4 pt-5">
-        <AgendaDashboard
+      <div className="mx-auto max-w-[1300px] px-4 pt-5">
+        <AgendaContenedorTabs
           usuarioActual={{
             id: usuario.id,
             nombre: usuario.nombre,
