@@ -51,6 +51,7 @@ import {
   IconoRemisiones,
   IconoProductos,
   IconoCoordinaciones,
+  IconoMonitoreo,
 } from "./IconosNav";
 
 /**
@@ -569,6 +570,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
           href: "/agenda",
           label: "Agenda",
           icono: IconoAgenda,
+        },
+        {
+          href: "/monitoreo",
+          label: "Central de Monitoreo",
+          icono: IconoMonitoreo,
+          badge: "nuevo",
         },
         {
           href: "/finanzas",
