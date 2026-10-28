@@ -327,14 +327,48 @@ async function obtenerSiguientesTresSlots(operadorId: string, sb: SupabaseClient
 }
 
 /** Construye las instrucciones (system prompt) del asistente. */
+// Caché en memoria para catálogos de Sofía con TTL de 5 minutos (evita cascada de consultas en cada respuesta)
+interface CacheCatalogosSofia {
+  timestamp: number;
+  productosImper: Awaited<ReturnType<typeof cargarProductosImper>>;
+  serviciosMant: Awaited<ReturnType<typeof cargarServiciosMantenimiento>>;
+  productosConVideos: Awaited<ReturnType<typeof cargarProductosConVideos>>;
+  familiasSeguridad: Awaited<ReturnType<typeof cargarFamiliasSeguridad>>;
+}
+
+let cacheCatalogosSofia: CacheCatalogosSofia | null = null;
+const TTL_CATALOGOS_MS = 5 * 60 * 1000; // 5 minutos
+
+async function obtenerCatalogosSofia(sb: SupabaseClient): Promise<CacheCatalogosSofia> {
+  const ahora = Date.now();
+  if (cacheCatalogosSofia && ahora - cacheCatalogosSofia.timestamp < TTL_CATALOGOS_MS) {
+    return cacheCatalogosSofia;
+  }
+
+  const [productosImper, serviciosMant, productosConVideos, familiasSeguridad] = await Promise.all([
+    cargarProductosImper(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarProductosImper>>),
+    cargarServiciosMantenimiento(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarServiciosMantenimiento>>),
+    cargarProductosConVideos(sb).catch(() => []),
+    cargarFamiliasSeguridad(sb, { soloAptosIa: true }).catch(() => []),
+  ]);
+
+  cacheCatalogosSofia = {
+    timestamp: ahora,
+    productosImper,
+    serviciosMant,
+    productosConVideos,
+    familiasSeguridad,
+  };
+
+  return cacheCatalogosSofia;
+}
+
 async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<string> {
-  // Productos de impermeabilización del catálogo: ficha técnica / facts para responder dudas y
-  // fotos para enviar. Sofía sólo anuncia imágenes si hay fotos cargadas y habilitadas.
-  const productosImper = await cargarProductosImper(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarProductosImper>>);
+  // Catálogos cargados en paralelo con caché en memoria (0 ms en peticiones subsiguientes)
+  const { productosImper, serviciosMant, productosConVideos, familiasSeguridad } = await obtenerCatalogosSofia(sb);
   const hayFotosImper = hayFotosEnCatalogo(productosImper);
   const fichaImper = fichaProductosParaPrompt(productosImper);
   const hayFotosEstandar = Boolean(productosImper.estandar?.aptoParaIa && productosImper.estandar.fotos.length > 0);
-  const serviciosMant = await cargarServiciosMantenimiento(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarServiciosMantenimiento>>);
   const fichaTinacos = fichaServicioParaPrompt(serviciosMant.tinacos);
   const fichaCisternas = fichaServicioParaPrompt(serviciosMant.cisternas);
   const fotosCisternas = Boolean(serviciosMant.cisternas?.aptoParaIa && serviciosMant.cisternas.fotos.length > 0);
@@ -349,9 +383,8 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
           .join("; ")
       : "";
   const fichasPdf = paquetesConFicha(productosImper).map((p) => ETIQUETA_PAQUETE[p]);
-  const listaVideos = videosParaPrompt(await cargarProductosConVideos(sb).catch(() => []));
-  // Seguridad: familias del catálogo con precio y aptas para Sofía (cada una tiene su imagen comparativa)
-  const listaFamiliasSeguridad = familiasParaPrompt(await cargarFamiliasSeguridad(sb, { soloAptosIa: true }).catch(() => []));
+  const listaVideos = videosParaPrompt(productosConVideos);
+  const listaFamiliasSeguridad = familiasParaPrompt(familiasSeguridad);
   const minimosImper = (["acrilico", "estandar", "premium"] as const)
     .map((p) => productosImper[p])
     .filter((p): p is NonNullable<typeof p> => Boolean(p && p.minimoM2 > 0))
@@ -1689,8 +1722,11 @@ export async function responderConIA(
       }
     }
 
-    let system = await instrucciones(exp, sb);
-    const express = await cotizacionesExpressDe(sb, ctx.expedienteId, exp?.prospecto_id);
+    const [systemRes, express] = await Promise.all([
+      instrucciones(exp, sb),
+      cotizacionesExpressDe(sb, ctx.expedienteId, exp?.prospecto_id),
+    ]);
+    let system = systemRes;
     const mensajes = aMensajes(historia, express);
     if (forzar) {
       const indicacion = ctx.indicacion?.trim();
@@ -1958,9 +1994,18 @@ export async function responderConIA(
       if ((datosExtraidos as any).colonia) {
         updates.fraccionamiento = (datosExtraidos as any).colonia;
       }
-      const direccionExtraida = String((datosExtraidos as any).direccion || "").trim();
+      let direccionExtraida = String((datosExtraidos as any).direccion || "").trim();
+      if (!direccionExtraida || direccionExtraida.toLowerCase() === "null" || direccionExtraida.length < 6) {
+        if (ultimoMsgIn?.texto) {
+          const fallback = extraerDireccionDeTexto(ultimoMsgIn.texto);
+          if (fallback) direccionExtraida = fallback;
+        }
+      }
       if (direccionExtraida && direccionExtraida.toLowerCase() !== "null" && direccionExtraida.length >= 6) {
         updates.direccion_propiedad = direccionExtraida;
+        if (!updates.link_google_maps && !exp?.link_google_maps) {
+          updates.link_google_maps = linkMapsDeDireccion(direccionExtraida);
+        }
         if (exp?.prospecto_id) {
           await sb
             .from("prospectos")

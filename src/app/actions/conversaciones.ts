@@ -407,11 +407,23 @@ async function verificarAccesoConversacion(
 export async function obtenerConversacion(
   telefono: string,
 ): Promise<ConversacionDetalle | null> {
-  await requireAdmin();
   const usuario = await usuarioActual();
   if (!usuario) throw new Error("No autorizado.");
-  const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
+
+  // Consulta paralela de rol y mensajes del hilo para eliminar cascada de latencia
+  const [{ rol }, msgRes] = await Promise.all([
+    rolDe(usuario.id),
+    sb
+      .from("mensajes_whatsapp")
+      .select("*")
+      .in("telefono", variantesId(telefono))
+      .is("proveedor_id", null)
+      .order("created_at", { ascending: true })
+      .limit(500),
+  ]);
+  if (msgRes.error) throw new Error(msgRes.error.message);
+  let filas = (msgRes.data as FilaMsg[]) ?? [];
 
   if (rol === "asesor" || rol === "operaciones") {
     const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
@@ -420,16 +432,6 @@ export async function obtenerConversacion(
       throw new Error("No tienes autorización para ver esta conversación.");
     }
   }
-
-  let { data, error } = await sb
-    .from("mensajes_whatsapp")
-    .select("*")
-    .in("telefono", variantesId(telefono))
-    .is("proveedor_id", null)
-    .order("created_at", { ascending: true })
-    .limit(500);
-  if (error) throw new Error(error.message);
-  let filas = (data as FilaMsg[]) ?? [];
 
   if (filas.length === 0 && !esCanalSocial(telefono)) {
     const digitos = telefono.replace(/\D/g, "").slice(-10);
@@ -536,40 +538,47 @@ export async function obtenerConversacion(
   let tipoNegocio: string | null = null;
   let etapa: string | null = null;
 
-  if (expedienteId) {
-    const { data: e } = await sb
-      .from("expedientes")
-      .select("cliente, primer_apellido, segundo_apellido, tipo_negocio, etapa, perfiles:asesor_id(nombre)")
-      .eq("id", expedienteId)
-      .maybeSingle();
-    if (e) {
-      nombreExpediente = nombreDe(e as any);
-      etapa = (e as any).etapa ?? null;
-      if ((e as any).tipo_negocio) {
-        tipoNegocio = (e as any).tipo_negocio;
-      }
-      if ((e as any).perfiles?.nombre) {
-        asesorNombre = (e as any).perfiles.nombre;
-      }
+  // Carga paralela de expediente, prospecto y estado de pausa de IA en una sola ronda de red
+  const [expRes, prosRes, iaPausada] = await Promise.all([
+    expedienteId
+      ? sb
+          .from("expedientes")
+          .select("cliente, primer_apellido, segundo_apellido, tipo_negocio, etapa, perfiles:asesor_id(nombre)")
+          .eq("id", expedienteId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    prospectoId
+      ? sb
+          .from("prospectos")
+          .select("nombre, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
+          .eq("id", prospectoId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    esConversacionPausada(sb, telefono, expedienteId),
+  ]);
+
+  const e = expRes?.data;
+  if (e) {
+    nombreExpediente = nombreDe(e as any);
+    etapa = (e as any).etapa ?? null;
+    if ((e as any).tipo_negocio) {
+      tipoNegocio = (e as any).tipo_negocio;
+    }
+    if ((e as any).perfiles?.nombre) {
+      asesorNombre = (e as any).perfiles.nombre;
     }
   }
 
-  if (prospectoId) {
-    const { data: p } = await sb
-      .from("prospectos")
-      .select("nombre, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
-      .eq("id", prospectoId)
-      .maybeSingle();
-    if (p) {
-      nombreProspecto = [p.nombre, p.primer_apellido, p.segundo_apellido]
-        .filter(Boolean)
-        .join(" ");
-      if (!tipoNegocio && (p as any).tipo_negocio) {
-        tipoNegocio = (p as any).tipo_negocio;
-      }
-      if (!asesorNombre && (p as any).perfiles?.nombre) {
-        asesorNombre = (p as any).perfiles.nombre;
-      }
+  const p = prosRes?.data;
+  if (p) {
+    nombreProspecto = [p.nombre, p.primer_apellido, p.segundo_apellido]
+      .filter(Boolean)
+      .join(" ");
+    if (!tipoNegocio && (p as any).tipo_negocio) {
+      tipoNegocio = (p as any).tipo_negocio;
+    }
+    if (!asesorNombre && (p as any).perfiles?.nombre) {
+      asesorNombre = (p as any).perfiles.nombre;
     }
   }
 
@@ -642,8 +651,6 @@ export async function obtenerConversacion(
       entregadoAt: f.entregado_at || null,
     };
   });
-
-  const iaPausada = await esConversacionPausada(sb, telefono, expedienteId);
 
   return {
     telefono,
