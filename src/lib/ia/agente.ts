@@ -26,6 +26,7 @@ import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { MARCA } from "@/lib/marca";
 import { variantesTelefono } from "@/lib/telefono";
+import { extraerDireccionDeTexto, linkMapsDeDireccion } from "@/lib/direccion";
 import { generarAudioTTS, subirAudioAMeta, enviarWhatsAppAudio } from "@/lib/ia/audio";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { hoyMexico, pausarExpediente, reactivarExpediente } from "@/lib/pausa-leads";
