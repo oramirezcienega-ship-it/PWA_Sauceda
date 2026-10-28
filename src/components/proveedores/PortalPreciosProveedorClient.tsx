@@ -29,6 +29,8 @@ interface Props {
   proveedorNombre: string;
   ofertasIniciales: OfertaPortalProveedor[];
   solicitudesIniciales?: SolicitudPortal[];
+  /** Folio o ID del servicio específico que se le está consultando para enfocar la vista */
+  solicitudFoco?: string;
   /** Estimaciones que SAUCEDA le pide (cotizaciones especiales); responde aquí si su canal es WhatsApp. */
   estimacionesIniciales?: CotizacionEspecialPortal[];
   /** Anticipo, pago, zonas y vigencia: del proveedor, aplican a todos sus servicios. */
@@ -68,11 +70,13 @@ export function PortalPreciosProveedorClient({
   proveedorNombre,
   ofertasIniciales,
   solicitudesIniciales = [],
+  solicitudFoco,
   estimacionesIniciales = [],
   condicionesIniciales,
 }: Props) {
   const [condiciones, setCondiciones] = useState<CondicionesProveedor>(condicionesIniciales || CONDICIONES_VACIAS);
   const [ofertas, setOfertas] = useState(ofertasIniciales);
+  const [mostrarMas, setMostrarMas] = useState(!solicitudFoco);
   const [editando, setEditando] = useState<string | null>(
     ofertasIniciales.length === 1 && faltantesOferta(ofertasIniciales[0]).includes("costo") ? ofertasIniciales[0].id : null
   );
@@ -105,61 +109,109 @@ export function PortalPreciosProveedorClient({
         )}
       </header>
 
-      <CondicionesGenerales token={token} condiciones={condiciones} onGuardadas={setCondiciones} />
+      {solicitudFoco && (
+        <div className="mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-50 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-bold text-white uppercase tracking-wider">
+              <span>🎯</span> Coordinación de servicio
+            </span>
+            <h2 className="mt-1 font-titular text-lg font-bold text-emerald-950">
+              Revisa el trabajo y confirma tus horarios disponibles
+            </h2>
+            <p className="text-xs text-emerald-800">
+              Enfocado en el servicio <b>{solicitudFoco}</b>. Abajo puedes indicar si lo tomas y en qué horarios.
+            </p>
+          </div>
+          {!mostrarMas && (
+            <button
+              type="button"
+              onClick={() => setMostrarMas(true)}
+              className="shrink-0 rounded-xl border border-emerald-600/30 bg-white px-3.5 py-2 text-xs font-semibold text-emerald-900 shadow-xs hover:bg-emerald-100/50 cursor-pointer"
+            >
+              Ver también catálogo y otras tareas ↓
+            </button>
+          )}
+        </div>
+      )}
 
-      <CotizacionesEspecialesPortal token={token} iniciales={estimacionesIniciales} />
+      {/* Servicios activos asignados: PRIMERA PRIORIDAD */}
+      <SolicitudesPortalProveedor token={token} iniciales={solicitudesIniciales} solicitudFoco={solicitudFoco} />
 
-      <SolicitudesPortalProveedor token={token} iniciales={solicitudesIniciales} />
+      {solicitudFoco && !mostrarMas && (
+        <div className="mt-8 rounded-2xl border border-dashed border-carbon/20 bg-white p-5 text-center">
+          <p className="text-sm font-semibold text-carbon/70">
+            ¿Necesitas consultar o actualizar tu catálogo de precios o tus condiciones generales?
+          </p>
+          <button
+            type="button"
+            onClick={() => setMostrarMas(true)}
+            className="mt-3 inline-flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-bold text-carbon/80 hover:bg-slate-200 cursor-pointer transition"
+          >
+            <span>📂</span> Mostrar mis condiciones, cotizaciones y catálogo completo
+          </button>
+        </div>
+      )}
 
-      {ofertas.length > 0 && (
+      {mostrarMas && (
+        <>
+          <CotizacionesEspecialesPortal token={token} iniciales={estimacionesIniciales} />
+          <CondicionesGenerales token={token} condiciones={condiciones} onGuardadas={setCondiciones} />
+        </>
+      )}
+
+      {mostrarMas && ofertas.length > 0 && (
         <div className="mt-7 flex items-end justify-between gap-3">
           <h2 className="font-titular text-lg font-bold text-verde-profundo">🏷️ Tus servicios</h2>
           <span className="text-xs text-carbon/50">{ofertas.length} en total</span>
         </div>
       )}
 
-      {ofertas.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-dashed border-carbon/20 bg-white p-8 text-center text-sm text-carbon/60">
-          Aún no tienes productos asignados. Pide a SAUCEDA que los registre.
-        </div>
-      ) : (
-        <div className="mt-3 divide-y divide-carbon/10 rounded-2xl border border-carbon/10 bg-white shadow-sm">
-          <div
-            className={`hidden gap-4 rounded-t-2xl bg-slate-50 px-5 py-2 text-[11px] font-bold uppercase tracking-wide text-carbon/50 lg:grid ${COLUMNAS_FILA}`}
-          >
-            <span>Servicio</span>
-            <span>Tu costo</span>
-            <span>🛠️ Proceso de trabajo</span>
-            <span>Condiciones</span>
-            <span />
-          </div>
-          {ofertas.map((o) => (
-            <TarjetaOferta
-              key={o.id}
-              token={token}
-              oferta={o}
-              editando={editando === o.id}
-              onEditar={(v) => setEditando(v ? o.id : null)}
-              onGuardada={(nueva) => setOfertas((prev) => prev.map((x) => (x.id === nueva.id ? nueva : x)))}
-            />
-          ))}
-        </div>
-      )}
+      {mostrarMas && (
+        <>
+          {ofertas.length === 0 ? (
+            <div className="mt-6 rounded-xl border border-dashed border-carbon/20 bg-white p-8 text-center text-sm text-carbon/60">
+              Aún no tienes productos asignados. Pide a SAUCEDA que los registre.
+            </div>
+          ) : (
+            <div className="mt-3 divide-y divide-carbon/10 rounded-2xl border border-carbon/10 bg-white shadow-sm">
+              <div
+                className={`hidden gap-4 rounded-t-2xl bg-slate-50 px-5 py-2 text-[11px] font-bold uppercase tracking-wide text-carbon/50 lg:grid ${COLUMNAS_FILA}`}
+              >
+                <span>Servicio</span>
+                <span>Tu costo</span>
+                <span>🛠️ Proceso de trabajo</span>
+                <span>Condiciones</span>
+                <span />
+              </div>
+              {ofertas.map((o) => (
+                <TarjetaOferta
+                  key={o.id}
+                  token={token}
+                  oferta={o}
+                  editando={editando === o.id}
+                  onEditar={(v) => setEditando(v ? o.id : null)}
+                  onGuardada={(nueva) => setOfertas((prev) => prev.map((x) => (x.id === nueva.id ? nueva : x)))}
+                />
+              ))}
+            </div>
+          )}
 
-      {ofertas.length > 0 && (
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-          <span className="text-xs text-carbon/50">¿Prefieres revisarlo en papel o compartirlo?</span>
-          <button
-            type="button"
-            onClick={async () => {
-              const { descargarFichaProveedorPdf } = await import("@/lib/fichaProveedorPdf");
-              descargarFichaProveedorPdf(proveedorNombre, ofertas, condiciones);
-            }}
-            className="rounded-lg border border-sauce/40 bg-white px-4 py-2 text-sm font-bold text-sauce shadow-sm hover:bg-sauce hover:text-white"
-          >
-            📄 Descargar resumen en PDF
-          </button>
-        </div>
+          {ofertas.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+              <span className="text-xs text-carbon/50">¿Prefieres revisarlo en papel o compartirlo?</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  const { descargarFichaProveedorPdf } = await import("@/lib/fichaProveedorPdf");
+                  descargarFichaProveedorPdf(proveedorNombre, ofertas, condiciones);
+                }}
+                className="rounded-lg border border-sauce/40 bg-white px-4 py-2 text-sm font-bold text-sauce shadow-sm hover:bg-sauce hover:text-white cursor-pointer"
+              >
+                📄 Descargar resumen en PDF
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       <p className="mt-8 text-center text-[11px] text-carbon/40">

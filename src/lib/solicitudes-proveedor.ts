@@ -16,7 +16,8 @@ import { generarFolioOT } from "@/lib/folio-ot";
 export const ESTADOS_ENVIO_ACTIVOS = ["enviada", "vista"] as const;
 
 const SITE_URL = () => (process.env.SITE_URL || "https://crm.saucedamx.com").replace(/\/$/, "");
-export const linkPortalProveedor = (token: string) => `${SITE_URL()}/precios-proveedor/${token}`;
+export const linkPortalProveedor = (token: string, solicitudFolio?: string | null) =>
+  `${SITE_URL()}/precios-proveedor/${token}${solicitudFolio ? `?solicitud=${encodeURIComponent(solicitudFolio)}` : ""}`;
 
 /** Costo de referencia del proveedor para esta cantidad según su oferta (por escalón, por volumen o unitario). */
 export function costoReferenciaOferta(
@@ -131,7 +132,7 @@ async function notificarProveedor(sb: SupabaseClient, envioId: string) {
   }
   const token = await tokenProveedor(sb, prov.id);
   if (!token) return;
-  const link = linkPortalProveedor(token);
+  const link = linkPortalProveedor(token, sol?.folio);
 
   const cantidadTxt =
     sol?.cantidad && Number(sol.cantidad) > 0 ? ` (${Number(sol.cantidad).toLocaleString("es-MX")} ${sol.unidad || ""})` : "";

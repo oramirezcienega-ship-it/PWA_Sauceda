@@ -44,7 +44,7 @@ function TarjetaEstimacion({
   onRespondida: (lista: CotizacionEspecialPortal[]) => void;
 }) {
   const pendiente = !c.cerrada && ["enviada", "cotizando", "sin_telegram"].includes(c.estado);
-  const [modo, setModo] = useState<"cotizar" | "visita" | null>(pendiente ? "cotizar" : null);
+  const [modo, setModo] = useState<"cotizar" | "visita" | null>(null);
   const [precio, setPrecio] = useState(c.precio ? String(c.precio) : "");
   const [tiempo, setTiempo] = useState(c.tiempo);
   const [incluye, setIncluye] = useState(c.incluye);
@@ -112,6 +112,33 @@ function TarjetaEstimacion({
       {respuesta && !pendiente && <div className={`mt-3 rounded-lg px-3 py-2 text-sm font-semibold ${respuesta.clase}`}>{respuesta.texto}</div>}
       {c.cerrada && <p className="mt-2 text-xs text-carbon/50">Esta solicitud ya se cerró.</p>}
 
+      {pendiente && !modo && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setModo("cotizar")}
+            className="rounded-xl bg-sauce px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-verde-profundo"
+          >
+            ✍️ Responder estimación
+          </button>
+          <button
+            type="button"
+            onClick={() => setModo("visita")}
+            className="rounded-xl border border-sky-300 bg-sky-50/60 px-3.5 py-2 text-sm font-semibold text-sky-800 hover:bg-sky-100"
+          >
+            🔎 Necesito verlo en sitio
+          </button>
+          <button
+            type="button"
+            disabled={enviando}
+            onClick={() => responder("rechazada")}
+            className="rounded-xl px-3 py-2 text-xs font-semibold text-carbon/50 hover:text-rojo"
+          >
+            No lo hago
+          </button>
+        </div>
+      )}
+
       {pendiente && modo === "cotizar" && (
         <div className="mt-3 space-y-3 rounded-xl bg-slate-50 p-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[12rem_1fr]">
@@ -135,7 +162,10 @@ function TarjetaEstimacion({
             />
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <button type="button" onClick={() => setModo("visita")} className="mr-auto text-sm font-semibold text-sky-700 hover:underline">
+            <button type="button" onClick={() => setModo(null)} className="mr-auto rounded-lg border border-carbon/20 px-3 py-1.5 text-xs font-semibold text-carbon/70 hover:bg-slate-100">
+              Cerrar
+            </button>
+            <button type="button" onClick={() => setModo("visita")} className="text-sm font-semibold text-sky-700 hover:underline">
               🔎 Necesito verlo en sitio
             </button>
             <button type="button" disabled={enviando} onClick={() => responder("rechazada")} className="text-sm font-semibold text-carbon/50 hover:text-rojo">

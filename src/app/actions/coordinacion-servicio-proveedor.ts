@@ -173,13 +173,25 @@ export async function redactarMensajeProveedorSofia(input: {
     // Link de su portal: ahí acepta y propone horarios (la solicitud se registra al mandar el mensaje).
     const { tokenProveedor, linkPortalProveedor } = await import("@/lib/solicitudes-proveedor");
     const token = await tokenProveedor(sb, input.proveedorId);
+    const { prospecto, expediente } = await idsCliente(sb, input.telefono);
+    let solFolio: string | undefined;
+    if (expediente?.id) {
+      const { data: ultSol } = await sb
+        .from("solicitudes_proveedor")
+        .select("folio")
+        .eq("expediente_id", expediente.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (ultSol?.folio) solFolio = ultSol.folio;
+    }
     const { generarMensajeCoordinacionProveedor } = await import("@/lib/ia/agente");
     const texto = await generarMensajeCoordinacionProveedor(sb, {
       ...input,
       proveedorNombre: prov.contacto_nombre || prov.nombre,
       fecha: fechaLegible(input.fecha),
       costo: input.costo ? pesos(input.costo) : "",
-      linkRespuesta: token ? linkPortalProveedor(token) : "",
+      linkRespuesta: token ? linkPortalProveedor(token, solFolio) : "",
     });
     if (!texto) return { ok: false, error: "Sofía no generó el mensaje (¿IA sin crédito o desactivada?)." };
     return { ok: true, texto };
@@ -297,10 +309,19 @@ export async function enviarCoordinacionOficial(
     const { enviarWhatsAppProveedor } = await import("@/lib/whatsapp-proveedores");
     const trabajo = input.trabajo.split(/[;.]/)[0].trim() || "un servicio";
     const lugar = input.direccion.split(",").slice(0, 2).join(",").trim();
-    const resumen = `tenemos ${input.tipo === "inspeccion" ? "una inspección técnica" : "un servicio"} para ti: ${trabajo}${lugar ? ` en ${lugar}` : ""}${input.fecha ? `, ${fechaLegible(input.fecha)}${input.horario ? ` ${input.horario}` : ""}` : ""}. ¿Lo puedes tomar?`;
-    const env = await enviarWhatsAppProveedor(sb, { proveedorId: input.proveedorId, texto: input.mensaje, resumen, agente: perfil?.nombre || "" });
-    if (!env.ok) return { ok: false, error: env.error };
+    // Primero registrar para tener el folio de solicitud y orden de trabajo
     const r = await registrarCoordinacionProveedor({ ...input, mensaje: input.mensaje });
+    if (!r.ok) return { ok: false, error: r.error };
+
+    // Si el mensaje tiene el link de precios y tenemos solicitudFolio, asegurar que viaje enfocado
+    let mensajeFinal = input.mensaje;
+    if (r.solicitudFolio && mensajeFinal.includes("/precios-proveedor/")) {
+      mensajeFinal = mensajeFinal.replace(/(\/precios-proveedor\/[A-Za-z0-9_-]+)(?!\?solicitud=)/g, `$1?solicitud=${r.solicitudFolio}`);
+    }
+
+    const resumen = `tenemos ${input.tipo === "inspeccion" ? "una inspección técnica" : "un servicio"} para ti: ${trabajo}${lugar ? ` en ${lugar}` : ""}${input.fecha ? `, ${fechaLegible(input.fecha)}${input.horario ? ` ${input.horario}` : ""}` : ""}. ¿Lo puedes tomar?`;
+    const env = await enviarWhatsAppProveedor(sb, { proveedorId: input.proveedorId, texto: mensajeFinal, resumen, agente: perfil?.nombre || "" });
+    if (!env.ok) return { ok: false, error: env.error };
     return { ...r, ok: true, via: env.via };
   } catch (err: any) {
     return { ok: false, error: err?.message || "No se pudo enviar." };

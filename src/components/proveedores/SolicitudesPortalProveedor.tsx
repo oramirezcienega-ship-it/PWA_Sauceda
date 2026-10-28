@@ -27,24 +27,59 @@ const ESTADO_RESPONDIDA: Partial<Record<SolicitudPortal["estado"], { texto: stri
 };
 
 /** Solicitudes de servicio que SAUCEDA le envió al proveedor: ¿lo puedes tomar? */
-export function SolicitudesPortalProveedor({ token, iniciales }: { token: string; iniciales: SolicitudPortal[] }) {
-  const [solicitudes, setSolicitudes] = useState(iniciales);
+export function SolicitudesPortalProveedor({
+  token,
+  iniciales,
+  solicitudFoco,
+}: {
+  token: string;
+  iniciales: SolicitudPortal[];
+  solicitudFoco?: string;
+}) {
+  const [solicitudes, setSolicitudes] = useState(() => {
+    const copia = [...iniciales];
+    copia.sort((a, b) => {
+      const aEsFoco = Boolean(solicitudFoco && (a.folio === solicitudFoco || a.envioId === solicitudFoco));
+      const bEsFoco = Boolean(solicitudFoco && (b.folio === solicitudFoco || b.envioId === solicitudFoco));
+      if (aEsFoco && !bEsFoco) return -1;
+      if (!aEsFoco && bEsFoco) return 1;
+      const aPend = a.estado === "enviada" || a.estado === "vista";
+      const bPend = b.estado === "enviada" || b.estado === "vista";
+      if (aPend && !bPend) return -1;
+      if (!aPend && bPend) return 1;
+      return 0;
+    });
+    return copia;
+  });
+
   if (solicitudes.length === 0) return null;
   const pendientes = solicitudes.filter((s) => s.estado === "enviada" || s.estado === "vista");
 
   return (
     <section className="mt-5 space-y-3">
-      <h2 className="font-titular text-lg font-bold text-verde-profundo">
-        📨 Servicios que te ofrecemos {pendientes.length > 0 && <span className="text-sauce">({pendientes.length} por responder)</span>}
-      </h2>
-      {solicitudes.map((s) => (
-        <TarjetaSolicitudPortal
-          key={s.envioId}
-          token={token}
-          s={s}
-          onRespondida={(nueva) => setSolicitudes((prev) => prev.map((x) => (x.envioId === nueva.envioId ? nueva : x)))}
-        />
-      ))}
+      <div className="flex items-center justify-between">
+        <h2 className="font-titular text-lg font-bold text-verde-profundo">
+          🛠️ Servicios que te ofrecemos{" "}
+          {pendientes.length > 0 && <span className="text-sauce">({pendientes.length} por responder)</span>}
+        </h2>
+        {solicitudFoco && (
+          <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+            Enfocado en {solicitudFoco}
+          </span>
+        )}
+      </div>
+      {solicitudes.map((s) => {
+        const esFoco = Boolean(solicitudFoco && (s.folio === solicitudFoco || s.envioId === solicitudFoco));
+        return (
+          <TarjetaSolicitudPortal
+            key={s.envioId}
+            token={token}
+            s={s}
+            foco={esFoco}
+            onRespondida={(nueva) => setSolicitudes((prev) => prev.map((x) => (x.envioId === nueva.envioId ? nueva : x)))}
+          />
+        );
+      })}
     </section>
   );
 }
@@ -52,14 +87,16 @@ export function SolicitudesPortalProveedor({ token, iniciales }: { token: string
 function TarjetaSolicitudPortal({
   token,
   s,
+  foco,
   onRespondida,
 }: {
   token: string;
   s: SolicitudPortal;
+  foco?: boolean;
   onRespondida: (s: SolicitudPortal) => void;
 }) {
   const pendiente = s.estado === "enviada" || s.estado === "vista";
-  const [abierta, setAbierta] = useState(pendiente);
+  const [abierta, setAbierta] = useState(foco ? true : pendiente);
   const [modo, setModo] = useState<null | "aceptada" | "rechazada" | "requiere_visita">(null);
   const [fechas, setFechas] = useState<string[]>(["", "", ""]);
   const [comentario, setComentario] = useState("");
@@ -91,10 +128,22 @@ function TarjetaSolicitudPortal({
 
   return (
     <article
-      className={`overflow-hidden rounded-2xl border bg-white shadow-sm ${
-        pendiente ? (s.urgente ? "border-rojo/40" : "border-sauce/40") : "border-carbon/10"
+      className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition-all ${
+        foco
+          ? "border-emerald-500 ring-4 ring-emerald-500/20 shadow-lg"
+          : pendiente
+          ? s.urgente
+            ? "border-rojo/40"
+            : "border-sauce/40"
+          : "border-carbon/10"
       }`}
     >
+      {foco && (
+        <div className="bg-emerald-600 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white flex items-center justify-between">
+          <span>🎯 Servicio que te estamos consultando</span>
+          <span className="font-mono">{s.folio}</span>
+        </div>
+      )}
       <button type="button" onClick={() => setAbierta((x) => !x)} className="flex w-full items-start justify-between gap-3 p-4 text-left">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase text-carbon/50">
@@ -182,6 +231,16 @@ function TarjetaSolicitudPortal({
               {modo === "aceptada" && (
                 <div className="space-y-2">
                   <p className="font-semibold">¿Qué días y horarios puedes? (al menos uno)</p>
+                  {s.fechasSugeridas && (
+                    <button
+                      type="button"
+                      onClick={() => setFechas((prev) => [s.fechasSugeridas, prev[1], prev[2]])}
+                      className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition flex items-center gap-1.5"
+                    >
+                      <span>⚡</span>
+                      <span>Aceptar horario propuesto por el cliente: <b>{s.fechasSugeridas}</b></span>
+                    </button>
+                  )}
                   {fechas.map((f, i) => (
                     <input
                       key={i}

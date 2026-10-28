@@ -17,7 +17,13 @@ export const metadata: Metadata = {
  * Link público para que el proveedor actualice costos, garantía, proceso y fotos
  * de los productos que nos ofrece (sin login). El token se valida en el servidor.
  */
-export default async function PaginaPreciosProveedor({ params }: { params: { token: string } }) {
+export default async function PaginaPreciosProveedor({
+  params,
+  searchParams,
+}: {
+  params: { token: string };
+  searchParams?: { solicitud?: string };
+}) {
   const contexto = await obtenerPortalPrecios(params.token);
   const solicitudes = contexto.ok ? await obtenerSolicitudesPortal(params.token).catch(() => ({ ok: false as const })) : null;
   const estimaciones = contexto.ok ? await obtenerCotizacionesEspecialesPortal(params.token).catch(() => []) : [];
@@ -43,6 +49,7 @@ export default async function PaginaPreciosProveedor({ params }: { params: { tok
         condicionesIniciales={contexto.condiciones}
         estimacionesIniciales={estimaciones}
         solicitudesIniciales={solicitudes?.ok ? solicitudes.solicitudes || [] : []}
+        solicitudFoco={searchParams?.solicitud}
       />
     </main>
   );
