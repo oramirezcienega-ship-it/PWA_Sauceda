@@ -1825,6 +1825,15 @@ export async function responderConIA(
       .replace(/^#{1,6}\s+/gm, "");
 
 
+    // Se declaran aquí (y no junto al envío) porque el guardrail de abajo ya los usa.
+    const esVerdadero = (v: unknown) => v === true || v === "true";
+    const clientePospone = esVerdadero((datosExtraidos as any).cliente_pospone);
+    const canal = (ctx.telefono.startsWith("messenger:") || ctx.telefono.startsWith("instagram:"))
+      ? ctx.telefono
+      : (exp?.canal_id || ctx.telefono);
+    const esMessenger = canal.startsWith("messenger:");
+    const esInstagram = canal.startsWith("instagram:");
+
     // --- GUARDRAIL DE IMPERMEABILIZACIÓN (< 25 m² Y CONTROL DE REENVÍOS) ---
     const ultimoMsgIn = [...historia].reverse().find((m) => m.direccion === "in");
     const pideReenvioImper = Boolean(
@@ -2597,8 +2606,6 @@ export async function responderConIA(
     }
 
     // --- CLIENTE QUE POSPONE / RETOMA ---
-    const esVerdadero = (v: unknown) => v === true || v === "true";
-    const clientePospone = esVerdadero((datosExtraidos as any).cliente_pospone);
     if (ctx.expedienteId) {
       try {
         if (clientePospone) {
@@ -2647,12 +2654,6 @@ export async function responderConIA(
 
     // --- ENVÍO DEL MENSAJE POR WHATSAPP/MESSENGER/INSTAGRAM ---
     let r: { ok: boolean; error?: string };
-    const canal = (ctx.telefono.startsWith("messenger:") || ctx.telefono.startsWith("instagram:"))
-      ? ctx.telefono
-      : (exp?.canal_id || ctx.telefono);
-
-    const esMessenger = canal.startsWith("messenger:");
-    const esInstagram = canal.startsWith("instagram:");
 
     if (esMessenger) {
       const psid = canal.slice(10);
