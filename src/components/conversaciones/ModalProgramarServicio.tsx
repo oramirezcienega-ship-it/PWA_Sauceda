@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { horasDeTexto, mencionaMonto, mensajeServicioCliente, mensajeServicioProveedor } from "@/lib/mensajes-servicio";
+import { linkMapsDeDireccion } from "@/lib/direccion";
 import {
   prepararProgramacionServicio,
   programarServicioSolicitud,
@@ -42,6 +43,8 @@ export function ModalProgramarServicio({
   const [precio, setPrecio] = useState("");
   const [modalidad, setModalidad] = useState<"servicio" | "inspeccion">("servicio");
   const [trabajo, setTrabajo] = useState<string>("");
+  const [direccion, setDireccion] = useState("");
+  const [linkMaps, setLinkMaps] = useState("");
   const [notas, setNotas] = useState("");
   const [avisarCliente, setAvisarCliente] = useState(true);
   const [avisarProveedor, setAvisarProveedor] = useState(true);
@@ -80,6 +83,7 @@ export function ModalProgramarServicio({
     const sugerido = datos?.costosSugeridos[id];
     setCosto(sugerido ? String(sugerido) : "");
   }
+  const linkFinal = linkMaps.trim() || (direccion.trim() ? linkMapsDeDireccion(direccion) : "");
   const datosMensaje = useMemo(
     () =>
       datos
@@ -89,8 +93,8 @@ export function ModalProgramarServicio({
             fecha,
             horaInicio,
             horaFin: horaFin && horaFin > horaInicio ? horaFin : "",
-            direccion: datos.direccion,
-            linkMaps: datos.linkMaps,
+            direccion: direccion.trim(),
+            linkMaps: linkFinal,
             ordenFolio: datos.ordenFolio,
             solicitudFolio: datos.folio,
             costo: costoNum,
@@ -99,7 +103,7 @@ export function ModalProgramarServicio({
             notas,
           }
         : null,
-    [datos, trabajo, fecha, horaInicio, horaFin, costoNum, precioNum, notas]
+    [datos, trabajo, fecha, horaInicio, horaFin, direccion, linkFinal, costoNum, precioNum, notas]
   );
   const previaCliente = textoCliente ?? (datosMensaje ? mensajeServicioCliente(datosMensaje) : "");
   const previaProveedor = textoProveedor ?? (datosMensaje ? mensajeServicioProveedor(datosMensaje) : "");
@@ -116,6 +120,8 @@ export function ModalProgramarServicio({
       setCosto(r.datos.costo ? String(r.datos.costo) : "");
       setProveedorId(r.datos.proveedorId || "");
       setPrecio(r.datos.precioCliente ? String(r.datos.precioCliente) : "");
+      setDireccion(r.datos.direccion || "");
+      setLinkMaps(r.datos.linkMaps || "");
     });
   }, [solicitudId, opcion, fechaInicial, horarioInicial]);
 
@@ -144,6 +150,8 @@ export function ModalProgramarServicio({
         mensajeProveedor: previaProveedor,
         proveedorId: proveedorId || undefined,
         precioCliente: precioNum,
+        direccion: direccion.trim(),
+        linkMaps: linkFinal,
       });
       if (!r.ok) return setError(r.error || "No se pudo programar.");
       setResultado(r);
@@ -230,9 +238,13 @@ export function ModalProgramarServicio({
             <div className="p-4 space-y-3 overflow-y-auto text-sm">
               <div className="rounded-lg bg-slate-50 border border-carbon/10 px-3 py-2 text-[12px] text-carbon/75 space-y-0.5">
                 <div>
-                  <b>{datos.trabajo}</b> · {datos.clienteNombre || "Cliente"}
+                  <b>{trabajo || datos.trabajo}</b> · {datos.clienteNombre || "Cliente"}
                 </div>
-                {datos.direccion && <div>📍 {datos.direccion}</div>}
+                {direccion ? (
+                  <div>📍 {direccion}</div>
+                ) : (
+                  <div className="text-amber-800 font-medium">⚠️ Sin dirección completa — ingrésala abajo</div>
+                )}
                 <div>
                   Solicitud {datos.folio}
                   {datos.ordenFolio ? ` · orden de trabajo ${datos.ordenFolio}` : " · se creará la orden de trabajo"}
@@ -277,6 +289,48 @@ export function ModalProgramarServicio({
                   className={campo}
                 />
               </label>
+
+              <label className="block">
+                <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">
+                  Dirección completa (calle, número, colonia) · Se guarda en el expediente
+                </span>
+                <textarea
+                  value={direccion}
+                  onChange={(e) => {
+                    setDireccion(e.target.value);
+                    setTextoCliente(null);
+                    setTextoProveedor(null);
+                  }}
+                  rows={2}
+                  placeholder="Ej. Calle Josefina Camarena #203, Col. León II"
+                  className={`${campo} resize-y`}
+                />
+              </label>
+
+              <div>
+                <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Link de Google Maps</span>
+                <input
+                  type="url"
+                  value={linkMaps}
+                  onChange={(e) => {
+                    setLinkMaps(e.target.value);
+                    setTextoCliente(null);
+                    setTextoProveedor(null);
+                  }}
+                  placeholder="Link de Google Maps (si lo dejas vacío se genera con la dirección)"
+                  className={campo}
+                />
+                {linkFinal && (
+                  <a
+                    href={linkFinal}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-block text-[11px] font-semibold text-sky-700 underline"
+                  >
+                    📍 {linkMaps.trim() ? "Ver en Google Maps" : "Ver en Google Maps (generado con la dirección)"}
+                  </a>
+                )}
+              </div>
 
               <div className="grid grid-cols-3 gap-2">
                 <label className="block col-span-3 sm:col-span-1">

@@ -2,6 +2,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { enviarBienvenida } from "@/lib/bienvenida";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
+import { extraerDireccionDeTexto, linkMapsDeDireccion } from "@/lib/direccion";
 import { iaAgenteActivo } from "@/lib/ia/agente";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { transcribirAudioMeta } from "@/lib/ia/audio";
@@ -322,27 +323,65 @@ export async function guardarMensajeEntrante(
     // error (p. ej. choque del índice único) => ya existía, no es nuevo.
     const esNuevo = !error;
     if (esNuevo) {
-      // Extracción automática determinista de Google Maps y Ubicación en Expediente y Prospecto
+      // Extracción automática determinista de Dirección, Google Maps y Ubicación en Expediente y Prospecto
       try {
         const urlMapsMatch = datos.texto.match(/https?:\/\/(?:www\.)?(?:maps\.google\.|google\.[a-z.]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl)\/[^\s]+/i);
         const locMatch = datos.texto.match(/\[location:([^,]+),([^\|]+)\|([^\|]*)\|([^\]]*)\]/i);
+        const dirTexto = extraerDireccionDeTexto(datos.texto);
 
-        if (urlMapsMatch || locMatch) {
-          const linkMaps = urlMapsMatch ? urlMapsMatch[0] : `https://maps.google.com/?q=${locMatch![1]},${locMatch![2]}`;
-          const dirDetalle = locMatch ? [locMatch[3], locMatch[4]].filter(Boolean).join(", ") : "";
+        if (urlMapsMatch || locMatch || dirTexto) {
+          const linkMaps = urlMapsMatch
+            ? urlMapsMatch[0]
+            : locMatch
+            ? `https://maps.google.com/?q=${locMatch[1]},${locMatch[2]}`
+            : dirTexto
+            ? linkMapsDeDireccion(dirTexto)
+            : "";
+          const dirDetalle = dirTexto || (locMatch ? [locMatch[3], locMatch[4]].filter(Boolean).join(", ") : "");
 
-          if (datos.expedienteId) {
-            const expUpd: Record<string, any> = { link_google_maps: linkMaps };
-            if (dirDetalle) expUpd.direccion_propiedad = dirDetalle;
-            void sb.from("expedientes").update(expUpd).eq("id", datos.expedienteId);
+          let expId = datos.expedienteId;
+          let proId = datos.prospectoId;
+
+          // Si faltaba el ID en los datos entrantes, resolverlo por teléfono para no perder la dirección
+          if (!expId || !proId) {
+            const normTel = normalizarTelefono(datos.telefono);
+            if (!expId) {
+              const { data: expRow } = await sb
+                .from("expedientes")
+                .select("id")
+                .eq("telefono", normTel)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (expRow) expId = expRow.id;
+            }
+            if (!proId) {
+              const { data: proRow } = await sb
+                .from("prospectos")
+                .select("id")
+                .eq("telefono", normTel)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (proRow) proId = proRow.id;
+            }
           }
-          if (datos.prospectoId) {
-            const proUpd: Record<string, any> = { direccion: dirDetalle || linkMaps };
-            void sb.from("prospectos").update(proUpd).eq("id", datos.prospectoId);
+
+          if (expId) {
+            const expUpd: Record<string, any> = {};
+            if (linkMaps) expUpd.link_google_maps = linkMaps;
+            if (dirDetalle) expUpd.direccion_propiedad = dirDetalle;
+            void sb.from("expedientes").update(expUpd).eq("id", expId);
+          }
+          if (proId) {
+            const proUpd: Record<string, any> = {};
+            if (dirDetalle) proUpd.direccion = dirDetalle;
+            else if (linkMaps) proUpd.direccion = linkMaps;
+            void sb.from("prospectos").update(proUpd).eq("id", proId);
           }
         }
       } catch (errGeo) {
-        console.error("Error al auto-sincronizar geolocalización de mensaje entrante:", errGeo);
+        console.error("Error al auto-sincronizar geolocalización o dirección de mensaje entrante:", errGeo);
       }
 
       await comprobarYSalirDeSecuenciaPorMensaje(sb, datos.telefono);

@@ -11,6 +11,7 @@ import {
   type TipoCoordinacionProveedor,
 } from "@/app/actions/coordinacion-servicio-proveedor";
 import { ModalProgramarServicio } from "@/components/conversaciones/ModalProgramarServicio";
+import { linkMapsDeDireccion } from "@/lib/direccion";
 
 /**
  * Coordinar un servicio o instalación con un proveedor (p. ej. el plomero): Sofía redacta
@@ -456,10 +457,4 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
   );
 }
 
-/** Link de búsqueda de Google Maps para la dirección; si no menciona ciudad, se asume León. */
-function linkMapsDeDireccion(direccion: string): string {
-  const d = direccion.trim().replace(/\s+/g, " ");
-  if (!d) return "";
-  const conCiudad = /le[oó]n|gto|guanajuato|silao|irapuato|celaya|salamanca|lagos|san francisco del rinc[oó]n|purísima/i.test(d) ? d : `${d}, León, Gto.`;
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(conCiudad)}`;
-}
+

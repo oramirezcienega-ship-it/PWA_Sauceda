@@ -14,6 +14,7 @@ import { formatearTelefonoLegible, normalizarTelefono } from "@/lib/telefono";
 import { registrarActividad } from "@/lib/actividades";
 import { costosProveedoresDe, loCotizadoAlCliente, proveedoresDelProducto } from "@/lib/costo-servicio";
 import { MARCA_FOLIO_OT, fechaDeTexto, horasDeTexto, mensajeServicioCliente, mensajeServicioProveedor } from "@/lib/mensajes-servicio";
+import { linkMapsDeDireccion } from "@/lib/direccion";
 
 export interface ProveedorProgramable {
   id: string;
@@ -68,13 +69,18 @@ async function cargar(sb: ReturnType<typeof supabaseServidor>, solicitudId: stri
           .maybeSingle()
       ).data
     : null;
+  let prospectoDireccion = "";
+  if (exp?.prospecto_id && !exp.direccion_propiedad) {
+    const { data: pr } = await sb.from("prospectos").select("direccion").eq("id", exp.prospecto_id).maybeSingle();
+    if (pr?.direccion) prospectoDireccion = pr.direccion;
+  }
   // Solo lo que se va a hacer: la necesidad trae notas ("…; agua tibia. Solicita agendar…").
   const trabajo =
     (sol as any).productos_servicios?.nombre ||
     String(exp?.necesidad || "").split(/[;.]/)[0].trim() ||
     String(sol.descripcion || "").split("\n")[0].replace(/^(Servicio|Instalación):\s*/i, "").split(/[;.]/)[0].trim() ||
     "Servicio";
-  return { sol: sol as any, exp: exp as any, trabajo };
+  return { sol: sol as any, exp: exp as any, prospectoDireccion, trabajo };
 }
 
 /** Datos para el formulario de programación. `opcion` es el horario que eligió el cliente. */
@@ -92,7 +98,9 @@ export async function prepararProgramacionServicio(
       const { abrirOrdenTrabajoSolicitud } = await import("@/lib/solicitudes-proveedor");
       if (await abrirOrdenTrabajoSolicitud(sb, solicitudId)) c = (await cargar(sb, solicitudId))!;
     }
-    const { sol, exp, trabajo } = c;
+    const { sol, exp, prospectoDireccion, trabajo } = c;
+    const direccionCargada = exp?.direccion_propiedad || prospectoDireccion || exp?.fraccionamiento || "";
+    const linkMapsCargado = exp?.link_google_maps || (direccionCargada ? linkMapsDeDireccion(direccionCargada) : "");
 
     // Si la opción vino de Telegram (código día + franja) se conoce la fecha y el horario.
     let fecha = "";
@@ -145,8 +153,8 @@ export async function prepararProgramacionServicio(
         costosSugeridos,
         relacionadosIds,
         clienteNombre: [exp?.cliente, exp?.primer_apellido].filter(Boolean).join(" "),
-        direccion: exp?.direccion_propiedad || exp?.fraccionamiento || "",
-        linkMaps: exp?.link_google_maps || "",
+        direccion: direccionCargada,
+        linkMaps: linkMapsCargado,
         trabajo,
         proveedorNombre: sol.proveedores?.nombre || "Proveedor",
         costo,
@@ -194,6 +202,10 @@ export async function programarServicioSolicitud(input: {
   proveedorId?: string;
   /** Lo que paga el cliente: va en su mensaje y en la OT. */
   precioCliente?: number | null;
+  /** Dirección completa editada/confirmada por el operador */
+  direccion?: string;
+  /** Link de Google Maps */
+  linkMaps?: string;
 }): Promise<ResultadoProgramacionServicio> {
   try {
     await requireAdmin();
@@ -231,18 +243,31 @@ export async function programarServicioSolicitud(input: {
     }
 
     const c = (await cargar(sb, input.solicitudId))!;
-    const { sol, exp, trabajo } = c;
+    const { sol, exp, prospectoDireccion, trabajo } = c;
     const prov = sol.proveedores || {};
     const costo = input.costo && input.costo > 0 ? input.costo : sol.costo_acordado === null ? null : Number(sol.costo_acordado);
     const clienteNombre = [exp?.cliente, exp?.primer_apellido].filter(Boolean).join(" ") || "Cliente";
     const precioCliente = input.precioCliente && input.precioCliente > 0 ? input.precioCliente : null;
-    const direccion = exp?.direccion_propiedad || exp?.fraccionamiento || "";
+    const direccion = input.direccion !== undefined ? input.direccion.trim() : (exp?.direccion_propiedad || prospectoDireccion || exp?.fraccionamiento || "");
+    const linkMaps = input.linkMaps !== undefined ? input.linkMaps.trim() : (exp?.link_google_maps || (direccion ? linkMapsDeDireccion(direccion) : ""));
+
+    // Guardar dirección en expediente y prospecto si viene definida
+    if (sol.expediente_id && (input.direccion?.trim() || input.linkMaps?.trim())) {
+      const actExp: Record<string, any> = {};
+      if (input.direccion?.trim()) actExp.direccion_propiedad = input.direccion.trim();
+      if (input.linkMaps?.trim()) actExp.link_google_maps = input.linkMaps.trim();
+      await sb.from("expedientes").update(actExp).eq("id", sol.expediente_id);
+    }
+    if (exp?.prospecto_id && input.direccion?.trim()) {
+      await sb.from("prospectos").update({ direccion: input.direccion.trim() }).eq("id", exp.prospecto_id);
+    }
+
     const concepto = `${trabajo} · ${sol.folio} · ${cuando}`;
     const descripcion = [
       `SERVICIO PROGRAMADO: ${cuando}`,
       `Proveedor: ${prov.nombre || "—"}${costo ? ` · costo acordado ${pesos(costo)}` : ""}`,
       direccion ? `Dirección: ${direccion}` : "",
-      exp?.link_google_maps ? `Maps: ${exp.link_google_maps}` : "",
+      linkMaps ? `Maps: ${linkMaps}` : "",
       input.notas.trim() ? `Indicaciones: ${input.notas.trim()}` : "",
     ]
       .filter(Boolean)
@@ -303,7 +328,7 @@ export async function programarServicioSolicitud(input: {
       estado: "confirmada",
     };
     if (citaPrevia) {
-      await sb.from("agenda_citas").update(cita).eq("id", citaPrevia.id);
+      await sb.from("agenda_citas").update({ ...cita, fraccionamiento: direccion || exp?.fraccionamiento || "" }).eq("id", citaPrevia.id);
     } else {
       const { error: errCita } = await sb.from("agenda_citas").insert({
         ...cita,
@@ -313,7 +338,7 @@ export async function programarServicioSolicitud(input: {
         cotizacion_id: sol.cotizacion_id || null,
         cliente_nombre: clienteNombre,
         cliente_telefono: normalizarTelefono(input.telefono || exp?.telefono || ""),
-        fraccionamiento: exp?.fraccionamiento || direccion,
+        fraccionamiento: direccion || exp?.fraccionamiento || "",
         tipo_cita: "instalacion",
       });
       if (errCita) console.error("No se pudo agendar el servicio:", errCita.message);
@@ -331,7 +356,7 @@ export async function programarServicioSolicitud(input: {
       horaInicio: input.horaInicio,
       horaFin,
       direccion,
-      linkMaps: exp?.link_google_maps || "",
+      linkMaps,
       ordenFolio: otFolio,
       solicitudFolio: sol.folio,
       costo,
@@ -348,7 +373,7 @@ export async function programarServicioSolicitud(input: {
     }
     if (input.avisarProveedor && sol.proveedor_asignado_id) {
       const texto = conFolio(input.mensajeProveedor?.trim() || mensajeServicioProveedor(datosMensaje));
-      const resumen = `tienes un servicio confirmado: ${trabajo}, ${fechaLeg} a las ${input.horaInicio} h${exp?.fraccionamiento ? ` en ${exp.fraccionamiento}` : ""}${otFolio ? ` (orden de trabajo ${otFolio})` : ""}.`;
+      const resumen = `tienes un servicio confirmado: ${trabajo}, ${fechaLeg} a las ${input.horaInicio} h${direccion ? ` en ${direccion}` : exp?.fraccionamiento ? ` en ${exp.fraccionamiento}` : ""}${otFolio ? ` (orden de trabajo ${otFolio})` : ""}.`;
       resultado.proveedor = await avisarProveedor(sb, sol.proveedor_asignado_id, prov, texto, resumen);
     }
 
