@@ -40,6 +40,8 @@ export function ModalProgramarServicio({
   const [costo, setCosto] = useState("");
   const [proveedorId, setProveedorId] = useState("");
   const [precio, setPrecio] = useState("");
+  const [modalidad, setModalidad] = useState<"servicio" | "inspeccion">("servicio");
+  const [trabajo, setTrabajo] = useState<string>("");
   const [notas, setNotas] = useState("");
   const [avisarCliente, setAvisarCliente] = useState(true);
   const [avisarProveedor, setAvisarProveedor] = useState(true);
@@ -53,6 +55,25 @@ export function ModalProgramarServicio({
   const proveedor = datos?.proveedores.find((p) => p.id === proveedorId) || null;
   const proveedorNombre = proveedor?.nombre || datos?.proveedorNombre || "el proveedor";
 
+
+  function cambiarModalidad(nueva: "servicio" | "inspeccion") {
+    setModalidad(nueva);
+    setTextoCliente(null);
+    setTextoProveedor(null);
+    if (nueva === "inspeccion") {
+      setPrecio("0");
+      setCosto("0");
+      if (datos?.trabajo && !/inspecci[oó]n|diagn[oó]stico/i.test(trabajo)) {
+        setTrabajo(`Inspección y diagnóstico de ${datos.trabajo}`);
+      }
+    } else {
+      setPrecio(datos?.precioCliente ? String(datos.precioCliente) : "");
+      setCosto(datos?.costo ? String(datos.costo) : "");
+      if (datos?.trabajo) {
+        setTrabajo(datos.trabajo);
+      }
+    }
+  }
   function cambiarProveedor(id: string) {
     setProveedorId(id);
     // El costo pasa al del catálogo del nuevo proveedor (si lo tiene).
@@ -64,7 +85,7 @@ export function ModalProgramarServicio({
       datos
         ? {
             clienteNombre: datos.clienteNombre,
-            trabajo: datos.trabajo,
+            trabajo: trabajo || datos.trabajo,
             fecha,
             horaInicio,
             horaFin: horaFin && horaFin > horaInicio ? horaFin : "",
@@ -78,7 +99,7 @@ export function ModalProgramarServicio({
             notas,
           }
         : null,
-    [datos, fecha, horaInicio, horaFin, costoNum, precioNum, notas]
+    [datos, trabajo, fecha, horaInicio, horaFin, costoNum, precioNum, notas]
   );
   const previaCliente = textoCliente ?? (datosMensaje ? mensajeServicioCliente(datosMensaje) : "");
   const previaProveedor = textoProveedor ?? (datosMensaje ? mensajeServicioProveedor(datosMensaje) : "");
@@ -217,6 +238,46 @@ export function ModalProgramarServicio({
                   {datos.ordenFolio ? ` · orden de trabajo ${datos.ordenFolio}` : " · se creará la orden de trabajo"}
                 </div>
               </div>
+                            {/* Selector de Modalidad: Servicio con costo vs Inspección sin costo */}
+              <div className="flex rounded-lg border border-carbon/15 bg-slate-100 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => cambiarModalidad("servicio")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-md transition cursor-pointer ${
+                    modalidad === "servicio"
+                      ? "bg-white shadow text-carbon"
+                      : "text-carbon/60 hover:text-carbon"
+                  }`}
+                >
+                  🛠️ Servicio con costo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cambiarModalidad("inspeccion")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-md transition cursor-pointer ${
+                    modalidad === "inspeccion"
+                      ? "bg-indigo-600 shadow text-white font-bold"
+                      : "text-carbon/60 hover:text-carbon"
+                  }`}
+                >
+                  🔍 Inspección / Diagnóstico previo ($0)
+                </button>
+              </div>
+
+              <label className="block">
+                <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Concepto o trabajo</span>
+                <input
+                  type="text"
+                  value={trabajo}
+                  onChange={(e) => {
+                    setTrabajo(e.target.value);
+                    setTextoCliente(null);
+                    setTextoProveedor(null);
+                  }}
+                  className={campo}
+                />
+              </label>
+
               <div className="grid grid-cols-3 gap-2">
                 <label className="block col-span-3 sm:col-span-1">
                   <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Fecha</span>

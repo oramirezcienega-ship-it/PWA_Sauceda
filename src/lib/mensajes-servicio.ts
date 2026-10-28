@@ -54,6 +54,22 @@ function horario(d: DatosMensajeServicio): string {
 
 export function mensajeServicioCliente(d: DatosMensajeServicio): string {
   const nombre = d.clienteNombre.trim().split(/\s+/)[0] || "";
+  const esInspeccion = /inspecci[oó]n|diagn[oó]stico|valoraci[oó]n/i.test(d.trabajo);
+  if (esInspeccion) {
+    return (
+      `¡Hola${nombre ? ` ${nombre}` : ""}! ✅ Te confirmamos tu visita de inspección y diagnóstico con SAUCEDA:\n\n` +
+      `🔍 *Concepto:* ${d.trabajo}\n` +
+      `📅 *Fecha:* ${fechaServicioLegible(d.fecha)}\n` +
+      `⏰ *Horario:* ${horario(d)}\n` +
+      (d.direccion ? `📍 *Dirección:* ${d.direccion}\n` : "") +
+      (d.precioCliente && d.precioCliente > 0
+        ? `💰 *Costo de la visita:* ${pesosMx(d.precioCliente)}\n`
+        : `💰 *Costo de la visita:* Sin costo (diagnóstico técnico en sitio)\n`) +
+      `🧾 *Folio:* ${d.ordenFolio || MARCA_FOLIO_OT}\n` +
+      (d.notas.trim() ? `📌 ${d.notas.trim()}\n` : "") +
+      `\nNuestro técnico especialista acudirá a revisar físicamente las condiciones del equipo para diagnosticar la falla y entregarte la cotización exacta de reparación. Por favor ten libre el acceso al área. Si necesitas cambiar algo, respóndenos por aquí. 💚`
+    );
+  }
   return (
     `¡Hola${nombre ? ` ${nombre}` : ""}! ✅ Te confirmamos tu servicio con SAUCEDA:\n\n` +
     `🔧 *Servicio:* ${d.trabajo}\n` +
@@ -68,19 +84,23 @@ export function mensajeServicioCliente(d: DatosMensajeServicio): string {
 }
 
 export function mensajeServicioProveedor(d: DatosMensajeServicio): string {
+  const esInspeccion = /inspecci[oó]n|diagn[oó]stico|valoraci[oó]n/i.test(d.trabajo);
+  const encabezado = esInspeccion ? "Inspección / Diagnóstico confirmado" : "Servicio confirmado";
   return (
-    `✅ *Servicio confirmado · SAUCEDA*\n\n` +
-    `🧾 Orden de trabajo *${d.ordenFolio || MARCA_FOLIO_OT}* (solicitud ${d.solicitudFolio})\n` +
-    `🔧 ${d.trabajo}\n` +
+    `✅ *${encabezado} · SAUCEDA*\n\n` +
+    `🧾 Folio *${d.ordenFolio || MARCA_FOLIO_OT}* (solicitud ${d.solicitudFolio})\n` +
+    `🔍 ${d.trabajo}\n` +
     `📅 *${fechaServicioLegible(d.fecha)}*\n` +
     `⏰ *${horario(d)}*\n` +
     `👤 Cliente: ${d.clienteNombre.trim() || "—"}\n` +
     (d.clienteTelefono ? `📱 WhatsApp del cliente: https://wa.me/${d.clienteTelefono}\n` : "") +
     (d.direccion ? `📍 ${d.direccion}\n` : "") +
     (d.linkMaps ? `🗺 ${d.linkMaps}\n` : "") +
-    (d.costo ? `💲 Costo acordado: ${pesosMx(d.costo)}\n` : "") +
+    (d.costo && d.costo > 0 ? `💲 Costo acordado: ${pesosMx(d.costo)}\n` : "") +
     (d.notas.trim() ? `📌 ${d.notas.trim()}\n` : "") +
-    `\nPor favor confírmanos de recibido. ¡Gracias!`
+    (esInspeccion
+      ? `\n📌 *Objetivo de la visita:* Revisar en sitio el equipo/instalación, diagnosticar la falla o fugas y definir lo necesario para cotizar la reparación definitiva.\n\nPor favor confírmanos de recibido. ¡Gracias!`
+      : `\nPor favor confírmanos de recibido. ¡Gracias!`)
   );
 }
 
