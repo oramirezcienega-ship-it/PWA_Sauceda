@@ -76,6 +76,14 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [datos, proveedorId]);
 
+  // Si cambia el tipo (ej. a Inspección) o el proveedor, re-redactar automáticamente
+  useEffect(() => {
+    if (primeraRef.current && datos && proveedorId) {
+      void redactar();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo]);
+
   async function redactar() {
     if (!datos || !proveedorId) return;
     const version = ++versionRef.current;
@@ -211,8 +219,8 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
           <div className="flex items-center gap-2.5">
             <span className="text-xl p-1.5 bg-sky-100 rounded-lg shrink-0">🔧</span>
             <div>
-              <h3 className="font-titular text-sm sm:text-base font-bold text-sky-900">Coordinar servicio con proveedor</h3>
-              <p className="text-[11px] text-carbon/50">Sofía redacta el WhatsApp para el proveedor; tú lo revisas y lo mandas.</p>
+              <h3 className="font-titular text-sm sm:text-base font-bold text-sky-900">Coordinar servicio o inspección con proveedor</h3>
+              <p className="text-[11px] text-carbon/50">Sofía redacta el WhatsApp para el proveedor (Clemente, plomero, etc.); tú lo revisas y lo mandas.</p>
             </div>
           </div>
           <button
@@ -234,8 +242,9 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
                 <label className="block">
                   <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Tipo</span>
                   <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoCoordinacionProveedor)} className={campo}>
-                    <option value="servicio">Servicio</option>
-                    <option value="instalacion">Instalación</option>
+                    <option value="servicio">Servicio (Mantenimiento / Trabajo)</option>
+                    <option value="inspeccion">🔍 Inspección / Diagnóstico Técnico</option>
+                    <option value="instalacion">Instalación nueva</option>
                   </select>
                 </label>
                 <label className="block">

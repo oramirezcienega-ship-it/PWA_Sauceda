@@ -14,7 +14,7 @@ import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { registrarActividad } from "@/lib/actividades";
 import { costosProveedoresDe, loCotizadoAlCliente, proveedoresDelProducto } from "@/lib/costo-servicio";
 
-export type TipoCoordinacionProveedor = "servicio" | "instalacion";
+export type TipoCoordinacionProveedor = "servicio" | "instalacion" | "inspeccion";
 
 export interface ProveedorCoordinable {
   id: string;
@@ -189,7 +189,7 @@ export async function registrarCoordinacionProveedor(input: {
       if (Object.keys(cambios).length) await sb.from("expedientes").update(cambios).eq("id", expediente.id);
     }
 
-    const que = input.tipo === "instalacion" ? "instalación" : "servicio";
+    const que = input.tipo === "instalacion" ? "instalación" : input.tipo === "inspeccion" ? "inspección técnica" : "servicio";
 
     // Con costo, si el cliente ya tiene OT abierta, queda ahí; si no, la abre la aceptación del proveedor.
     let ot: { folio: string; creada: boolean; error?: string } | null = null;
@@ -269,7 +269,7 @@ export async function enviarCoordinacionOficial(
     const { enviarWhatsAppProveedor } = await import("@/lib/whatsapp-proveedores");
     const trabajo = input.trabajo.split(/[;.]/)[0].trim() || "un servicio";
     const lugar = input.direccion.split(",").slice(0, 2).join(",").trim();
-    const resumen = `tenemos un servicio para ti: ${trabajo}${lugar ? ` en ${lugar}` : ""}${input.fecha ? `, ${fechaLegible(input.fecha)}${input.horario ? ` ${input.horario}` : ""}` : ""}. ¿Lo puedes tomar?`;
+    const resumen = `tenemos ${input.tipo === "inspeccion" ? "una inspección técnica" : "un servicio"} para ti: ${trabajo}${lugar ? ` en ${lugar}` : ""}${input.fecha ? `, ${fechaLegible(input.fecha)}${input.horario ? ` ${input.horario}` : ""}` : ""}. ¿Lo puedes tomar?`;
     const env = await enviarWhatsAppProveedor(sb, { proveedorId: input.proveedorId, texto: input.mensaje, resumen, agente: perfil?.nombre || "" });
     if (!env.ok) return { ok: false, error: env.error };
     const r = await registrarCoordinacionProveedor({ ...input, mensaje: input.mensaje });

@@ -3153,11 +3153,11 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         <button
                           type="button"
                           onClick={() => setMostrarServicioProveedor(true)}
-                          title="Sofía redacta el WhatsApp para el proveedor (p. ej. el plomero) con el trabajo, la fecha que pide el cliente y la dirección"
+                          title="Coordinar servicio, instalación o inspección técnica con un proveedor (Clemente, plomero, etc.)"
                           className="flex items-center gap-1 rounded bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
                         >
                           <span>🔧</span>
-                          <span>Coordinar Servicio</span>
+                          <span>Coordinar Proveedor</span>
                         </button>
                       )}
                       {/* Botón: Rescate Móvil (Estrategia de Doble Línea / Evolution API) */}

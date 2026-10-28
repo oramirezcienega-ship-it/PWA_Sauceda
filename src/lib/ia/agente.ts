@@ -2901,7 +2901,7 @@ export async function generarMensajeCoordinacionProveedor(
   datos: {
     telefono: string;
     proveedorNombre: string;
-    tipo: "servicio" | "instalacion";
+    tipo: "servicio" | "instalacion" | "inspeccion";
     clienteNombre: string;
     direccion: string;
     linkMaps: string;
@@ -2933,12 +2933,12 @@ export async function generarMensajeCoordinacionProveedor(
     .join("\n")
     .slice(-8000);
 
-  const que = datos.tipo === "instalacion" ? "una instalación" : "un servicio";
+  const que = datos.tipo === "instalacion" ? "una instalación" : datos.tipo === "inspeccion" ? "una inspección o visita de diagnóstico técnico" : "un servicio";
   const system = `Eres Sofía, de SAUCEDA Construye (León, Guanajuato). Vas a escribir UN mensaje de WhatsApp para ${datos.proveedorNombre}, proveedor de confianza de la empresa, para coordinar ${que} en casa de un cliente.
 
 El mensaje debe:
 - Saludar por su nombre, en tono cordial y directo, como compañeros de trabajo (de tú).
-- Decir en 1-2 frases qué hay que hacer, sacado de la conversación con el cliente y de los datos de abajo. Si el cliente mencionó detalles útiles para el proveedor (síntomas, medidas, material, acceso), inclúyelos breves.
+- Decir en 1-2 frases qué hay que hacer, sacado de la conversación con el cliente y de los datos de abajo. Si es inspección o diagnóstico técnico, aclara que acuda a revisar las condiciones del equipo o instalación en sitio para diagnosticar antes de cotizar la reparación definitiva. Si el cliente mencionó detalles útiles (síntomas, fugas, fotos enviadas, acceso), inclúyelos breves.
 - Proponer la fecha y horario que pide el cliente y preguntar si le queda o qué opción tiene.
 - Incluir la dirección completa (y el link de Google Maps si hay) para que la confirme y pueda agendar la visita.
 - Si viene el costo del proveedor, mencionarlo como el costo acordado del trabajo y pedir que lo confirme.
