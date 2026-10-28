@@ -87,21 +87,26 @@ export async function enviarYRegistrar(
 /** Envía la imagen comparativa para `metros` m² (una sola vez por expediente y cantidad de metros). */
 export async function enviarComparativaImper(
   sb: SupabaseClient,
-  ctx: { canal: string; telefono: string; expedienteId?: string | null; agente: string; metros: number }
+  ctx: { canal: string; telefono: string; expedienteId?: string | null; agente: string; metros: number; forzarReenvio?: boolean }
 ): Promise<boolean> {
   try {
     const marca = `Comparativa de impermeabilización para ${ctx.metros} m²`;
-    if (await yaEnviado(sb, ctx.expedienteId, marca)) return false;
+    if (!ctx.forzarReenvio && (await yaEnviado(sb, ctx.expedienteId, marca))) return false;
 
     const paquetes = await paquetesConPreciosVigentes(sb);
     const png = await generarImagenComparativaImper(paquetes, ctx.metros);
+    const detalleTexto = ctx.metros < 25
+      ? `Estándar y Premium (mínimo 25 m² aplicado). Acrílico omitido.`
+      : `Acrílico, Estándar y Premium.`;
     const ok = await enviarYRegistrar(sb, ctx, png, "image/png", `Comparativa-${ctx.metros}m2.png`, `${marca}. Precios sin factura (con factura se agrega IVA).`);
     if (ok && ctx.expedienteId) {
       await registrarActividad(sb, {
         expedienteId: ctx.expedienteId,
         tipo: "mensaje",
-        titulo: "Sofía envió la comparativa de precios de impermeabilización",
-        detalle: `${ctx.metros} m² · Acrílico, Estándar y Premium.`,
+        titulo: ctx.forzarReenvio
+          ? `Sofía reenvió la comparativa de precios de impermeabilización (${ctx.metros} m²)`
+          : "Sofía envió la comparativa de precios de impermeabilización",
+        detalle: `${ctx.metros} m² · ${detalleTexto}`,
       });
     }
     return ok;
@@ -251,3 +256,5 @@ export async function enviarFotosMantenimiento(
     return 0;
   }
 }
+
+export { buscarMetrosEnHistorial, sanitizarRespuestaImper } from "./imper-reglas";

@@ -22,7 +22,7 @@ const h = (type: string, style: Record<string, any>, children?: any, extra: Reco
 
 const dinero = (n: number) => n.toLocaleString("es-MX", { maximumFractionDigits: 0 });
 
-function tarjeta(pkg: PaqueteInfo, m2: number): Nodo {
+function tarjeta(pkg: PaqueteInfo, m2: number, cardWidth = 346): Nodo {
   const premium = !!pkg.destacado;
   const { total, m2Cobrados, precioM2, aplicaMinimo } = cotizarPaquete(pkg, m2);
   const acento = premium ? DORADO_OSC : VERDE_CLARO;
@@ -33,7 +33,7 @@ function tarjeta(pkg: PaqueteInfo, m2: number): Nodo {
     "div",
     {
       flexDirection: "column",
-      width: 346,
+      width: cardWidth,
       height: 595,
       padding: 22,
       borderRadius: 20,
@@ -64,7 +64,7 @@ function tarjeta(pkg: PaqueteInfo, m2: number): Nodo {
           )
         : null,
       h("div", { color: acento, fontSize: 12, fontWeight: 800 }, pkg.badge),
-      h("div", { color: "#0F172A", fontSize: 20, fontWeight: 800, marginTop: 6, lineHeight: 1.15, maxWidth: premium ? 250 : 300 }, pkg.titulo),
+      h("div", { color: "#0F172A", fontSize: 20, fontWeight: 800, marginTop: 6, lineHeight: 1.15, maxWidth: premium ? (cardWidth > 400 ? 420 : 250) : (cardWidth > 400 ? 460 : 300) }, pkg.titulo),
       h("div", { color: "#64748B", fontSize: 13, marginTop: 4 }, pkg.subtitulo),
       // 1. Tarifa por m² (Hero principal accesible)
       h("div", { alignItems: "flex-end", marginTop: 12, color: premium ? DORADO_OSC : VERDE }, [
@@ -160,7 +160,12 @@ export async function generarImagenComparativaImper(paquetes: PaqueteInfo[], m2:
   const satori = (await import("satori")).default;
   const sharp = (await import("sharp")).default;
 
-  const textoPill = `Propuesta para: ${m2} m²`;
+  // Si la superficie es menor a 25 m², omitimos el acrílico y mostramos solo las 2 opciones en manto asfáltico
+  const pkgsParaMostrar = m2 < 25 ? paquetes.filter((p) => p.id !== "acrilico") : paquetes;
+  const dosTarjetas = pkgsParaMostrar.length === 2;
+  const cardWidth = dosTarjetas ? 515 : 346;
+
+  const textoPill = m2 < 25 ? `Propuesta: ${m2} m² (Mínimo 25 m²)` : `Propuesta para: ${m2} m²`;
   const alto = 780;
 
   const arbol = h(
@@ -174,7 +179,11 @@ export async function generarImagenComparativaImper(paquetes: PaqueteInfo[], m2:
         ]),
         h("div", { backgroundColor: VERDE_CLARO, color: "#FFFFFF", fontSize: 19, fontWeight: 800, padding: "11px 22px", borderRadius: 24 }, textoPill),
       ]),
-      h("div", { padding: "20px 54px 0", justifyContent: "space-between" }, paquetes.map((p) => tarjeta(p, m2))),
+      h(
+        "div",
+        { padding: dosTarjetas ? "20px 60px 0" : "20px 54px 0", justifyContent: "space-between" },
+        pkgsParaMostrar.map((p) => tarjeta(p, m2, cardWidth))
+      ),
       h(
         "div",
         { justifyContent: "center", marginTop: 12, color: "#64748B", fontSize: 12.5 },

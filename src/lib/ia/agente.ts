@@ -10,6 +10,8 @@ import {
   enviarFotosMantenimiento,
   metrosClaros,
   ETIQUETA_PAQUETE,
+  buscarMetrosEnHistorial,
+  sanitizarRespuestaImper,
 } from "@/lib/ia/imper-envios";
 import { cargarProductosImper, fichaProductosParaPrompt, paquetesConFicha } from "@/lib/ia/catalogo-imper";
 import { preguntasImperParaPrompt } from "@/features/llamadas-ia/lineas/impermeabilizacion";
@@ -584,8 +586,11 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   Asigna "paso_flujo": "paso_1".
 
 - PASO 2: METROS CLAROS → COMPARATIVA DE OPCIONES (Al tener los metros cuadrados)
-  Se activa en cuanto el cliente indica de forma CLARA los metros cuadrados de su azotea (un número, aunque sea aproximado: "80", "unos 80 m2", "como 60 metros"), o si ya los conocemos por los "Datos del cliente".
-  - Si los metros son claros: en "datosExtraidos" pon "metros" (número entero) y "metros_claros": true. El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, una imagen comparativa con la inversión de las 3 opciones para esos metros. Responde con este mensaje:
+  Se activa en cuanto el cliente indica de forma CLARA los metros cuadrados de su azotea (un número, aunque sea aproximado: "80", "unos 80 m2", "como 60 metros"), o si ya los conocemos por los "Datos del cliente" o el historial reciente.
+  - Si los metros son claros: en "datosExtraidos" pon "metros" (número entero) y "metros_claros": true. El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, una imagen comparativa con la inversión para esos metros.
+
+  🚨 CASO A: SUPERFICIES DE 25 M² O MÁS (3 Opciones normales):
+  Si los metros son 25 o más, responde con este mensaje:
   "¡Excelente! Para tu azotea de aproximadamente [METROS] m², el costo por metro cuadrado instalado va desde $165/m² en sistema acrílico hasta $225/m² en manto asfáltico termo-fusionado con gravilla (según el paquete y garantía de 3, 5 o 10 años).
 
   En la siguiente imagen puedes ver el comparativo de las 3 opciones con su inversión estimada total ya con material, sellado de grietas y mano de obra incluidos 👇
@@ -593,6 +598,29 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   Todas nuestras opciones incluyen preparación profunda de la losa, retiro de material suelto y garantía formal por escrito. Aceptamos efectivo, transferencia o tarjeta con opción a meses por Mercado Pago.
 
   Para afinar tus medidas exactas y verificar que no pagues un solo metro de más, podemos programar una inspección técnica de diagnóstico sin costo en tu domicilio. ¿Te gustaría que pase nuestro técnico esta semana a revisar tu azotea?"
+
+  🚨 CASO B: SUPERFICIES MENORES A 25 M² (TARIFA MÍNIMA DE SERVICIO - PROHIBIDO ACRÍLICO):
+  Si los metros son MENORES a 25 m² (ej. 10, 15, 18, 20 m²):
+  - ESTÁ ESTRICTAMENTE PROHIBIDO OFRECER, MENCIONAR O COTIZAR SISTEMA ACRÍLICO.
+  - Presenta ÚNICAMENTE las 2 opciones en Manto Asfáltico Termo-fusionado con gravilla con la TARIFA MÍNIMA DE SERVICIO (25 m²):
+    🔸 Opción 1: Manto Estándar 3.5 mm con gravilla ($5,625 MXN) · 5 años de garantía formal por escrito.
+    ⭐ Opción 2: Manto Premium 4.0 mm poliéster con gravilla ($6,875 MXN) · 10 años de garantía formal por escrito.
+  - NUNCA calcules ni cotices multiplicando por metro lineal ($225 × 18 = $4,050). Se cotiza el mínimo oficial: $5,625 MXN Estándar y $6,875 MXN Premium.
+  - Responde con este mensaje adaptado:
+  "¡Excelente! Para tu azotea de [METROS] m², al ser un área menor a 25 m² aplica nuestra tarifa mínima de servicio (25 m²) con todo incluido (limpieza profunda, sellado de grietas con cemento plástico, materiales, mano de obra y garantía por escrito):
+
+  En la siguiente imagen puedes ver el comparativo de nuestras 2 opciones en manto asfáltico termo-fusionado 👇
+
+  Todas nuestras opciones incluyen preparación profunda de la losa y garantía formal por escrito.
+
+  ¿Cuál de las 2 opciones se adapta mejor a tu necesidad? Compártenos tu colonia en León y coordinamos una revisión técnica sin costo para revisar tu azotea."
+
+  🚨 CASO C: REENVÍO DE COTIZACIÓN O INFORMACIÓN PERDIDA:
+  Si el cliente solicita reenvío ("reenvíamela", "reinicié mi teléfono", "perdí la cotización", "pásamela de nuevo"):
+  - Confirma con amabilidad el reenvío y anuncia la cotización con "👇" (el sistema volverá a enviar la imagen comparativa automáticamente).
+  - Mantén "metros_claros": true, "paso_flujo": "paso_2" y en "datosExtraidos" coloca "metros" con la cantidad de metros del historial.
+  - Si la superficie es menor a 25 m², dale en texto las 2 opciones en manto asfáltico ($5,625 Estándar / $6,875 Premium) y NUNCA menciones acrílico.
+
   - Si el cliente NO da metros claros (dice "no sé", "es grande", "una casa normal", "no sé cómo medir", etc.):
     NO pongas "metros_claros" (déjalo false/null) y NO anuncies ninguna imagen todavía. Ayúdale con empatía a estimar:
     "No te preocupes, la mayoría no tiene las medidas exactas a la mano. Para darnos una idea rápida: ¿tu casa es de 1 o 2 pisos? En León, una casa típica de 1 piso suele andar entre 45 y 60 m², y de 2 pisos entre 70 y 90 m². O si prefieres, podemos tomar una medida estimada promedio para mostrarte la comparativa de precios, ¿te late?"
@@ -614,10 +642,11 @@ ${minimosImper.length > 0 ? `  - MÍNIMO DE COBRO POR OPCIÓN (lo calcula el sis
     Valida su decisión con calidez y ofrece respaldo activo:
     "¡Claro que sí! Revísenlo con toda calma. Si te ayuda para evaluarlo juntos, te puedo compartir fotos de trabajos terminados o la ficha de garantía. Y si surge cualquier duda de materiales o formas de pago, aquí sigo a tus órdenes 👍"
   * Si el cliente pregunta por el precio por metro cuadrado o no entiende la imagen:
-    Sé transparente y dale con amabilidad la referencia directa en texto:
-    - Acrílico con malla (3 años): aprox. $165 MXN / m²
-    - Estándar manto 3.5 con gravilla (5 años): aprox. $225 MXN / m²
-    - Premium manto 4.0 poliéster (10 años): aprox. $275 MXN / m²
+    - Si la azotea es menor a 25 m²: aclara que aplica la tarifa mínima de cobro de 25 m² ($5,625 Estándar 3.5 mm y $6,875 Premium 4.0 mm), y que en superficies pequeñas no se maneja acrílico.
+    - Si la azotea tiene 25 m² o más: dale con amabilidad la referencia directa en texto:
+      - Acrílico con malla (3 años): aprox. $165 MXN / m²
+      - Estándar manto 3.5 con gravilla (5 años): aprox. $225 MXN / m²
+      - Premium manto 4.0 poliéster (10 años): aprox. $275 MXN / m²
     (Aclara que en superficies amplias a partir de 60 u 80 m² aplica precio por volumen aún más bajo, y que todos los precios ya incluyen mano de obra, preparación y sellado).
     Remata invitándolo a la visita técnica: "¿En qué colonia se encuentra tu casa para agendar la revisión sin costo?"
   * Si pregunta por lluvias ("¿se puede hacer en temporada de lluvias?"):
@@ -1796,6 +1825,25 @@ export async function responderConIA(
       .replace(/^#{1,6}\s+/gm, "");
 
 
+    // --- GUARDRAIL DE IMPERMEABILIZACIÓN (< 25 m² Y CONTROL DE REENVÍOS) ---
+    const ultimoMsgIn = [...historia].reverse().find((m) => m.direccion === "in");
+    const pideReenvioImper = Boolean(
+      ultimoMsgIn?.texto &&
+      /reenv[ií]|m[aá]ndam|perd[ií]|reinici|borr|no me llego|otra vez|pasa de nuevo/i.test(ultimoMsgIn.texto)
+    );
+    const metrosHistorial = buscarMetrosEnHistorial(historia, exp);
+    const metrosImper = metrosClaros((datosExtraidos as any).metros) || metrosHistorial;
+    const esImperFlujoOExp = exp?.tipo_negocio === "construccion-impermeabilizacion" || (datosExtraidos as any).paso_flujo;
+    const anunciaComp = /comparativa/i.test(textoRespuesta);
+    const vaAEnviarComp = Boolean(
+      !clientePospone && !esMessenger && !esInstagram &&
+      metrosImper &&
+      ((anunciaComp && (datosExtraidos as any).paso_flujo === "paso_2") || (pideReenvioImper && (anunciaComp || /👇|cotizaci[óo]n/i.test(textoRespuesta))))
+    );
+    if (esImperFlujoOExp) {
+      textoRespuesta = sanitizarRespuestaImper(textoRespuesta, metrosImper, vaAEnviarComp);
+    }
+
     // Borrador para el asesor: se detiene antes de guardar datos o enviar.
     if (ctx.soloBorrador) return textoRespuesta;
 
@@ -2700,13 +2748,14 @@ export async function responderConIA(
     // --- IMPERMEABILIZACIÓN: comparativa de precios e imágenes de referencia (sólo WhatsApp) ---
     if (r.ok && !clientePospone && !esMessenger && !esInstagram && (exp?.tipo_negocio === "construccion-impermeabilizacion" || (datosExtraidos as any).paso_flujo)) {
       const ctxEnvio = { canal, telefono: ctx.telefono, expedienteId: ctx.expedienteId ?? null, agente: NOMBRE_AGENTE };
-      const claros = (datosExtraidos as any).metros_claros === true || (datosExtraidos as any).metros_claros === "true";
-      const metrosImper = metrosClaros((datosExtraidos as any).metros);
-      // Sólo se envían medios que el texto de Sofía anunció en este turno (evita mandarlos fuera de contexto)
+      const claros = (datosExtraidos as any).metros_claros === true || (datosExtraidos as any).metros_claros === "true" || (pideReenvioImper && Boolean(metrosImper));
+      // Sólo se envían medios que el texto de Sofía anunció en este turno o si el cliente pidió reenvío explícito
       const anunciaComparativa = /comparativa/i.test(textoRespuesta);
       const anunciaFotos = /(fotos?|im[aá]genes|imagen de referencia|👇)/i.test(textoRespuesta);
-      if (claros && metrosImper && anunciaComparativa && (datosExtraidos as any).paso_flujo === "paso_2") {
-        await enviarComparativaImper(sb, { ...ctxEnvio, metros: metrosImper });
+      const debeEnviarComp = (claros && metrosImper && anunciaComparativa && (datosExtraidos as any).paso_flujo === "paso_2") ||
+                             (pideReenvioImper && metrosImper && (anunciaComparativa || /👇|cotizaci[óo]n/i.test(textoRespuesta)));
+      if (debeEnviarComp && metrosImper) {
+        await enviarComparativaImper(sb, { ...ctxEnvio, metros: metrosImper, forzarReenvio: pideReenvioImper });
       }
       if (/fotos/i.test(textoRespuesta) && (datosExtraidos as any).paso_flujo === "paso_1" && ((updates.tipo_negocio as string | undefined) || exp?.tipo_negocio) === "construccion-impermeabilizacion") {
         // Fotos de la impermeabilización estándar sólo cuando el cliente pidió ver ejemplos (una sola vez)
