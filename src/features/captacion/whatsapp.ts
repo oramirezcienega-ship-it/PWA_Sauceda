@@ -236,6 +236,7 @@ async function obtenerOCrearProspecto(
   adset_name = "",
   ad_name = "",
   origen: OrigenAdquisicion = "whatsapp",
+  tipoNegocio?: string,
 ): Promise<string> {
   const { data: existentes } = await sb
     .from("prospectos")
@@ -784,8 +785,22 @@ export async function registrarLeadWhatsApp(
     ad_name = "Sin Etiqueta (Genérico)";
   }
 
+  // Detectar el tipo de negocio desde el mensaje y la metadata de pauta antes de asignar prospecto
+  const tipoNegocio = detectarTipoNegocio(
+    lead.mensaje ?? "",
+    [campaign_name, adset_name, ad_name].filter(Boolean).join(" ")
+  );
+
   // Prospecto (persona): se busca o se crea por teléfono.
-  const prospectoId = await obtenerOCrearProspecto(sb, lead, campaign_name, adset_name, ad_name, origenLead);
+  const prospectoId = await obtenerOCrearProspecto(
+    sb,
+    lead,
+    campaign_name,
+    adset_name,
+    ad_name,
+    origenLead,
+    tipoNegocio
+  );
 
   // 1. Detección de token universal (Handshake Enlace Puente wa.me)
   // Formato universal esperado: [EXP-XXX], [COT-XXX], [PRO-XXX], EXP-XXX, COT-XXX o PRO-XXX
@@ -964,10 +979,6 @@ export async function registrarLeadWhatsApp(
   const id = await siguienteId(sb);
   const esInmobiliario = tipoNegocio === "promocion_venta" || tipoNegocio === "asesoria_compra" || tipoNegocio === "traspaso_compra";
   const asesorId = esInmobiliario ? await obtenerIdAsesorInmobiliario(sb) : await obtenerIdAsesorGerardo(sb);
-  const tipoNegocio = detectarTipoNegocio(
-    lead.mensaje ?? "",
-    [campaign_name, adset_name, ad_name].filter(Boolean).join(" ")
-  );
   await insertarExpedienteSeguro(sb, {
     id,
     cliente: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
