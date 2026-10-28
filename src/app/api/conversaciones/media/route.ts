@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { obtenerCredencialesWhatsApp } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Falta mediaId" }, { status: 400 });
     }
 
-    const token = process.env.WHATSAPP_TOKEN;
+    let token = process.env.WHATSAPP_TOKEN;
+    if (!token) {
+      try {
+        const creds = await obtenerCredencialesWhatsApp();
+        token = creds.token;
+      } catch (errCreds) {
+        console.error("[Media Proxy] Error al obtener credenciales de WhatsApp:", errCreds);
+      }
+    }
     if (!token) {
       return NextResponse.json({ error: "WhatsApp no está configurado en el servidor" }, { status: 500 });
     }
@@ -49,11 +58,22 @@ export async function GET(request: NextRequest) {
     const isDownload = searchParams.get("download") === "1";
     const filenameParam = searchParams.get("filename");
     const acceptHeader = request.headers.get("accept") || "";
+    const secFetchDest = request.headers.get("sec-fetch-dest") || "";
+    const secFetchMode = request.headers.get("sec-fetch-mode") || "";
 
-    // Si el usuario navegó directamente a la URL en el navegador / PWA (Accept: text/html) y es una imagen,
-    // renderizamos una vista HTML responsiva con botón claro de "Volver al chat" y safe-area para móviles/iOS.
-    // Esto previene que en iOS PWA (modo standalone) el usuario quede atrapado en una pantalla blanca sin controles.
-    if (!isRaw && !isDownload && acceptHeader.includes("text/html") && contentType.startsWith("image/")) {
+    // Si la petición viene de un tag <img> (sec-fetch-dest === "image"), trae accept image/*, o pide &raw=1,
+    // SIEMPRE debemos devolver el binario de la imagen pura. Solo servimos el visor HTML si el usuario
+    // navegó expresamente a la URL como documento principal en la barra de direcciones / pestaña nueva.
+    const esPeticionDeImagen =
+      isRaw ||
+      secFetchDest === "image" ||
+      (acceptHeader.includes("image/") && !acceptHeader.startsWith("text/html"));
+
+    const esNavegacionDirecta =
+      !esPeticionDeImagen &&
+      (secFetchDest === "document" || secFetchMode === "navigate" || acceptHeader.startsWith("text/html"));
+
+    if (esNavegacionDirecta && !isDownload && contentType.startsWith("image/")) {
       const safeMediaId = encodeURIComponent(mediaId);
       const html = `<!DOCTYPE html>
 <html lang="es">

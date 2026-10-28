@@ -246,7 +246,7 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
                         if (match) {
                           const mediaId = match[1];
                           const caption = match[2]?.trim();
-                          const mediaUrl = mediaId.startsWith("http") ? mediaId : `/api/conversaciones/media?mediaId=${mediaId}`;
+                          const mediaUrl = mediaId.startsWith("http") ? mediaId : `/api/conversaciones/media?mediaId=${mediaId}&raw=1`;
                           
                           let plantillaAnidada: React.ReactNode = null;
                           if (caption && (caption.startsWith("[plantilla:") || caption.startsWith("[Plantilla:"))) {
@@ -345,7 +345,7 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
                         const match = m.texto.match(/^\[sticker:([^\]]+)\]/);
                         if (match) {
                           const mediaId = match[1];
-                          const mediaUrl = `/api/conversaciones/media?mediaId=${mediaId}`;
+                          const mediaUrl = `/api/conversaciones/media?mediaId=${mediaId}&raw=1`;
                           return (
                             <button
                               type="button"

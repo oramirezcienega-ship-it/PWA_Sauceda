@@ -360,7 +360,7 @@ function renderizarContenidoMensaje(
       if (match) {
         const mediaId = match[1];
         const caption = match[2]?.trim();
-        const mediaUrl = mediaId.startsWith("http") ? mediaId : `/api/conversaciones/media?mediaId=${mediaId}`;
+        const mediaUrl = mediaId.startsWith("http") ? mediaId : `/api/conversaciones/media?mediaId=${mediaId}&raw=1`;
         
         let plantillaAnidada: React.ReactNode = null;
         if (caption && (caption.startsWith("[plantilla:") || caption.startsWith("[Plantilla:"))) {
@@ -414,7 +414,7 @@ function renderizarContenidoMensaje(
       const match = texto.match(/^\[sticker:([^\]]+)\]/);
       if (match) {
         const mediaId = match[1];
-        const mediaUrl = `/api/conversaciones/media?mediaId=${mediaId}`;
+        const mediaUrl = `/api/conversaciones/media?mediaId=${mediaId}&raw=1`;
         return (
           <div className="relative inline-block my-1">
             <button
@@ -633,7 +633,7 @@ function renderizarContenidoMensaje(
         const mediaId = match[1];
         const caption = match[2];
         // Los videos del catálogo se envían por link público; el resto por media_id de Meta.
-        const src = /^https?:\/\//i.test(mediaId) ? mediaId : `/api/conversaciones/media?mediaId=${mediaId}`;
+        const src = /^https?:\/\//i.test(mediaId) ? mediaId : `/api/conversaciones/media?mediaId=${mediaId}&raw=1`;
         return (
           <div className="space-y-1 max-w-[280px]">
             <div className="overflow-hidden rounded-lg border border-carbon/10 bg-carbon/5 shadow-sm">
