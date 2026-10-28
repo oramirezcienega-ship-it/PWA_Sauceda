@@ -9,6 +9,13 @@ test("extraerDireccionDeTexto: Caso real de Ernesto con prefijo y multilínea", 
   assert.equal(dir, "Calle Josefina Camarena #203. Col. Leon 2. Entre Calle Esteban de laris y Eufrasia Pantoja");
 });
 
+test("extraerDireccionDeTexto: Caso real de Bernabe (vialidad 'Convento' con indicación y sin prefijo)", () => {
+  const texto = "Convento del Carmen 112 colinas del Carmen hay que avisar por wattsap para abrir la reja de la entrada a la calle, si de favor pudieran este viernes 30/10/2026 por favor";
+  const dir = extraerDireccionDeTexto(texto);
+  assert.ok(dir);
+  assert.equal(dir, "Convento del Carmen 112 colinas del Carmen hay que avisar por wattsap para abrir la reja de la entrada a la calle");
+});
+
 test("extraerDireccionDeTexto: Domicilio con 'domicilio es' o 'mi dirección es'", () => {
   const t1 = "Mi domicilio es Calle Santa Rita 124, Col. San Miguel por favor";
   assert.equal(extraerDireccionDeTexto(t1), "Calle Santa Rita 124, Col. San Miguel");
@@ -29,6 +36,9 @@ test("extraerDireccionDeTexto: Vialidad directa con calle y número", () => {
 
   const t3 = "Blvd. Mariano Escobedo 4502 col. León Moderno";
   assert.equal(extraerDireccionDeTexto(t3), "Blvd. Mariano Escobedo 4502 col. León Moderno");
+
+  const t4 = "Paseo de los Cisnes 310, Col. San Jerónimo";
+  assert.equal(extraerDireccionDeTexto(t4), "Paseo de los Cisnes 310, Col. San Jerónimo");
 });
 
 test("extraerDireccionDeTexto: Frases conversacionales no deben extraerse falsamente", () => {

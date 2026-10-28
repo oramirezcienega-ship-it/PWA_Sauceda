@@ -3,6 +3,9 @@
  * recibidas por chat o formularios, y generación de enlaces de Google Maps.
  */
 
+const VIALIDADES_REGEX_STR =
+  "calle|c\\.|av\\.?|avenida|blvd\\.?|bulevar|circuito|privada|cerrada|andador|retorno|pasaje|camino|carretera|cto\\.?|prol\\.?|prolongaci[oó]n|convento|paseo|paseos|calzada|czda|valle|monte|sierra|hacienda|villa|villas|bosque|bosques|misi[oó]n|misiones|portal|portales|rinconada|jard[ií]n|jardines|loma|lomas|plaza|plazas|rinc[oó]n|vereda|callej[oó]n|diagonal|eje";
+
 /** Link de búsqueda de Google Maps para la dirección; si no menciona ciudad, se asume León, Gto. */
 export function linkMapsDeDireccion(direccion: string): string {
   const d = direccion.trim().replace(/\s+/g, " ");
@@ -20,9 +23,9 @@ export function limpiarColetillasDireccion(s: string): string {
     .replace(/^(?:perfecto|ok|sale|enterado|muy bien|de acuerdo|listo)[,.\s]+/i, "")
     // Quitar "en ", "de ", "sería en " sobrante al inicio
     .replace(/^(?:(?:ser[ií]a|es)\s+)?(?:en|de|por)\s+/i, "")
-    // Quitar coletillas al final
+    // Quitar coletillas al final (agradecimientos, horarios o peticiones)
     .replace(
-      /(?:,\s*|\.\s*|\s+)(?:por favor|gracias|muchas gracias|saludos|quedo al pendiente|aquí los espero|aquí estamos|a qué hora vienen\??|para que vengan|espero su confirmaci[oó]n).*$/i,
+      /(?:,\s*|\.\s*|\s+)(?:si\s+de\s+favor\s+pudieran|si\s+pudieran|para\s+el\s+d[ií]a|el\s+d[ií]a|por\s+favor|gracias|muchas\s+gracias|saludos|quedo\s+al\s+pendiente|aqu[ií]\s+los\s+espero|aqu[ií]\s+estamos|a\s+qu[eé]\s+hora\s+vienen\??|para\s+que\s+vengan|espero\s+su\s+confirmaci[oó]n).*$/i,
       ""
     )
     .replace(/^[:;,-]\s*/, "")
@@ -49,13 +52,13 @@ export function pareceDireccionValida(s: string): boolean {
   if (/^(hola|buenos d[ií]as|buenas tardes|buenas noches)/i.test(t) && !/\d+/.test(t)) return false;
 
   const tieneNumero = /\d+/.test(t);
-  const tieneVialidad = /\b(calle|c\.|av\.?|avenida|blvd\.?|bulevar|circuito|privada|cerrada|andador|retorno|cto|pasaje|camino|carretera|prol\.?|prolongaci[oó]n)\b/i.test(t);
+  const tieneVialidad = new RegExp(`\\b(${VIALIDADES_REGEX_STR})\\b`, "i").test(t);
   const tieneColonia = /\b(col\.?|colonia|fracc\.?|fraccionamiento|barrio|secci[oó]n|residencial|villa|villas|lomas|jardines|portal)\b/i.test(t);
   const tieneEntreCalles = /\bentre(?:\s+calle|\s+calles|\s+la)?\b/i.test(t);
   const tieneLoteManzana = /\b(mza|manzana|lt|lote)\.?\s*\d+/i.test(t);
 
   // Es válida si:
-  // - Tiene vialidad Y número (ej. Calle Roble 124)
+  // - Tiene vialidad Y número (ej. Convento del Carmen 112)
   // - O tiene vialidad Y colonia (ej. Privada Gardenias en León II)
   // - O tiene número Y colonia (ej. Roble 124 Col. San Miguel)
   // - O tiene lote/manzana
@@ -74,6 +77,7 @@ export function pareceDireccionValida(s: string): boolean {
  * Extrae de forma determinista una dirección física a partir de un mensaje entrante de chat.
  * Maneja formatos como:
  * - "Mi domicilio es: Calle Josefina Camarena #203. Col. Leon 2. Entre Calle Esteban de laris y Eufrasia Pantoja"
+ * - "Convento del Carmen 112 colinas del Carmen hay que avisar por wattsap..."
  * - "Dirección: Paseo de las Lomas 124, Col. San Miguel"
  * - "Calle Roble 124, León II"
  * - "Estamos en Privada Gardenias #12"
@@ -109,9 +113,11 @@ export function extraerDireccionDeTexto(texto: string): string | null {
   }
 
   // 3. Patrón directo que comienza con tipo de vialidad + nombre + número
-  const vialidadMatch = t.match(
-    /\b((?:calle|c\.|av\.?|avenida|blvd\.?|bulevar|circuito|privada|cerrada|andador|retorno|pasaje|camino|cto\.?|prol\.?|prolongaci[oó]n)\s+[A-Za-z0-9ÁÉÍÓÚáéíóúñÑüÜ\s.,#-]+?\d+[A-Za-z0-9ÁÉÍÓÚáéíóúñÑüÜ\s.,#-]*)/i
+  const vialidadRegex = new RegExp(
+    `\\b((?:${VIALIDADES_REGEX_STR})\\s+[A-Za-z0-9ÁÉÍÓÚáéíóúñÑüÜ\\s.,#-]+?\\d+[A-Za-z0-9ÁÉÍÓÚáéíóúñÑüÜ\\s.,#-]*)`,
+    "i"
   );
+  const vialidadMatch = t.match(vialidadRegex);
   if (vialidadMatch) {
     let candidata = limpiarColetillasDireccion(vialidadMatch[1].trim());
     candidata = candidata.replace(/\r?\n+/g, " ").replace(/\s+/g, " ");

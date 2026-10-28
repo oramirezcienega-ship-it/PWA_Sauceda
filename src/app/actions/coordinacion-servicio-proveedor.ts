@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
+import { extraerDireccionDeTexto, linkMapsDeDireccion } from "@/lib/direccion";
 import { registrarActividad } from "@/lib/actividades";
 import { costosProveedoresDe, loCotizadoAlCliente, proveedoresDelProducto } from "@/lib/costo-servicio";
 
@@ -103,14 +104,41 @@ export async function prepararCoordinacionServicio(
     const nombre = [expediente?.cliente || prospecto?.nombre, expediente?.cliente ? expediente?.primer_apellido : prospecto?.primer_apellido]
       .filter(Boolean)
       .join(" ");
+
+    let direccion = expediente?.direccion_propiedad || prospecto?.direccion || "";
+    let linkMaps = expediente?.link_google_maps || (direccion ? linkMapsDeDireccion(direccion) : "");
+    if (!direccion) {
+      const { data: ultimosMsgs } = await sb
+        .from("mensajes_whatsapp")
+        .select("texto")
+        .in("telefono", variantesTelefono(telefono))
+        .eq("direccion", "in")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      for (const m of ultimosMsgs || []) {
+        const extraida = extraerDireccionDeTexto(m.texto);
+        if (extraida) {
+          direccion = extraida;
+          linkMaps = linkMapsDeDireccion(extraida);
+          if (expedienteId) {
+            void sb.from("expedientes").update({ direccion_propiedad: direccion, link_google_maps: linkMaps }).eq("id", expedienteId);
+          }
+          if (prospectoId) {
+            void sb.from("prospectos").update({ direccion: direccion }).eq("id", prospectoId);
+          }
+          break;
+        }
+      }
+    }
+
     return {
       ok: true,
       datos: {
         expedienteId,
         prospectoId,
         clienteNombre: nombre,
-        direccion: expediente?.direccion_propiedad || prospecto?.direccion || "",
-        linkMaps: expediente?.link_google_maps || "",
+        direccion,
+        linkMaps,
         trabajo: expediente?.necesidad || "",
         proveedores,
         proveedorSugeridoId: sugerido,

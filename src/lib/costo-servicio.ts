@@ -140,14 +140,23 @@ export async function costosProveedoresDe(
   sb: SupabaseClient,
   cotizado: CotizadoCliente
 ): Promise<Record<string, number>> {
-  const { data } = await sb
-    .from("proveedor_productos")
-    .select("proveedor_id, costo_unitario, costos_volumen, tarifas_capacidad, cantidad_minima, monto_minimo")
-    .eq("producto_id", cotizado.productoId)
-    .eq("activo", true);
+  const [{ data: provProds }, { data: prod }] = await Promise.all([
+    sb
+      .from("proveedor_productos")
+      .select("proveedor_id, costo_unitario, costos_volumen, tarifas_capacidad, cantidad_minima, monto_minimo")
+      .eq("producto_id", cotizado.productoId)
+      .eq("activo", true),
+    sb
+      .from("productos_servicios")
+      .select("costo_unitario, tarifas_capacidad, cantidad_minima")
+      .eq("id", cotizado.productoId)
+      .maybeSingle(),
+  ]);
+
+  const costoBaseProd = prod ? costoReferenciaOferta(prod as any, cotizado.cantidad) : null;
   const out: Record<string, number> = {};
-  for (const o of data || []) {
-    const c = costoReferenciaOferta(o as any, cotizado.cantidad);
+  for (const o of provProds || []) {
+    const c = costoReferenciaOferta(o as any, cotizado.cantidad) || costoBaseProd;
     if (c && c > 0) out[(o as any).proveedor_id] = c;
   }
   return out;
