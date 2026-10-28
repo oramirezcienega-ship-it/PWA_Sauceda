@@ -94,6 +94,93 @@ export function labelTipoNegocio(tipo: string): string {
  * Analiza el mensaje inicial y el nombre de la campaña para auto-detectar
  * el tipo de negocio/servicio de interés.
  */
+/**
+ * Extrae información de atribución a partir de etiquetas estructuradas [TAG]
+ * en el mensaje inicial de WhatsApp (ej. [G-MAPS], [IG-BIO], [WEB:concreto-estampado:SEO-Google]).
+ */
+export function extraerAtribucionEtiquetas(texto: string): {
+  origenLead?: OrigenAdquisicion;
+  campaign_name?: string;
+  adset_name?: string;
+  ad_name?: string;
+} | null {
+  if (!texto) return null;
+
+  // 1. Tag dinámico de sitio web: [WEB:<seccion>:<fuente>] ej: [WEB:concreto-estampado:SEO-Google] o [WEB:impermeabilizacion]
+  const matchWeb = texto.match(/\[WEB:([^:\]]+)(?::([^\]]+))?\]/i);
+  if (matchWeb) {
+    const seccion = matchWeb[1].trim().toLowerCase();
+    const fuente = matchWeb[2]?.trim() || "Google-SEO";
+    const nombrePagina = seccion.replace(/[-_]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+    return {
+      origenLead: "sitio-web",
+      campaign_name: `Orgánico Web (${fuente})`,
+      adset_name: "saucedamx.com",
+      ad_name: `Página ${nombrePagina}`,
+    };
+  }
+
+  // 2. Ficha Google Business / Google Maps: [G-MAPS] o [GOOGLE-MAPS]
+  if (/\[(?:G-?MAPS|GOOGLE-?MAPS)\]/i.test(texto)) {
+    return {
+      origenLead: "sitio-web",
+      campaign_name: "Google Maps Orgánico",
+      adset_name: "Perfil de Negocio Google (GBP)",
+      ad_name: "Ficha Google Maps León",
+    };
+  }
+
+  // 3. Instagram Bio: [IG-BIO] o [INSTAGRAM]
+  if (/\[(?:IG-?BIO|INSTAGRAM)\]/i.test(texto)) {
+    return {
+      origenLead: "instagram",
+      campaign_name: "Instagram Orgánico",
+      adset_name: "Perfil @saucedaconstruye",
+      ad_name: "Enlace en Bio Instagram",
+    };
+  }
+
+  // 4. Facebook Fanpage: [FB-ORG] o [FB-BIO] o [FACEBOOK]
+  if (/\[(?:FB-?ORG|FB-?BIO|FACEBOOK)\]/i.test(texto)) {
+    return {
+      origenLead: "facebook",
+      campaign_name: "Facebook Orgánico",
+      adset_name: "Página Oficial SAUCEDA",
+      ad_name: "Botón Enviar Mensaje Fanpage",
+    };
+  }
+
+  // 5. TikTok Bio: [TK-BIO] o [TIKTOK]
+  if (/\[(?:TK-?BIO|TIKTOK)\]/i.test(texto)) {
+    return {
+      origenLead: "otro",
+      campaign_name: "TikTok Orgánico",
+      adset_name: "Perfil @saucedamx",
+      ad_name: "Enlace en Bio TikTok",
+    };
+  }
+
+  // 6. Recomendación directa o volante: [RECOMENDADO] o [VOLANTE]
+  if (/\[(?:RECOMENDAD[OA]|BOCA-?EN-?BOCA)\]/i.test(texto)) {
+    return {
+      origenLead: "recomendacion",
+      campaign_name: "Recomendación Directa",
+      adset_name: "Cliente Referido",
+      ad_name: "Boca a Boca",
+    };
+  }
+  if (/\[VOLANTE\]/i.test(texto)) {
+    return {
+      origenLead: "volante",
+      campaign_name: "Volante Físico León",
+      adset_name: "Impresos en Campo",
+      ad_name: "Volante Mano a Mano",
+    };
+  }
+
+  return null;
+}
+
 export function detectarTipoNegocio(
   mensaje: string,
   campaignName?: string,

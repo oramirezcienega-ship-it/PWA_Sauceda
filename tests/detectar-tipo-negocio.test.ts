@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { detectarTipoNegocio } from "../src/lib/types.ts";
+import { detectarTipoNegocio, extraerAtribucionEtiquetas } from "../src/lib/types.ts";
 
 test("detectarTipoNegocio: Campaña o adset con 'Tramite' clasifica como solo_tramite", () => {
   const r1 = detectarTipoNegocio("Hola", "SAUCEDA Compra Tramite - Sep 2026", "Tramite y Asesoria", "Tramite Asesoria Gratis");
@@ -65,3 +65,40 @@ test("detectarTipoNegocio: Atribución orgánica del sitio web clasifica correct
   assert.equal(detectarTipoNegocio("Hola SAUCEDA Protege 🛡️, quisiera asesoría y cotización.", "Google SEO León", "saucedamx.com", "Página Protege"), "seguridad");
   assert.equal(detectarTipoNegocio("Hola SAUCEDA 👋, quisiera recibir asesoría y cotización.", "Google SEO León", "saucedamx.com", "Página Trámite"), "solo_tramite");
 });
+
+test("extraerAtribucionEtiquetas: extrae tag dinámico de página web y clasifica negocio", () => {
+  const at1 = extraerAtribucionEtiquetas("Hola SAUCEDA 👋, quisiera cotizar [WEB:impermeabilizacion:SEO-Google]");
+  assert.ok(at1);
+  assert.equal(at1.origenLead, "sitio-web");
+  assert.equal(at1.campaign_name, "Orgánico Web (SEO-Google)");
+  assert.equal(at1.ad_name, "Página Impermeabilizacion");
+  assert.equal(detectarTipoNegocio("Hola", at1.campaign_name, at1.adset_name, at1.ad_name), "construccion-impermeabilizacion");
+
+  const at2 = extraerAtribucionEtiquetas("Hola SAUCEDA 👋, quisiera cotizar [WEB:concreto-estampado:Google]");
+  assert.ok(at2);
+  assert.equal(at2.ad_name, "Página Concreto Estampado");
+  assert.equal(detectarTipoNegocio("Hola", at2.campaign_name, at2.adset_name, at2.ad_name), "construccion-piso-estampado");
+});
+
+test("extraerAtribucionEtiquetas: extrae tags de Google Maps, Instagram, Facebook y Volantes", () => {
+  const atGmaps = extraerAtribucionEtiquetas("Hola, los encontré en Google Maps y quiero cotizar [G-MAPS]");
+  assert.ok(atGmaps);
+  assert.equal(atGmaps.campaign_name, "Google Maps Orgánico");
+  assert.equal(atGmaps.ad_name, "Ficha Google Maps León");
+
+  const atIg = extraerAtribucionEtiquetas("Hola, vi su perfil en Instagram [IG-BIO]");
+  assert.ok(atIg);
+  assert.equal(atIg.origenLead, "instagram");
+  assert.equal(atIg.campaign_name, "Instagram Orgánico");
+
+  const atFb = extraerAtribucionEtiquetas("Hola, vi su página [FB-ORG]");
+  assert.ok(atFb);
+  assert.equal(atFb.origenLead, "facebook");
+  assert.equal(atFb.campaign_name, "Facebook Orgánico");
+
+  const atVolante = extraerAtribucionEtiquetas("Hola, me dieron un folleto [VOLANTE]");
+  assert.ok(atVolante);
+  assert.equal(atVolante.origenLead, "volante");
+  assert.equal(atVolante.campaign_name, "Volante Físico León");
+});
+

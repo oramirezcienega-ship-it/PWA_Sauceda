@@ -6,7 +6,7 @@ import { iaAgenteActivo } from "@/lib/ia/agente";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { transcribirAudioMeta } from "@/lib/ia/audio";
 import { procesarRetroAsesorWhatsApp } from "@/lib/retro-whatsapp";
-import { detectarTipoNegocio, OrigenAdquisicion } from "@/lib/types";
+import { detectarTipoNegocio, extraerAtribucionEtiquetas, OrigenAdquisicion } from "@/lib/types";
 import { obtenerIdAsesorGerardo, obtenerIdAsesorInmobiliario } from "@/lib/asesores";
 import { analizarImagenMeta } from "@/lib/ia/vision-documentos";
 import { interpretarErrorMeta } from "@/lib/whatsapp";
@@ -670,7 +670,14 @@ export async function registrarLeadWhatsApp(
   let ad_name = lead.ad_name || "";
   let origenLead: OrigenAdquisicion = "whatsapp";
 
-  if (lead.referral) {
+  // 1. Detección por etiquetas estructuradas en el mensaje ([WEB:...], [G-MAPS], [IG-BIO], etc.)
+  const atribEtiqueta = extraerAtribucionEtiquetas(lead.mensaje || "");
+  if (atribEtiqueta) {
+    if (atribEtiqueta.origenLead) origenLead = atribEtiqueta.origenLead;
+    if (atribEtiqueta.campaign_name) campaign_name = atribEtiqueta.campaign_name;
+    if (atribEtiqueta.adset_name) adset_name = atribEtiqueta.adset_name;
+    if (atribEtiqueta.ad_name) ad_name = atribEtiqueta.ad_name;
+  } else if (lead.referral) {
     if (lead.referral.headline) {
       ad_name = lead.referral.headline;
     }
@@ -767,6 +774,14 @@ export async function registrarLeadWhatsApp(
       ad_name = fallback.ad_name;
       console.log(`[Atribución Fallback] Asignada campaña estimada para lead ${lead.telefono}: ${campaign_name} / ${adset_name} / ${ad_name}`);
     }
+  }
+
+  // Si no provino de pauta publicitaria ni de etiqueta estructurada ni de texto web detectado:
+  if (!campaign_name) {
+    origenLead = "whatsapp";
+    campaign_name = "WhatsApp Orgánico Directo";
+    adset_name = "Contacto Directo / Redes";
+    ad_name = "Sin Etiqueta (Genérico)";
   }
 
   // Prospecto (persona): se busca o se crea por teléfono.
@@ -876,19 +891,20 @@ export async function registrarLeadWhatsApp(
     }`.trim();
 
     const esFallbackEstimado = ad_name === ATRIBUCION_ESTIMADA_LABEL;
+    const esFallbackGenerico = campaign_name === "WhatsApp Orgánico Directo";
     const updateData: any = { notas: nota, ultimo_movimiento: hoyISO() };
     if (campaign_name && campaign_name !== exp.campaign_name) {
-      if (!esFallbackEstimado || !exp.campaign_name) {
+      if ((!esFallbackEstimado && !esFallbackGenerico) || !exp.campaign_name) {
         updateData.campaign_name = campaign_name;
       }
     }
     if (adset_name && adset_name !== exp.adset_name) {
-      if (!esFallbackEstimado || !exp.adset_name) {
+      if ((!esFallbackEstimado && !esFallbackGenerico) || !exp.adset_name) {
         updateData.adset_name = adset_name;
       }
     }
     if (ad_name && ad_name !== exp.ad_name) {
-      if (!esFallbackEstimado || !exp.ad_name) {
+      if ((!esFallbackEstimado && !esFallbackGenerico) || !exp.ad_name) {
         updateData.ad_name = ad_name;
       }
     }
