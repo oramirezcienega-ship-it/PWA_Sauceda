@@ -796,6 +796,8 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   }, [sel]);
   const [soloTel, setSoloTel] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<ConversacionDetalle | null>(null);
+  const [cargandoHistorial, setCargandoHistorial] = useState(false);
+  const cacheConversacionesRef = useRef<Map<string, ConversacionDetalle>>(new Map());
   const [documentosCliente, setDocumentosCliente] = useState<{
     cotizacionToken: string;
     tieneRemision: boolean;
@@ -989,7 +991,10 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
         setSelEstado(telReal);
         const d = await obtenerConversacion(telReal);
         if (versionSelRef.current !== version) return;
-        setDetalle(d);
+        if (d) {
+          cacheConversacionesRef.current.set(telReal, d);
+          setDetalle(d);
+        }
       }
     } catch {
       // silencioso: el sondeo reintenta
@@ -1093,20 +1098,73 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
 
   async function abrir(telefono: string) {
     setSel(telefono);
-    setDetalle(null);
     setAviso(null);
     setTexto("");
     setPlantillaSel("");
     setParams([]);
     const version = versionSelRef.current;
+
+    // 1. Si ya se abrió antes en esta sesión, restaurar desde memoria instantáneamente (0 ms)
+    const cached = cacheConversacionesRef.current.get(telefono);
+    if (cached) {
+      setDetalle(cached);
+      setCargandoHistorial(false);
+    } else {
+      // 2. Si es la primera vez, armar vista previa optimista con datos de la bandeja
+      const convEnLista = conversaciones.find((c) => coincidenTelefonos(c.telefono, telefono));
+      if (convEnLista) {
+        setDetalle({
+          telefono,
+          nombre: convEnLista.nombre || telefono,
+          expedienteId: convEnLista.expedienteId ?? null,
+          prospectoId: convEnLista.prospectoId ?? null,
+          tipoNegocio: convEnLista.tipoNegocio ?? null,
+          atiende: convEnLista.atiende || "IA",
+          ventanaAbierta: convEnLista.ventanaAbierta ?? false,
+          ultimoInboundFecha: convEnLista.ultimoInboundFecha ?? null,
+          finalizado: convEnLista.finalizado ?? false,
+          iaPausada: false,
+          etapa: convEnLista.etapa ?? null,
+          posibleBloqueo: convEnLista.posibleBloqueo ?? false,
+          motivoAlerta: convEnLista.motivoAlerta ?? null,
+          mensajes: convEnLista.ultimoTexto
+            ? [
+                {
+                  id: "preview-last-msg",
+                  direccion: convEnLista.ultimaDireccion || "in",
+                  texto: convEnLista.ultimoTexto,
+                  estado: "entregado",
+                  agente: convEnLista.atiende || "",
+                  fecha: convEnLista.ultimaFecha,
+                  errorDetalle: null,
+                  campanaOrigen: null,
+                  leidoAt: null,
+                  entregadoAt: null,
+                },
+              ]
+            : [],
+        });
+      } else {
+        setDetalle(null);
+      }
+      setCargandoHistorial(true);
+    }
+
     try {
       const d = await obtenerConversacion(telefono);
       if (versionSelRef.current !== version) return; // ya se abrió otro chat
-      setDetalle(d);
-      marcarComoLeida(telefono, d?.ultimoInboundFecha);
+      if (d) {
+        cacheConversacionesRef.current.set(telefono, d);
+        setDetalle(d);
+        marcarComoLeida(telefono, d.ultimoInboundFecha);
+      }
     } catch (err: any) {
       console.error("Error al abrir conversación:", err);
       setAviso(humanizarError(err || "Error al cargar los mensajes de la conversación."));
+    } finally {
+      if (versionSelRef.current === version) {
+        setCargandoHistorial(false);
+      }
     }
   }
 
@@ -2183,9 +2241,17 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     >
                       ← Volver
                     </button>
-                    <p className="truncate font-titular font-medium text-verde-profundo text-sm sm:text-base">
-                      {detalle.nombre}
-                    </p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="truncate font-titular font-medium text-verde-profundo text-sm sm:text-base">
+                        {detalle.nombre}
+                      </p>
+                      {cargandoHistorial && (
+                        <span
+                          className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-sauce border-t-transparent"
+                          title="Actualizando mensajes..."
+                        />
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">

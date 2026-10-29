@@ -416,7 +416,7 @@ export async function obtenerConversacion(
     rolDe(usuario.id),
     sb
       .from("mensajes_whatsapp")
-      .select("*")
+      .select("id, direccion, texto, estado, agente, created_at, finalizado, campana_origen, leido_at, entregado_at, expediente_id, prospecto_id")
       .in("telefono", variantesId(telefono))
       .is("proveedor_id", null)
       .order("created_at", { ascending: true })
@@ -538,12 +538,12 @@ export async function obtenerConversacion(
   let tipoNegocio: string | null = null;
   let etapa: string | null = null;
 
-  // Carga paralela de expediente, prospecto y estado de pausa de IA en una sola ronda de red
-  const [expRes, prosRes, iaPausada] = await Promise.all([
+  // Carga paralela de expediente y prospecto; ia_pausada se incluye directo en expediente
+  const [expRes, prosRes] = await Promise.all([
     expedienteId
       ? sb
           .from("expedientes")
-          .select("cliente, primer_apellido, segundo_apellido, tipo_negocio, etapa, perfiles:asesor_id(nombre)")
+          .select("cliente, primer_apellido, segundo_apellido, tipo_negocio, etapa, ia_pausada, perfiles:asesor_id(nombre)")
           .eq("id", expedienteId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -554,9 +554,9 @@ export async function obtenerConversacion(
           .eq("id", prospectoId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
-    esConversacionPausada(sb, telefono, expedienteId),
   ]);
 
+  let iaPausada = false;
   const e = expRes?.data;
   if (e) {
     nombreExpediente = nombreDe(e as any);
@@ -567,6 +567,14 @@ export async function obtenerConversacion(
     if ((e as any).perfiles?.nombre) {
       asesorNombre = (e as any).perfiles.nombre;
     }
+    if (typeof (e as any).ia_pausada === "boolean") {
+      iaPausada = (e as any).ia_pausada;
+    }
+  }
+
+  // Si no se obtuvo la pausa del expediente, solo entonces verificar fallback
+  if (!e || typeof (e as any).ia_pausada !== "boolean") {
+    iaPausada = await esConversacionPausada(sb, telefono, expedienteId);
   }
 
   const p = prosRes?.data;

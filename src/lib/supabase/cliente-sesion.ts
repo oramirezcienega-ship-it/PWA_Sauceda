@@ -58,14 +58,55 @@ export function supabaseSesion() {
   );
 }
 
+// Caché en memoria para evitar llamadas de red repetidas a Supabase Auth en cada server action
+interface CacheUsuario {
+  user: any;
+  exp: number;
+}
+const cacheUsuarios = new Map<string, CacheUsuario>();
+
+interface CacheRol {
+  rol: "admin" | "asesor" | "operaciones";
+  activo: boolean;
+  exp: number;
+}
+const cacheRoles = new Map<string, CacheRol>();
+
 /**
  * Devuelve el usuario autenticado o null. No lanza error.
+ * Utiliza caché en memoria con TTL de 60s ligado a la cookie de sesión para 0ms de latencia.
  */
 export async function usuarioActual() {
+  let cacheKey: string | null = null;
+  try {
+    const cookieStore = cookies();
+    const authCookie = cookieStore.getAll().find((c) => c.name.includes("auth-token") || c.name.startsWith("sb-"));
+    if (authCookie) {
+      cacheKey = `${authCookie.name}:${authCookie.value.slice(0, 48)}`;
+      const cached = cacheUsuarios.get(cacheKey);
+      if (cached && Date.now() < cached.exp) {
+        return cached.user;
+      }
+    }
+  } catch {
+    // Si cookies() no está disponible en este contexto, continúa normal
+  }
+
   const sb = supabaseSesion();
   const {
     data: { user },
   } = await sb.auth.getUser();
+
+  if (cacheKey && user) {
+    if (cacheUsuarios.size > 200) {
+      const ahora = Date.now();
+      for (const [k, v] of cacheUsuarios) {
+        if (v.exp < ahora) cacheUsuarios.delete(k);
+      }
+    }
+    cacheUsuarios.set(cacheKey, { user, exp: Date.now() + 60000 });
+  }
+
   return user;
 }
 
@@ -78,10 +119,16 @@ export async function requireAdmin() {
 /**
  * Rol y estado de un usuario (vía service role, ignora RLS).
  * Si no tiene perfil, se considera admin (bootstrap del primer usuario).
+ * Con caché de 60s para resolver en 0ms en peticiones consecutivas.
  */
 export async function rolDe(
   userId: string,
 ): Promise<{ rol: "admin" | "asesor" | "operaciones"; activo: boolean }> {
+  const cached = cacheRoles.get(userId);
+  if (cached && Date.now() < cached.exp) {
+    return { rol: cached.rol, activo: cached.activo };
+  }
+
   try {
     const sb = supabaseServidor();
     const { data } = await sb
@@ -89,11 +136,22 @@ export async function rolDe(
       .select("rol, activo")
       .eq("id", userId)
       .maybeSingle();
-    if (!data) return { rol: "admin", activo: true };
-    return {
-      rol: (data as { rol: "admin" | "asesor" | "operaciones" }).rol,
-      activo: (data as { activo: boolean }).activo,
-    };
+
+    const res = !data
+      ? { rol: "admin" as const, activo: true }
+      : {
+          rol: (data as { rol: "admin" | "asesor" | "operaciones" }).rol,
+          activo: (data as { activo: boolean }).activo,
+        };
+
+    if (cacheRoles.size > 200) {
+      const ahora = Date.now();
+      for (const [k, v] of cacheRoles) {
+        if (v.exp < ahora) cacheRoles.delete(k);
+      }
+    }
+    cacheRoles.set(userId, { ...res, exp: Date.now() + 60000 });
+    return res;
   } catch {
     // Si la tabla aún no existe, no bloqueamos (bootstrap).
     return { rol: "admin", activo: true };
