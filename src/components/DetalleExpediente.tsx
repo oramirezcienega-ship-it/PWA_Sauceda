@@ -35,6 +35,7 @@ import { normalizarTelefono } from "@/lib/telefono";
 import { BotonPublicarInventario } from "./asesoria-compra/BotonPublicarInventario";
 import { TarjetaAsesoriaCompraExpediente } from "./asesoria-compra/TarjetaAsesoriaCompraExpediente";
 import { ModalRescateMovil } from "./ModalRescateMovil";
+import { ModalCompartirExpedienteWhatsApp } from "./ModalCompartirExpedienteWhatsApp";
 
 /**
  * Vista de detalle de un expediente.
@@ -63,6 +64,7 @@ export function DetalleExpediente({ id }: { id: string }) {
   // Estado para programación de llamada
   const [mostrarFormLlamada, setMostrarFormLlamada] = useState(false);
   const [mostrarRescate, setMostrarRescate] = useState(false);
+  const [mostrarCompartirWA, setMostrarCompartirWA] = useState(false);
   const [perfiles, setPerfiles] = useState<{ id: string; nombre: string; rol: string }[]>([]);
   const [perfilLlamadaId, setPerfilLlamadaId] = useState("");
   const [fechaLlamada, setFechaLlamada] = useState("");
@@ -451,11 +453,20 @@ export function DetalleExpediente({ id }: { id: string }) {
               {expediente.telefono && (
                 <div className="flex items-center gap-1.5 pt-1">
                   <BotonLlamar telefono={expediente.telefono} prospectoId={expediente.prospectoId} />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarCompartirWA(true)}
+                    title="Compartir expediente al cliente por WhatsApp desde la Línea Principal Oficial (Meta Cloud API)"
+                    className="inline-flex items-center gap-1 rounded bg-verde-profundo hover:bg-emerald-900 px-2 py-1 text-[10px] font-semibold text-white transition shadow-2xs cursor-pointer"
+                  >
+                    <span>🟢 Línea Principal</span>
+                  </button>
                   <a
                     href={`https://wa.me/${normalizarTelefono(expediente.telefono)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-emerald-700 transition shadow-2xs"
+                    title="Abrir chat en WhatsApp Web personal"
                   >
                     <span>💬 WhatsApp</span>
                   </a>
@@ -1325,6 +1336,18 @@ export function DetalleExpediente({ id }: { id: string }) {
           proyecto={expediente.tipoNegocio ? labelTipoNegocio(expediente.tipoNegocio as any) : "Remodelación"}
           colonia={expediente.fraccionamiento || undefined}
           onEnviado={() => recargar()}
+        />
+      )}
+
+      {/* Modal Compartir Expediente por WhatsApp Línea Principal (Meta Cloud API) */}
+      {mostrarCompartirWA && expediente.telefono && (
+        <ModalCompartirExpedienteWhatsApp
+          abierto={mostrarCompartirWA}
+          onCerrar={() => setMostrarCompartirWA(false)}
+          expedienteId={expediente.id}
+          folioExpediente={expediente.id}
+          clienteNombre={expediente.nombreCompleto || expediente.cliente || "Cliente"}
+          clienteTelefono={expediente.telefono}
         />
       )}
       </div>

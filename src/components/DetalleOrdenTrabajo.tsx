@@ -24,6 +24,7 @@ import { ModalGestionarGarantia } from "./ModalGestionarGarantia";
 import { ModalGenerarRemisionOT } from "./ModalGenerarRemisionOT";
 import { ModalNotificarEntregaOT } from "./ModalNotificarEntregaOT";
 import { ModalAsignarProveedorOT } from "./ModalAsignarProveedorOT";
+import { ModalCompartirExpedienteWhatsApp } from "./ModalCompartirExpedienteWhatsApp";
 import { SeccionContratoOT } from "./SeccionContratoOT";
 import { TarjetaCotizacionOrigenOT } from "./TarjetaCotizacionOrigenOT";
 import { PanelInfonavitCompraventa } from "./PanelInfonavitCompraventa";
@@ -64,6 +65,19 @@ export function DetalleOrdenTrabajo({
   const [modalGarantia, setModalGarantia] = useState(false);
   const [modalRemision, setModalRemision] = useState(false);
   const [modalNotificar, setModalNotificar] = useState(false);
+  const [modalCompartirExpediente, setModalCompartirExpediente] = useState(false);
+  const [copiadoPortal, setCopiadoPortal] = useState(false);
+
+  const handleCopiarUrlPortal = async () => {
+    if (!urlPortalEntrega) return;
+    try {
+      await navigator.clipboard.writeText(urlPortalEntrega);
+      setCopiadoPortal(true);
+      setTimeout(() => setCopiadoPortal(false), 2500);
+    } catch {
+      setCopiadoPortal(false);
+    }
+  };
   const [modalProveedor, setModalProveedor] = useState(false);
   const [modalEliminar, setModalEliminar] = useState(false);
   const [eliminando, setEliminando] = useState(false);
@@ -573,42 +587,70 @@ export function DetalleOrdenTrabajo({
         </div>
       )}
 
-      {/* 3. Portal de Entrega del Cliente (Público) */}
-      <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">🌐</span>
-            <span className="font-titular font-bold text-blue-950 text-sm">
-              Portal Digital de Entrega al Cliente
+      {/* 3. Portal Digital de Entrega del Cliente (Público y Optimizado) */}
+      <div className="rounded-2xl border border-blue-200/90 bg-gradient-to-r from-blue-50/90 via-sky-50/50 to-white p-3.5 shadow-2xs">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600 text-white text-sm shadow-2xs shrink-0">
+              🌐
             </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-titular font-bold text-blue-950 text-xs sm:text-sm">
+                  Portal Digital de Entrega al Cliente
+                </span>
+                <span className="rounded-full bg-blue-100/90 text-blue-800 text-[10px] font-semibold px-2 py-0.2 shrink-0">
+                  Enlace seguro
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="font-mono text-[11px] text-blue-850 truncate max-w-[240px] sm:max-w-md select-all">
+                  {urlPortalEntrega}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopiarUrlPortal}
+                  className="text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-white border border-blue-200 rounded-md px-1.5 py-0.5 shadow-2xs transition shrink-0 cursor-pointer"
+                  title="Copiar enlace del portal"
+                >
+                  {copiadoPortal ? "✓ Copiado" : "📋 Copiar"}
+                </button>
+              </div>
+            </div>
           </div>
-          <p className="text-xs text-blue-900/80 font-cuerpo max-w-xl">
-            Enlace web seguro y público para que el cliente consulte su reporte de obra, fotos de evidencia, recibos de pago y póliza de garantía.
-          </p>
-          <div className="font-mono text-xs text-blue-800 break-all select-all pt-1">
-            {urlPortalEntrega}
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <a
-            href={`/orden-trabajo/entrega/${orden.token}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-xl border border-blue-300 bg-white hover:bg-blue-50 text-blue-900 font-bold px-3.5 py-2 text-xs transition shadow-2xs inline-flex items-center gap-1.5"
-          >
-            <span>↗</span> Abrir Portal
-          </a>
-
-          {orden.clienteTelefono && (
-            <button
-              type="button"
-              onClick={() => setModalNotificar(true)}
-              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2 text-xs transition shadow-2xs inline-flex items-center gap-1.5"
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            <a
+              href={`/orden-trabajo/entrega/${orden.token}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-xl border border-blue-300 bg-white hover:bg-blue-50 text-blue-900 font-bold px-3 py-1.5 text-xs transition shadow-2xs inline-flex items-center gap-1.5"
             >
-              <span>💬</span> Enviar por WhatsApp
-            </button>
-          )}
+              <span>↗</span> Abrir Portal
+            </a>
+
+            {orden.clienteTelefono && (
+              <button
+                type="button"
+                onClick={() => setModalNotificar(true)}
+                className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 text-xs transition shadow-2xs inline-flex items-center gap-1.5 cursor-pointer"
+                title="Notificar entrega de obra por WhatsApp (Línea Oficial)"
+              >
+                <span>💬</span> Enviar por WhatsApp
+              </button>
+            )}
+
+            {orden.expedienteId && (
+              <button
+                type="button"
+                onClick={() => setModalCompartirExpediente(true)}
+                className="rounded-xl bg-sauce/15 hover:bg-sauce hover:text-white text-verde-profundo font-bold px-3 py-1.5 text-xs transition shadow-2xs inline-flex items-center gap-1.5 cursor-pointer"
+                title="Compartir expediente al cliente por WhatsApp (Línea Principal)"
+              >
+                <span>📁</span> Compartir Expediente
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1188,6 +1230,16 @@ export function DetalleOrdenTrabajo({
           recargarDetalle();
         }}
       />
+
+      {orden.expedienteId && (
+        <ModalCompartirExpedienteWhatsApp
+          abierto={modalCompartirExpediente}
+          onCerrar={() => setModalCompartirExpediente(false)}
+          expedienteId={orden.expedienteId}
+          clienteNombre={orden.clienteNombre}
+          clienteTelefono={orden.clienteTelefono || ""}
+        />
+      )}
     </div>
   );
 }

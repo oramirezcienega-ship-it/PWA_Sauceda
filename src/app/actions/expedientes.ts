@@ -8,6 +8,7 @@ import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarBienvenida } from "@/lib/bienvenida";
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
+import { normalizarTelefono } from "@/lib/telefono";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { validarAgendaOperador } from "@/app/actions/agenda";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
@@ -1740,3 +1741,85 @@ export async function validarPinExpediente(
   }
 }
 
+
+
+/**
+ * Obtiene o genera la URL segura del portal de cliente para un expediente.
+ */
+export async function obtenerUrlPortalExpedienteAction(
+  expedienteId: string
+): Promise<{ ok: boolean; url?: string; token?: string; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { token, url } = await asegurarPortalCliente(sb, expedienteId);
+    return { ok: true, token, url };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al obtener URL del portal." };
+  }
+}
+
+/**
+ * Comparte el enlace seguro del expediente al cliente a través de la Línea Principal
+ * oficial de WhatsApp (Meta Cloud API / Sofía) y registra el mensaje en el historial del CRM.
+ */
+export async function compartirExpedienteWhatsAppLineaPrincipal(params: {
+  expedienteId: string;
+  telefonoDestino?: string;
+  mensajePersonalizado?: string;
+}): Promise<{ ok: boolean; mensaje?: string; error?: string; url?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: exp, error: errExp } = await sb
+      .from("expedientes")
+      .select("id, prospecto_id, cliente, primer_apellido, segundo_apellido, telefono, session_token_client, token_expiration, tipo_negocio, etapa")
+      .eq("id", params.expedienteId)
+      .single();
+
+    if (errExp || !exp) {
+      return { ok: false, error: "Expediente no encontrado." };
+    }
+
+    const telDestino = params.telefonoDestino || exp.telefono;
+    if (!telDestino) {
+      return { ok: false, error: "El expediente no cuenta con un teléfono registrado para WhatsApp." };
+    }
+
+    // Asegurar portal del cliente (token válido por 90 días)
+    const { url } = await asegurarPortalCliente(sb, params.expedienteId);
+
+    const clienteNombre = [exp.cliente, exp.primer_apellido].filter(Boolean).join(" ") || "Cliente";
+
+    const textoMensaje =
+      params.mensajePersonalizado?.trim() ||
+      `¡Hola ${clienteNombre}! 👋 Te compartimos el enlace oficial para consultar tu expediente y el seguimiento de tu servicio con SAUCEDA:\n\n🔗 ${url}\n\nPuedes revisar la información, documentos y estado en cualquier momento.`;
+
+    const resEnvio = await enviarWhatsAppTexto(telDestino, textoMensaje);
+
+    if (!resEnvio.ok) {
+      return { ok: false, error: resEnvio.error || "No se pudo entregar por WhatsApp Cloud API." };
+    }
+
+    // Registrar en mensajes_whatsapp para trazabilidad en CRM
+    await sb.from("mensajes_whatsapp").insert({
+      telefono: normalizarTelefono(telDestino),
+      texto: textoMensaje,
+      direccion: "out",
+      expediente_id: exp.id,
+      prospecto_id: exp.prospecto_id,
+      meta_message_id: resEnvio.messageId || null,
+      created_at: new Date().toISOString(),
+    });
+
+    return {
+      ok: true,
+      mensaje: "Expediente compartido con éxito por la línea principal de WhatsApp.",
+      url,
+    };
+  } catch (err: any) {
+    console.error("Error al compartir expediente por WhatsApp:", err);
+    return { ok: false, error: err?.message || "Error al compartir expediente." };
+  }
+}
