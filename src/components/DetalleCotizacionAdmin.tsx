@@ -477,7 +477,7 @@ export function DetalleCotizacionAdmin({
   const [mensajeConceptos, setMensajeConceptos] = useState({ tipo: "", texto: "" });
 
   // --- State para Condiciones y Garantía ---
-  const [condicionesPago, setCondicionesPago] = useState(cotizacionInicial.condicionesPago || "Anticipo del 50% para compra de materiales y programación de inicio; 50% al término a entera satisfacción.");
+  const [condicionesPago, setCondicionesPago] = useState(cotizacionInicial.condicionesPago || "Anticipo del 50% al iniciar la obra y 50% al término a entera satisfacción.");
   const [garantia, setGarantia] = useState(cotizacionInicial.garantia || "Todos los trabajos cuentan con garantía técnica contra vicios ocultos de acuerdo al servicio contratado.");
   const [guardandoCondiciones, setGuardandoCondiciones] = useState(false);
   const [mensajeCondiciones, setMensajeCondiciones] = useState({ tipo: "", texto: "" });

@@ -498,7 +498,7 @@ export function generarPdfCotizacion(
   const condiciones = [
     { label: "Precios:", val: "Todos los precios expresados son más IVA (16% de Impuesto al Valor Agregado)." },
     { label: "Vigencia:", val: "Esta cotización cuenta con una vigencia de 15 días a partir de su envío." },
-    { label: "Forma de pago:", val: cotizacion.condicionesPago || "Anticipo del 50% para compra de materiales y programación de inicio; 50% al término a entera satisfacción." },
+    { label: "Forma de pago:", val: cotizacion.condicionesPago || "Anticipo del 50% al iniciar la obra y 50% al término a entera satisfacción." },
     { label: "Garantía:", val: cotizacion.garantia || "Todos los trabajos cuentan con garantía técnica contra vicios ocultos de acuerdo al servicio contratado." },
   ];
 

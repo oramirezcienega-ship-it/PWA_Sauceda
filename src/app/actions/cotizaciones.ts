@@ -108,7 +108,9 @@ export async function crearCotizacion(datos: {
       fecha_visita: fechaVisita,
       inspector_id: inspectorId,
       cita_id: citaId,
-      notas_internas: datos.notasInternas || ""
+      notas_internas: datos.notasInternas || "",
+      condiciones_pago: "Anticipo del 50% al iniciar la obra y 50% al término a entera satisfacción.",
+      garantia: "Todos los trabajos cuentan con garantía técnica contra vicios ocultos de acuerdo al servicio contratado."
     })
     .select("*, prospectos(nombre, primer_apellido, segundo_apellido, telefono)")
     .single();
@@ -2577,7 +2579,7 @@ export async function duplicarCotizacion(
       aprobado_operativo_by: null,
       token: nuevoToken,
       notas_internas: notasClonadas,
-      condiciones_pago: original.condiciones_pago || 'Anticipo del 50% para compra de materiales y programación de inicio; 50% al término a entera satisfacción.',
+      condiciones_pago: original.condiciones_pago || 'Anticipo del 50% al iniciar la obra y 50% al término a entera satisfacción.',
       garantia: original.garantia || 'Todos los trabajos cuentan con garantía técnica contra vicios ocultos de acuerdo al servicio contratado.',
     })
     .select(`
