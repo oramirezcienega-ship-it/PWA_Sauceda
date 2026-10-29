@@ -657,14 +657,16 @@ export async function registrarLeadWhatsApp(
     }
   }
 
-  // Si es una imagen (foto o documento), analizarla con Visión Multimodal / OCR (Gemini)
+  // Si es una imagen (foto o documento), analizarla con Visión Multimodal / OCR (Claude / Gemini)
   if (lead.imageId) {
     try {
       console.log(`[WhatsApp Inbound Vision] Se detectó imagen ${lead.imageId} para ${lead.telefono}. Analizando con IA multimodal...`);
+      const captionUsuario = (lead.mensaje || "").replace(/^\[image:[^\]]*\]\s*/, "").trim();
       const vision = await analizarImagenMeta(lead.imageId);
       if (vision?.resumen_descriptivo) {
         const prefijo = vision.es_documento ? "[DOCUMENTO DETECTADO]" : "[FOTO DE PROPIEDAD]";
-        lead.mensaje = `[image:${lead.imageId}] ${prefijo} ${vision.resumen_descriptivo}`;
+        const textoCaption = captionUsuario ? ` [Pie de foto del cliente: "${captionUsuario}"]` : "";
+        lead.mensaje = `[image:${lead.imageId}] ${prefijo} ${vision.resumen_descriptivo}${textoCaption}`;
         console.log(`[WhatsApp Inbound Vision] Análisis visual completado: ${lead.mensaje}`);
       }
     } catch (err) {
