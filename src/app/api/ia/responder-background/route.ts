@@ -6,9 +6,10 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
-  const expectedToken = `Bearer ${process.env.CRON_SECRET}`;
+  const secret = process.env.CRON_SECRET;
+  const expectedToken = `Bearer ${secret}`;
 
-  if (process.env.CRON_SECRET && authHeader !== expectedToken) {
+  if (!secret || authHeader !== expectedToken) {
     console.warn("[IA Background Route] Intento de acceso no autorizado.");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
