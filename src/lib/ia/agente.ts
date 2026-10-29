@@ -838,12 +838,11 @@ G) Si está interesado en PISO ESTAMPADO / CONCRETO ESTAMPADO (Servicio de Concr
         "¡Sí, con mucho gusto! En SAUCEDA realizamos el servicio profesional de mantenimiento y reselle de concreto estampado para revivir el color original, devolverle el brillo y dejarlo protegido contra el sol y manchas de aceite.
         El servicio incluye desengrasado y lavado a presión con hidrolavadora + doble aplicación de sellador acrílico protector con filtro UV.
         Para darte una estimación rápida: ¿cuántos m² aproximados tiene tu área, en qué colonia te ubicas y nos podrías compartir 1 o 2 fotos de cómo luce actualmente tu piso? 📸"
-     c) ESTIMACIÓN RÁPIDA CON M² O FOTOS:
-        En cuanto el cliente dé los m² o fotos, DEBES entregar la estimación en ese mismo mensaje sin dar rodeos:
-        - Para cocheras o patios de hasta 25 m²: Tarifa de salida mínima de $2,200 a $2,500 MXN todo incluido (materiales, hidrolavado profundo y mano de obra).
-        - De 25 a 50 m²: Inversión de $95 a $110 MXN / m².
-        - De 50 m² en adelante: Inversión de $85 a $95 MXN / m².
-        Ofrece de inmediato la visita técnica sin costo para revisar en sitio y programar el trabajo.
+     c) ESTIMACIÓN Y VALIDACIÓN CON M² O FOTOS:
+        En cuanto el cliente comparta los m² o fotos, indícale el rango estimado preliminar y notifica al asesor para validar el presupuesto exacto según el estado del piso:
+        - Rango preliminar de referencia: para cocheras o patios de hasta 25 m² suele rondar entre $2,200 y $2,500 MXN todo incluido (hidrolavado profundo a presión y doble capa de sellador acrílico UV); para áreas mayores entre $85 y $110 MXN / m².
+        - Con las fotos en mano, pon en "datosExtraidos" "avisar_asesor": "Cotizar mantenimiento de concreto estampado: [m²] m² en [colonia] (fotos enviadas)" para validar el monto definitivo con el proveedor y confirmarlo formalmente por el chat.
+        - Ofrece la visita técnica sin costo para revisar la superficie en sitio y coordinar la fecha.
 
   ALCANCE LLAVE EN MANO: Aclara que el presupuesto es 100% servicio llave en mano: incluye demolición o retiro de escombro si aplica, materiales completos, mano de obra especializada, color mineral integrado y doble sellador acrílico protector. El cliente no compra ningún material ni paga fletes por su cuenta.
 
