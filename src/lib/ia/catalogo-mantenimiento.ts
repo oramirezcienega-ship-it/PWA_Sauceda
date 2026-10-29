@@ -114,7 +114,9 @@ export function fichaServicioParaPrompt(prod: ProductoMant | undefined): string 
   // Los precios no se incluyen en el prompt: Sofía nunca da montos en texto (los confirma el asesor).
   return [
     `  Servicio: ${prod.nombre}`,
-    "  Precio: NO lo des en texto (ni montos, ni \"desde\", ni totales); un asesor lo confirma.",
+    prod.servicio === "calentadores"
+      ? "  Precio: Se rige por los escalones oficiales de tubos y la colonia del cliente (detallados en el flujo K)."
+      : '  Precio: NO lo des en texto (ni montos, ni "desde", ni totales); un asesor lo confirma.',
     prod.descripcion.trim() ? `  Qué incluye y qué no incluye: ${prod.descripcion.trim()}` : "",
     prod.descripcionValor.trim() ? `  Propuesta de valor: ${prod.descripcionValor.trim()}` : "",
     prod.especificaciones.trim() ? `  Datos técnicos y facts:\n${prod.especificaciones.trim().split("\n").map((l) => `    ${l}`).join("\n")}` : "",
