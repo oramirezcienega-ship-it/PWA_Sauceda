@@ -19,7 +19,7 @@ export async function enviarComparativaSeguridad(
     if (await yaEnviado(sb, ctx.expedienteId, marca)) return false;
 
     const png = await generarImagenComparativaSeguridad(familia);
-    const ok = await enviarYRegistrar(sb, ctx, png, "image/png", `Opciones-${familia.clave}.png`, `${marca}. Precios sin factura (con factura se agrega IVA).`);
+    const ok = await enviarYRegistrar(sb, ctx, png, "image/png", `Opciones-${familia.clave}.png`, `${marca} instalados llave en mano. Precios sin factura (con factura se agrega IVA).`);
     if (ok && ctx.expedienteId) {
       await registrarActividad(sb, {
         expedienteId: ctx.expedienteId,

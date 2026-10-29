@@ -117,15 +117,19 @@ export function complementoDe(familias: FamiliaSeguridad[], claveFam: string): {
   return c && familia ? { familia, motivo: c.motivo } : null;
 }
 
-/** Resumen de las familias para el prompt de Sofía (IDs y nombres, sin precios: los da la imagen). */
+/** Resumen de las familias para el prompt de Sofía con precios oficiales y beneficios clave para acompañamiento. */
 export function familiasParaPrompt(familias: FamiliaSeguridad[]): string {
   return familias
     .map((f) => {
       const comp = complementoDe(familias, f.clave);
       return [
         `  • "${f.clave}" — ${f.nombre}:`,
-        ...f.productos.slice(0, MAX_OPCIONES_COMPARATIVA).map((p) => `      ${p.id}: ${p.nombre}${p.fotos.length > 0 ? "" : " (sin fotos)"}`),
-        comp ? `      Complemento: "${comp.familia.clave}" (${comp.familia.nombre}), para ${comp.motivo}.` : "",
+        ...f.productos.slice(0, MAX_OPCIONES_COMPARATIVA).map((p) => {
+          const valor = (p.descripcionValor || p.descripcion || "").replace(/\r?\n+/g, " ").trim();
+          const descCorta = valor ? ` (Beneficio: ${valor.length > 120 ? valor.slice(0, 117) + "..." : valor})` : "";
+          return `      - ${p.id}: ${p.nombre} — $${p.precio.toLocaleString("es-MX")} MXN instalado llave en mano${descCorta}${p.fotos.length > 0 ? "" : " (sin fotos)"}`;
+        }),
+        comp ? `      Complemento recomendado: "${comp.familia.clave}" (${comp.familia.nombre}), para ${comp.motivo}.` : "",
       ]
         .filter(Boolean)
         .join("\n");
