@@ -9,7 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export type ServicioMant = "cisternas" | "tinacos" | "calentadores";
 
 export const ETIQUETA_SERVICIO_MANT: Record<ServicioMant, string> = {
-  cisternas: "Mantenimiento de cisternas",
+  cisternas: "Mantenimiento y reparación de cisternas",
   tinacos: "Limpieza y mantenimiento de tinacos",
   calentadores: "Mantenimiento de calentador solar",
 };
