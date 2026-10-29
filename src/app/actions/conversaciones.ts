@@ -161,6 +161,19 @@ async function telefonosProveedores(sb: ReturnType<typeof supabaseServidor>): Pr
   return set;
 }
 
+/** Últimos 10 dígitos de los WhatsApp de asesores: sus chats van en la pestaña Asesores. */
+async function telefonosAsesores(sb: ReturnType<typeof supabaseServidor>): Promise<Set<string>> {
+  const { data } = await sb.from("perfiles").select("telefono, telefono_whatsapp");
+  const set = new Set<string>();
+  for (const p of data || []) {
+    for (const t of [(p as any).telefono, (p as any).telefono_whatsapp]) {
+      const d = String(t || "").replace(/\D/g, "").slice(-10);
+      if (d.length === 10) set.add(d);
+    }
+  }
+  return set;
+}
+
 export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   // Una sola validación de sesión (getUser es una llamada de red a Supabase Auth).
   const usuario = await usuarioActual();
@@ -168,7 +181,7 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   const sb = supabaseServidor();
 
   // Rol y mensajes en paralelo; solo las columnas que usa la bandeja.
-  const [{ rol }, { data, error }, telProveedores] = await Promise.all([
+  const [{ rol }, { data, error }, telProveedores, telAsesores] = await Promise.all([
     rolDe(usuario.id),
     sb
       .from("mensajes_whatsapp")
@@ -177,6 +190,7 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
       .order("created_at", { ascending: false })
       .limit(1000),
     telefonosProveedores(sb),
+    telefonosAsesores(sb),
   ]);
   if (error) throw new Error(error.message);
   let filas = (data as FilaMsg[]) ?? [];
@@ -294,7 +308,7 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
 
   const resumenes: ConversacionResumen[] = [];
   porTel.forEach((arr, telefono) => {
-    if (telProveedores.has(telefono)) return;
+    if (telProveedores.has(telefono) || telAsesores.has(telefono)) return;
     const conExp = arr.find((f) => f.expediente_id);
     const conPros = arr.find((f) => f.prospecto_id);
     const expId = conExp?.expediente_id ?? null;
@@ -1377,7 +1391,7 @@ export async function contarConversacionesPendientes(): Promise<number> {
     const u = await usuarioActual();
     if (!u) return 0;
     const sb = supabaseServidor();
-    const [{ data }, telProveedores] = await Promise.all([
+    const [{ data }, telProveedores, telAsesores] = await Promise.all([
       sb
         .from("mensajes_whatsapp")
         .select("telefono, direccion, finalizado, created_at")
@@ -1385,6 +1399,7 @@ export async function contarConversacionesPendientes(): Promise<number> {
         .order("created_at", { ascending: false })
         .limit(2000),
       telefonosProveedores(sb),
+      telefonosAsesores(sb),
     ]);
     if (!data) return 0;
     // Agrupar por clave de 10 dígitos (o canal social) para asociar respuestas 'out' con mensajes 'in'
@@ -1393,7 +1408,7 @@ export async function contarConversacionesPendientes(): Promise<number> {
       const key = esCanalSocial(f.telefono)
         ? f.telefono
         : (f.telefono || "").replace(/\D/g, "").slice(-10);
-      if (!key || telProveedores.has(key)) continue;
+      if (!key || telProveedores.has(key) || telAsesores.has(key)) continue;
 
       if (!porTel.has(key)) {
         porTel.set(key, {

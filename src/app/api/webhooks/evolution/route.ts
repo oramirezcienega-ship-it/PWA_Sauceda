@@ -146,8 +146,64 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 2. Si no es proveedor, registrar como mensaje regular si coincide con un expediente/prospecto
     const diez = telNormalizado.slice(-10);
+
+    // 2. Verificar si el remitente es un Asesor registrado (Gerardo, Paulina, etc.)
+    const { data: asesor } = await sb
+      .from("perfiles")
+      .select("id, nombre, rol, telefono, telefono_whatsapp")
+      .or(`telefono.ilike.%${diez},telefono_whatsapp.ilike.%${diez}`)
+      .limit(1)
+      .maybeSingle();
+
+    if (asesor) {
+      await sb.from("mensajes_whatsapp").insert({
+        telefono: telNormalizado,
+        direccion: "in",
+        texto,
+        wa_message_id: messageId,
+        agente: asesor.nombre,
+        estado: "recibido",
+      });
+
+      // Si el asesor responde, marcar el último lead enviado como revisado en leads_envios_telegram
+      const { data: ultimosEnvios } = await sb
+        .from("leads_envios_telegram")
+        .select("id, estado, expediente_id, prospecto_id")
+        .eq("asesor_id", asesor.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (ultimosEnvios && ultimosEnvios.length > 0 && ultimosEnvios[0].estado === "enviado") {
+        await sb
+          .from("leads_envios_telegram")
+          .update({
+            estado: "revisado",
+            respondido_at: new Date().toISOString(),
+            respondido_via: "whatsapp",
+          })
+          .eq("id", ultimosEnvios[0].id);
+
+        if (ultimosEnvios[0].expediente_id || ultimosEnvios[0].prospecto_id) {
+          await sb.from("actividades").insert({
+            expediente_id: ultimosEnvios[0].expediente_id,
+            prospecto_id: ultimosEnvios[0].prospecto_id,
+            tipo: "nota",
+            titulo: `✅ Asesor ${asesor.nombre} atendió/respondió por WhatsApp`,
+            detalle: `Respuesta recibida por Evolution API: "${texto}"`,
+          });
+        }
+      }
+
+      return NextResponse.json({
+        ok: true,
+        tipo: "asesor",
+        asesor: asesor.nombre,
+        texto,
+      });
+    }
+
+    // 3. Si no es proveedor ni asesor, registrar como mensaje regular si coincide con un expediente/prospecto
     const { data: exp } = await sb
       .from("expedientes")
       .select("id, prospecto_id")

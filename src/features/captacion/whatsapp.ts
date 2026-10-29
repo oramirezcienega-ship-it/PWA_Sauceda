@@ -998,6 +998,22 @@ export async function registrarLeadWhatsApp(
       waMessageId: lead.waMessageId,
     });
 
+    // Si el expediente o mensaje corresponde a seguridad, pasar en automático a Gerardo por Evolution API
+    const tipoEfectivo = updateData.tipo_negocio || exp.tipo_negocio;
+    if (tipoEfectivo === "seguridad" || tipoNegocio === "seguridad") {
+      try {
+        const { pasarLeadSeguridadAGerardoAutomatico } = await import("@/lib/asignacion-seguridad-automatica");
+        void pasarLeadSeguridadAGerardoAutomatico({
+          telefono,
+          expedienteId: exp.id,
+          prospectoId: efectivoProspectoId,
+          motivo: "Lead de seguridad detectado en mensaje entrante",
+        });
+      } catch (errAuto) {
+        console.error("[Captación] Error al pasar lead de seguridad a Gerardo:", errAuto);
+      }
+    }
+
     // Audio que no se pudo transcribir: pausa y aviso al equipo.
     if (audioSinTranscribir) {
       await manejarFlujoAudio(sb, {
@@ -1063,6 +1079,21 @@ export async function registrarLeadWhatsApp(
     prospectoId,
     waMessageId: lead.waMessageId,
   });
+
+  // Si es un lead de seguridad, pasarlo en automático a Gerardo por WhatsApp (Evolution API)
+  if (tipoNegocio === "seguridad") {
+    try {
+      const { pasarLeadSeguridadAGerardoAutomatico } = await import("@/lib/asignacion-seguridad-automatica");
+      void pasarLeadSeguridadAGerardoAutomatico({
+        telefono,
+        expedienteId: id,
+        prospectoId,
+        motivo: "Nuevo lead de seguridad captado automáticamente",
+      });
+    } catch (errAuto) {
+      console.error("[Captación] Error al pasar lead de seguridad a Gerardo:", errAuto);
+    }
+  }
 
   // Audio que no se pudo transcribir: pausa y aviso al equipo.
   if (audioSinTranscribir) {

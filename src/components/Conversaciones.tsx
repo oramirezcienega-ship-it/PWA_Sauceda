@@ -69,8 +69,9 @@ import { CotizacionesEspecialesConversacion } from "@/components/conversaciones/
 import { CoordinacionInstalacionConversacion } from "@/components/conversaciones/CoordinacionInstalacionConversacion";
 import { ModalCoordinarServicioProveedor } from "@/components/conversaciones/ModalCoordinarServicioProveedor";
 import { ConversacionesProveedores } from "@/components/conversaciones/ConversacionesProveedores";
+import { ConversacionesAsesores } from "@/components/conversaciones/ConversacionesAsesores";
 
-type TabPrincipal = "bandeja" | "proveedores" | "documentos" | "respuestas";
+type TabPrincipal = "bandeja" | "proveedores" | "asesores" | "documentos" | "respuestas";
 
 const INPUT =
   "w-full rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-carbon outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30";
@@ -1737,16 +1738,18 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
     <div className="flex flex-col gap-1.5 sm:gap-3">
       {/* Navegación de tabs (en móvil: una fila delgada con nombres cortos) */}
       <div className="flex items-center gap-0.5 sm:gap-1 border-b border-carbon/10 pb-0">
-        {(["bandeja", "proveedores", "documentos", "respuestas"] as TabPrincipal[]).map((t) => {
+        {(["bandeja", "proveedores", "asesores", "documentos", "respuestas"] as TabPrincipal[]).map((t) => {
           const labels: Record<TabPrincipal, string> = {
             bandeja: "💬 Bandeja",
             proveedores: "🧰 Proveedores",
+            asesores: "👔 Asesores",
             documentos: "📂 Documentos",
             respuestas: "⚡ Respuestas Rápidas",
           };
           const labelsCortos: Record<TabPrincipal, string> = {
             bandeja: "💬 Bandeja",
             proveedores: "🧰 Prov.",
+            asesores: "👔 Asesores",
             documentos: "📂 Docs",
             respuestas: "⚡ Rápidas",
           };
@@ -1787,6 +1790,9 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
 
       {/* Tab: Proveedores (línea oficial, sin Sofía) */}
       {tab === "proveedores" && <ConversacionesProveedores proveedorInicial={proveedorInicial} />}
+
+      {/* Tab: Asesores (comunicación interna por Evolution API / WhatsApp) */}
+      {tab === "asesores" && <ConversacionesAsesores />}
 
       {/* Tab: Documentos */}
       {tab === "documentos" && (
