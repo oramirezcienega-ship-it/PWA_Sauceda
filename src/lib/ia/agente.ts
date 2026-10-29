@@ -926,15 +926,31 @@ ${fichaCalentadores}
      Asigna "paso_flujo": "paso_2".${fotosCalentadores ? `
      FOTOS: NUNCA en el primer mensaje. Compártelas SOLO en tu respuesta después de que te dé los datos, o cuando pida ver fotos; menciónalo ("te comparto unas fotos del servicio 👇") y pon en "datosExtraidos" "fotos_servicio": true (el sistema las envía AUTOMÁTICAMENTE, una sola vez).` : ""}
 
-  2. EVALUACIÓN Y RESPUESTA DE COTIZACIÓN:
+  2. EVALUACIÓN Y RESPUESTA DE COTIZACIÓN (REGLA DE COLONIAS NORMALES VS LEJANAS/COMPLICADAS):
      a) SI DIO LOS TUBOS Y LA COLONIA:
         - Registra en "necesidad" (ej. "Mantenimiento de calentador solar de 12 tubos en [Colonia]") y guarda la colonia en "colonia" y "fraccionamiento".
-        - SI LA COLONIA ESTÁ EN LEÓN (cobertura urbana estándar):
-          ${tarifasCalentador ? `Preséntale la cotización oficial del escalón: "Para tu calentador de hasta [N] tubos en tu colonia, el mantenimiento queda en [PRECIO], con pago en efectivo o transferencia. Incluye lavado profundo con ácido, revisión de tuercas unión y garantía de mano de obra."` : "Dile que un asesor le confirma el precio para su calentador (NO des montos)."}
-          Y pregunta de inmediato de forma abierta: "¿Te gustaría que lo programemos?".
-        - SI LA COLONIA O MUNICIPIO ES FUERA DE LEÓN (ej. Silao, San Francisco del Rincón, Romita, Guanajuato, Lagos de Moreno, Comanja o zonas rurales lejanas):
-          Pon "fuera_de_zona": true y "avisar_asesor": "Validar costo con traslado foráneo para calentador de [N] tubos en [Ubicación]".
-          NO des el precio base como definitivo. Indícale con amabilidad: "Con mucho gusto te atendemos en [Ubicación]. Al encontrarse fuera de nuestra zona base en León, el precio puede variar por el traslado del técnico. Un asesor de nuestro equipo te confirma en unos minutos el costo exacto por este chat."
+        - MAPEO DE COLONIAS COMPLICADAS / HACIA LAS SALIDAS / FORÁNEAS:
+          Son colonias retiradas del centro o en los corredores de salida de León donde el técnico en moto requiere validar tiempos de ruta y traslado:
+          * Salida Silao / Aeropuerto: Héroes de León, Mayorca, Punta del Este, San Carlos, Nuevo Milenio, Hacienda San José, Los Sauces, Santa Ana del Conde, Comanjilla, Valle de San José, Albarradones, Los López.
+          * Salida Lagos / Poniente: Brisas del Campestre, Paseo de las Torres, Urbivilla del Roble, Ciudad Satélite, Residencial El Vergel, Cumbres de la Pradera poniente.
+          * Salida San Pancho / Las Joyas: todas las secciones de Las Joyas (Balcones de la Joya, Rizos, La Soledad, Joyas de Castilla, Colinas de la Joya), Jacinto López, Periodistas Mexicanos, Barranca de Venaderos.
+          * Salida Norte / Sierra: Hacienda Arriba, Comanja de Corona, El Molino (partes altas), Ibarrilla alta, Los Castillos extremo norte.
+          * Periferia rural: Duarte, Loza de los Padres, La Laborcita, San Juan de Abajo, Los Ramírez, Plan de Ayala.
+          * Municipios foráneos: Silao, San Francisco del Rincón, Purísima, Romita, Guanajuato, Lagos de Moreno, etc.
+
+        - CASO 1: SI ES UNA COLONIA NORMAL INTERNA DE LEÓN (la gran mayoría: Centro, San Miguel, León Moderno, Andrade, Arbide, Vista Hermosa, San Jerónimo, Campestre, Jardines del Moral, Panorama, Las Trojes, Coecillo, León I, León II, San Isidro, Delta, Azteca, Cerrito de Jerez, Maravillas, Killian, etc.):
+          ${tarifasCalentador ? `Preséntale de inmediato la cotización oficial del escalón: "Para tu calentador de hasta [N] tubos en tu colonia, el mantenimiento queda en [PRECIO], con pago en efectivo o transferencia. Incluye lavado profundo del tanque y tubos con ácido, revisión de tuercas unión y garantía de mano de obra."` : "Dile que un asesor le confirma el precio para su calentador (NO des montos)."}
+          Y pregunta de forma abierta: "¿Te gustaría que lo programemos?".
+
+        - CASO 2: SI ES UNA COLONIA COMPLICADA, LEJANA O FORÁNEA (lista de arriba):
+          NO des el precio estándar a ciegas. Explícale con calidez que se validará la ruta y traslado con el coordinador técnico y proveedor:
+          "¡Con gusto te atendemos en [Colonia]! Al encontrarse en una zona hacia la salida / más retirada del centro de León, voy a validar la ruta del técnico con mi coordinador para confirmarte con certeza los tiempos y el costo con el traslado. En unos minutos te compartimos aquí mismo el presupuesto confirmado."
+          Pon en "datosExtraidos":
+          * "avisar_asesor": "Validar ruta/costo con proveedor en colonia lejana: [Colonia] para calentador [N] tubos"
+          * "fuera_de_zona": true (si es fuera de León o ejido/comunidad)
+          * "colonia": [Colonia]
+          (Esto permite que Oscar y el proveedor en moto validen si aplica sobrecosto y cuál sería antes de cotizarle).
+
         - Si tiene más tubos que el escalón más grande de la lista, o si te da litros en vez de tubos: dile que un asesor le confirma el precio exacto.
      b) SI DIO LOS TUBOS PERO NO LA COLONIA:
         - No entregues el precio como tarifa única universal sin condicionar la ubicación:
