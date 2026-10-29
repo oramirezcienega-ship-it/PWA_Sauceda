@@ -245,12 +245,13 @@ DISQUALIFIED_CALIFICACION = {"descalificado", "no_viable"}
 DISQUALIFIED_ETAPAS = {"perdido", "descalificado", "no_viable", "fuera_de_zona", "cancelado", "en_pausa"}
 
 
-def verificar_elegibilidad_crm(phone_e164: str, sufijo_10: str) -> tuple[bool, str, str | None, str | None]:
+def verificar_elegibilidad_crm(phone_e164: str, sufijo_10: str, campaign_name: str = "") -> tuple[bool, str, str | None, str | None]:
     """
-    PRE-FLIGHT GUARD: Consulta en tiempo real a Supabase (prospectos y expedientes)
+    PRE-FLIGHT GUARD: Consulta en tiempo real a Supabase (prospectos, expedientes y órdenes de trabajo)
     ANTES de enviar cualquier mensaje de campaña por WhatsApp.
-    Si el contacto está descalificado, no viable, fuera de zona, cancelado o perdido:
-    retorna (False, motivo, prospecto_id, expediente_id) para ABORTAR el envío.
+    - Si el contacto está descalificado, no viable, fuera de zona, cancelado o perdido: ABORTA.
+    - Si el contacto es un CLIENTE real (estatus='cliente', tiene OT o expediente ganado) y la
+      campaña es de prospección/reactivación en frío: ABORTA para protegerlo de saturación.
     """
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY or not sufijo_10 or len(sufijo_10) < 8:
         return True, "Validación omitida (sin credenciales)", None, None
@@ -327,6 +328,48 @@ def verificar_elegibilidad_crm(phone_e164: str, sufijo_10: str) -> tuple[bool, s
     if reasons:
         motivo = " | ".join(reasons)
         return False, motivo, pid, eid
+
+    # =========================================================================
+    # BLINDAJE ANTISPAM PARA CLIENTES:
+    # Si ya compró (es cliente, tiene OT o expediente ganado), queda protegido
+    # de campañas de prospección en frío o reactivación agresiva.
+    # =========================================================================
+    camp_lower = (campaign_name or "").lower()
+    es_campana_cliente = any(
+        tag in camp_lower
+        for tag in ["cliente", "post_venta", "postventa", "garantia", "mantenimiento_anual", "fidelizacion"]
+    )
+
+    if not es_campana_cliente:
+        es_cliente = False
+        motivo_cliente = []
+
+        if prospecto and str(prospecto.get("estatus") or "").strip().lower() == "cliente":
+            es_cliente = True
+            motivo_cliente.append("prospecto.estatus='cliente'")
+
+        for exp in expedientes:
+            e_id = exp.get("id")
+            e_etapa = str(exp.get("etapa") or "").strip().lower()
+            if e_etapa in ("ganado", "obra", "ejecucion", "finalizado", "cerrado", "propuesta-aceptada"):
+                es_cliente = True
+                motivo_cliente.append(f"expediente({e_id}).etapa='{e_etapa}'")
+
+        if not es_cliente and pid:
+            try:
+                query_ot = f"{SUPABASE_URL}/rest/v1/ordenes_trabajo?select=id,folio,estatus&prospecto_id=eq.{pid}&limit=1"
+                req_ot = urllib.request.Request(query_ot, headers=headers, method="GET")
+                with urllib.request.urlopen(req_ot, timeout=5) as resp_ot:
+                    data_ot = json.loads(resp_ot.read().decode("utf-8"))
+                    if data_ot and len(data_ot) > 0:
+                        es_cliente = True
+                        motivo_cliente.append(f"tiene_OT({data_ot[0].get('folio')})")
+            except Exception as e_ot:
+                pass
+
+        if es_cliente:
+            motivo = f"CLIENTE_PROTEGIDO ({' | '.join(motivo_cliente)}): bloqueado para campañas de prospección"
+            return False, motivo, pid, eid
 
     return True, "Elegible", pid, eid
 
@@ -542,7 +585,7 @@ def queue_worker():
             # =========================================================================
             # PRE-FLIGHT GUARD: VALIDACIÓN EN TIEMPO REAL CONTRA SUPABASE
             # =========================================================================
-            elegible, motivo_rechazo, prospecto_id, expediente_id = verificar_elegibilidad_crm(phone_e164, sufijo_10)
+            elegible, motivo_rechazo, prospecto_id, expediente_id = verificar_elegibilidad_crm(phone_e164, sufijo_10, campaign_name)
             if not elegible:
                 logger.warning(f"⛔ [PRE-FLIGHT BLOQUEADO] {phone_e164} ({name}) DESCALIFICADO EN CRM: {motivo_rechazo}. Abortando envío.")
                 record_entry = {

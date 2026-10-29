@@ -278,6 +278,19 @@ export async function crearOrdenTrabajo(datos: {
       return { ok: false, error: error.message };
     }
 
+    // Promover automáticamente el prospecto a estatus permanente 'cliente'
+    if (prospectoId) {
+      try {
+        await sb
+          .from("prospectos")
+          .update({ estatus: "cliente" })
+          .eq("id", prospectoId)
+          .neq("estatus", "cliente");
+      } catch (errPromover) {
+        console.warn("Aviso: no se pudo actualizar prospecto a cliente:", errPromover);
+      }
+    }
+
     if (proveedorId && tipoNegocio !== "asesoria_compra") {
       const resDoc = await generarDocumentoProveedorAutomatico(nuevaOT.id);
       if (!resDoc.ok) console.warn("No se generó el documento de proveedor automático:", resDoc.error);

@@ -1230,6 +1230,19 @@ export async function aceptarCotizacionCliente(
 
   if (error) throw new Error(error.message);
 
+  // Promover automáticamente a estatus permanente 'cliente' al aceptar cotización
+  if (cot.prospecto_id) {
+    try {
+      await sb
+        .from("prospectos")
+        .update({ estatus: "cliente" })
+        .eq("id", cot.prospecto_id)
+        .neq("estatus", "cliente");
+    } catch (errPromover) {
+      console.warn("Aviso: no se pudo promover prospecto a cliente en aceptación:", errPromover);
+    }
+  }
+
   // Si es modular y tenemos datos modulares y opciones seleccionadas, sincronizar conceptos para downstream
   if (cot.modalidad === "modular" && cot.datos_modulares && opcionesSeleccionadas) {
     try {
