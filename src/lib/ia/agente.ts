@@ -2770,24 +2770,7 @@ export async function responderConIA(
         nombreCliente: [exp?.cliente, exp?.primer_apellido].filter(Boolean).join(" "),
       });
 
-      // Si es un lead de seguridad, pasar en automático a Gerardo por Evolution API
-      if (
-        datosExtraidos.tipo_negocio === "seguridad" ||
-        exp?.tipo_negocio === "seguridad" ||
-        /seguridad|cctv|alarma|c[aá]mara|videoportero/i.test(motivoAviso)
-      ) {
-        try {
-          const { pasarLeadSeguridadAGerardoAutomatico } = await import("@/lib/asignacion-seguridad-automatica");
-          void pasarLeadSeguridadAGerardoAutomatico({
-            telefono: ctx.telefono,
-            expedienteId: ctx.expedienteId ?? null,
-            prospectoId: exp?.prospecto_id ?? null,
-            motivo: motivoAviso || "Lead de seguridad detectado en conversación por Sofía",
-          });
-        } catch (errSeg) {
-          console.error("[Sofía Agente] Error al pasar lead de seguridad a Gerardo:", errSeg);
-        }
-      }
+
 
       // Si es una oportunidad comercial de construcción/mantenimiento, garantía o se solicitó pausar_ia, pausar a Sofía de inmediato
       const esAtencionHumanaRequerida =
@@ -2950,6 +2933,29 @@ export async function responderConIA(
         titulo: `Respuesta automática (IA) por ${canalLabel}`,
         detalle: textoRespuesta,
       });
+    }
+
+    // --- PASE AUTOMÁTICO DE SEGURIDAD A GERARDO (EVOLUTION API) ---
+    // Se ejecuta DESPUÉS de haberle respondido al cliente para que nunca se quede en "visto".
+    // Envía la ficha completa con el resumen y cotización entregada a Gerardo y luego pausa a Sofía.
+    const esLeadSeguridad =
+      (updates.tipo_negocio as string | undefined) === "seguridad" ||
+      datosExtraidos.tipo_negocio === "seguridad" ||
+      exp?.tipo_negocio === "seguridad" ||
+      /seguridad|cctv|alarma|c[aá]mara|videoportero/i.test(textoRespuesta);
+
+    if (r.ok && esLeadSeguridad) {
+      try {
+        const { pasarLeadSeguridadAGerardoAutomatico } = await import("@/lib/asignacion-seguridad-automatica");
+        void pasarLeadSeguridadAGerardoAutomatico({
+          telefono: ctx.telefono,
+          expedienteId: ctx.expedienteId ?? null,
+          prospectoId: exp?.prospecto_id ?? null,
+          motivo: "Lead de seguridad atendido con cotización inicial; transferido a Gerardo para seguimiento",
+        });
+      } catch (errSeg) {
+        console.error("[Sofía Agente] Error al pasar lead de seguridad a Gerardo tras responder:", errSeg);
+      }
     }
   } catch (err) {
     if (ctx.soloBorrador) throw err;

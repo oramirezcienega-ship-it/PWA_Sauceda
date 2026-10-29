@@ -1000,16 +1000,16 @@ export async function registrarLeadWhatsApp(
       waMessageId: lead.waMessageId,
     });
 
-    // Si el expediente o mensaje corresponde a seguridad, pasar en automático a Gerardo por Evolution API
+    // Si la IA está apagada y es seguridad, pasar en automático a Gerardo (si la IA está activa, ella responde primero y luego pasa el lead)
     const tipoEfectivo = updateData.tipo_negocio || exp.tipo_negocio;
-    if (tipoEfectivo === "seguridad" || tipoNegocio === "seguridad") {
+    if (!iaAgenteActivo() && (tipoEfectivo === "seguridad" || tipoNegocio === "seguridad")) {
       try {
         const { pasarLeadSeguridadAGerardoAutomatico } = await import("@/lib/asignacion-seguridad-automatica");
         void pasarLeadSeguridadAGerardoAutomatico({
           telefono,
           expedienteId: exp.id,
           prospectoId: efectivoProspectoId,
-          motivo: "Lead de seguridad detectado en mensaje entrante",
+          motivo: "Lead de seguridad entrante (IA apagada)",
         });
       } catch (errAuto) {
         console.error("[Captación] Error al pasar lead de seguridad a Gerardo:", errAuto);
@@ -1082,15 +1082,15 @@ export async function registrarLeadWhatsApp(
     waMessageId: lead.waMessageId,
   });
 
-  // Si es un lead de seguridad, pasarlo en automático a Gerardo por WhatsApp (Evolution API)
-  if (tipoNegocio === "seguridad") {
+  // Si la IA está apagada y es seguridad, pasar en automático a Gerardo (si la IA está activa, ella responde primero y luego pasa el lead)
+  if (!iaOn && tipoNegocio === "seguridad") {
     try {
       const { pasarLeadSeguridadAGerardoAutomatico } = await import("@/lib/asignacion-seguridad-automatica");
       void pasarLeadSeguridadAGerardoAutomatico({
         telefono,
         expedienteId: id,
         prospectoId,
-        motivo: "Nuevo lead de seguridad captado automáticamente",
+        motivo: "Nuevo lead de seguridad captado (IA apagada)",
       });
     } catch (errAuto) {
       console.error("[Captación] Error al pasar lead de seguridad a Gerardo:", errAuto);
