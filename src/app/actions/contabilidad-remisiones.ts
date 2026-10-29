@@ -774,12 +774,12 @@ export async function previsualizarCostosRemisionOT(
 
     const { data: ot } = await sb
       .from("ordenes_trabajo")
-      .select("id, cotizacion_id, expediente_id, costo_proveedor, comision_bancaria_pct, asesor_responsable_id, asesor_ejecutor_id")
+      .select("id, cotizacion_id, expediente_id, costo_proveedor, comision_bancaria_pct, precio_cliente, asesor_responsable_id, asesor_ejecutor_id")
       .eq("id", ordenTrabajoId)
       .maybeSingle();
     if (!ot) return { ok: false, error: "Orden de trabajo no encontrada." };
 
-    let montoTotal = 0;
+    let montoTotal = Number(ot.precio_cliente || 0);
     let servicioTipo: string | null = null;
     let asesorId: string | null = null;
     if (ot.cotizacion_id) {
@@ -788,7 +788,9 @@ export async function previsualizarCostosRemisionOT(
         .select("precio_final, servicio_tipo, prospecto_id")
         .eq("id", ot.cotizacion_id)
         .maybeSingle();
-      montoTotal = Number(cot?.precio_final || 0);
+      if (Number(cot?.precio_final || 0) > 0) {
+        montoTotal = Number(cot?.precio_final);
+      }
       servicioTipo = cot?.servicio_tipo || null;
       if (cot?.prospecto_id) {
         const { data: pr } = await sb.from("prospectos").select("asesor_id").eq("id", cot.prospecto_id).maybeSingle();

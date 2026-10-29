@@ -1964,6 +1964,7 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
         fecha_programada,
         costo_proveedor,
         comision_bancaria_pct,
+        precio_cliente,
         prospectos(nombre, primer_apellido, segundo_apellido, telefono, direccion),
         cotizaciones(id, precio_final, token, expediente_id)
       `)
