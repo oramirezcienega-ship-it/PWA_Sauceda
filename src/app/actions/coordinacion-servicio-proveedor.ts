@@ -397,21 +397,116 @@ export async function registrarAceptacionProveedor(input: {
 export async function registrarCotizacionExpress(
   telefono: string,
   d: { productoId: string; productoNombre: string; cantidad: number | null; variacion: string; total: number }
-): Promise<void> {
+): Promise<{ ok: boolean; cotizacionId?: string; error?: string }> {
   try {
     await requireAdmin();
     const sb = supabaseServidor();
     const { prospecto, expediente } = await idsCliente(sb, telefono);
-    if (!expediente && !prospecto) return;
+    if (!expediente && !prospecto) return { ok: false, error: "Cliente no encontrado." };
+
+    // Obtener datos del producto para costos, unidad y especificaciones
+    const { data: prod } = await sb.from("productos_servicios").select("*").eq("id", d.productoId).maybeSingle();
+    const { costoReferenciaOferta } = await import("@/lib/solicitudes-proveedor");
+    let costoProv = prod ? costoReferenciaOferta(prod as any, d.cantidad) : null;
+    if (!costoProv || !(costoProv > 0)) {
+      costoProv = Math.round(d.total * 0.7);
+    }
+
+    const filtroCliente = [
+      expediente?.id ? `expediente_id.eq.${expediente.id}` : null,
+      prospecto?.id ? `prospecto_id.eq.${prospecto.id}` : null,
+    ].filter(Boolean).join(",");
+
+    let cotId: string;
+    const { data: cotExistente } = filtroCliente
+      ? await sb
+          .from("cotizaciones")
+          .select("id, estatus")
+          .or(filtroCliente)
+          .in("estatus", ["calculando_costo", "enviada"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : { data: null };
+
+    if (cotExistente) {
+      cotId = cotExistente.id;
+      await sb
+        .from("cotizaciones")
+        .update({
+          precio_final: d.total,
+          costo_directo: costoProv,
+          costo_estimado: costoProv,
+          utilidad_monto: Math.max(0, d.total - costoProv),
+          utilidad_pct: d.total > 0 ? Math.round(((d.total - costoProv) / d.total) * 10000) / 100 : 0,
+          estatus: "enviada",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", cotId);
+      await sb.from("cotizacion_conceptos").delete().eq("cotizacion_id", cotId);
+    } else {
+      const { data: existentes } = await sb.from("cotizaciones").select("id");
+      const numeros = (existentes || [])
+        .map((r: any) => parseInt(String(r.id).replace(/\D/g, ""), 10))
+        .filter((n: number) => !isNaN(n));
+      const max = numeros.length ? Math.max(...numeros) : 0;
+      cotId = `COT-${String(max + 1).padStart(3, "0")}`;
+
+      await sb.from("cotizaciones").insert({
+        id: cotId,
+        prospecto_id: prospecto?.id || null,
+        expediente_id: expediente?.id || null,
+        servicio_tipo: "otro",
+        estatus: "enviada",
+        requiere_visita: false,
+        costo_estimado: costoProv,
+        costo_directo: costoProv,
+        precio_final: d.total,
+        utilidad_monto: Math.max(0, d.total - costoProv),
+        utilidad_pct: d.total > 0 ? Math.round(((d.total - costoProv) / d.total) * 10000) / 100 : 0,
+        token: crypto.randomUUID(),
+        modalidad: "estatica",
+        condiciones_pago: "Pago de contado al término del servicio a entera satisfacción.",
+        garantia: prod?.estandar_garantia || prod?.plantilla_garantia || "Garantía de servicio realizado en mano de obra.",
+        alcances: prod?.descripcion || `${d.productoNombre}${d.variacion ? ` · ${d.variacion}` : ""}`,
+        notas_internas: `Generada automáticamente desde Cotización Express (${d.productoNombre} · ${d.variacion || ""}).`,
+      });
+    }
+
+    await sb.from("cotizacion_conceptos").insert({
+      cotizacion_id: cotId,
+      producto_servicio_id: d.productoId,
+      descripcion: `${d.productoNombre}${d.variacion ? ` · ${d.variacion}` : ""}`,
+      cantidad: d.cantidad || 1,
+      unidad: prod?.unidad || "servicio",
+      costo_unitario: costoProv && d.cantidad && d.cantidad > 0 ? Math.round((costoProv / d.cantidad) * 100) / 100 : costoProv,
+      precio_unitario: d.cantidad && d.cantidad > 0 ? Math.round((d.total / d.cantidad) * 100) / 100 : d.total,
+      descuento: 0,
+      importe: d.total,
+    });
+
+    if (expediente?.id) {
+      await sb
+        .from("expedientes")
+        .update({
+          etapa: "cotizacion",
+          ultimo_movimiento: new Date().toISOString().split("T")[0],
+        })
+        .eq("id", expediente.id);
+    }
+
     await registrarActividad(sb, {
       expedienteId: expediente?.id ?? null,
       prospectoId: prospecto?.id ?? null,
       tipo: "cotizacion_express",
-      titulo: `Cotización Express · ${d.productoNombre}${d.variacion ? ` · ${d.variacion}` : ""} · ${pesos(d.total)}`,
-      detalle: `[producto:${d.productoId}]${d.cantidad ? `[cantidad:${d.cantidad}]` : ""}[precio:${d.total}]`,
+      titulo: `Cotización Express · ${d.productoNombre}${d.variacion ? ` · ${d.variacion}` : ""} · ${pesos(d.total)} (${cotId})`,
+      detalle: `[cotizacion:${cotId}][producto:${d.productoId}]${d.cantidad ? `[cantidad:${d.cantidad}]` : ""}[precio:${d.total}]`,
     });
-  } catch (err) {
+
+    return { ok: true, cotizacionId: cotId };
+  } catch (err: any) {
     console.error("No se pudo registrar la cotización express:", err);
+    return { ok: false, error: err?.message || "No se pudo registrar la cotización." };
   }
 }
 
@@ -458,6 +553,31 @@ async function guardarEnOrdenTrabajo(
     (abiertas || []).find((o: any) => o.proveedor_id === d.proveedorId) ||
     (abiertas || []).find((o: any) => !o.proveedor_id);
 
+  // Buscar si el cliente tiene una cotización reciente para vincular la OT y heredar precio_cliente
+  let cotId: string | null = null;
+  let precioCliente: number | null = null;
+  const filtroCliente = [
+    d.expedienteId ? `expediente_id.eq.${d.expedienteId}` : null,
+    d.prospectoId ? `prospecto_id.eq.${d.prospectoId}` : null,
+  ].filter(Boolean).join(",");
+  if (filtroCliente) {
+    const { data: ultCot } = await sb
+      .from("cotizaciones")
+      .select("id, precio_final, estatus")
+      .or(filtroCliente)
+      .neq("estatus", "cancelada")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (ultCot) {
+      cotId = ultCot.id;
+      precioCliente = Number(ultCot.precio_final || 0) || null;
+      if (ultCot.estatus === "enviada" || ultCot.estatus === "calculando_costo") {
+        await sb.from("cotizaciones").update({ estatus: "aceptada", updated_at: new Date().toISOString() }).eq("id", ultCot.id);
+      }
+    }
+  }
+
   if (ot) {
     const { error } = await sb
       .from("ordenes_trabajo")
@@ -466,6 +586,8 @@ async function guardarEnOrdenTrabajo(
         costo_proveedor: d.costo,
         proveedor_concepto: d.concepto,
         ...(d.fechaProgramada && !ot.fecha_programada ? { fecha_programada: d.fechaProgramada } : {}),
+        ...(cotId && !ot.cotizacion_id ? { cotizacion_id: cotId } : {}),
+        ...(precioCliente && !ot.precio_cliente ? { precio_cliente: precioCliente } : {}),
         updated_at: new Date().toISOString(),
       })
       .eq("id", ot.id);
@@ -476,6 +598,7 @@ async function guardarEnOrdenTrabajo(
   const { crearOrdenTrabajo } = await import("@/app/actions/ordenes-trabajo");
   const r = await crearOrdenTrabajo({
     expedienteId: d.expedienteId,
+    cotizacionId: cotId,
     prospectoId: d.prospectoId,
     ...(d.tipoNegocio ? { tipoNegocio: d.tipoNegocio } : {}),
     titulo: `${d.concepto} — ${d.proveedorNombre}`,

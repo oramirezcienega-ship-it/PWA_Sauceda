@@ -200,17 +200,21 @@ export async function crearOrdenTrabajo(datos: {
       }
     }
 
-    // Solo se crea una OT desde una cotización aceptada por el cliente
+    // Si viene de cotización, asegurar que esté aceptada o promoverla automáticamente al crear la OT
+    let cotPrecioFinal: number | null = null;
     if (cotizacionId) {
       const { data: cotEstado } = await sb
         .from("cotizaciones")
-        .select("estatus")
+        .select("estatus, precio_final")
         .eq("id", cotizacionId)
         .maybeSingle();
       if (!cotEstado) {
         return { ok: false, error: "La cotización indicada no existe." };
       }
-      if (cotEstado.estatus !== "aceptada" && cotEstado.estatus !== "instalacion") {
+      cotPrecioFinal = Number(cotEstado.precio_final || 0) || null;
+      if (cotEstado.estatus === "enviada" || cotEstado.estatus === "calculando_costo") {
+        await sb.from("cotizaciones").update({ estatus: "aceptada", updated_at: new Date().toISOString() }).eq("id", cotizacionId);
+      } else if (cotEstado.estatus !== "aceptada" && cotEstado.estatus !== "instalacion") {
         return {
           ok: false,
           error: `La cotización ${cotizacionId} está en estado "${cotEstado.estatus}". Solo se puede crear una orden de trabajo desde una cotización aceptada por el cliente.`,
@@ -263,6 +267,7 @@ export async function crearOrdenTrabajo(datos: {
         proveedor_id: proveedorId || null,
         costo_proveedor: costoProveedor && costoProveedor > 0 ? costoProveedor : null,
         proveedor_concepto: proveedorConcepto?.trim() || null,
+        ...(cotPrecioFinal && cotPrecioFinal > 0 ? { precio_cliente: cotPrecioFinal } : {}),
       })
       .select("id, folio, token")
       .single();
@@ -2001,7 +2006,7 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
     }
     const folio = `${prefijo}${String(siguienteNum).padStart(4, "0")}`;
 
-    const montoBase = Number(ot.cotizaciones?.precio_final || 0);
+    const montoBase = Number(ot.cotizaciones?.precio_final || (ot as any).precio_cliente || 0);
 
     const datosDoc: Record<string, any> =
       datos.tipo === "factura"
@@ -2309,23 +2314,25 @@ async function generarDocumentosAutomaticosOT(
   }
 
   // 3. Remisión de venta: sólo si hay un precio real que facturar (evita
-  // generar remisiones en $0 para OTs manuales sin cotización).
+  // generar remisiones en $0 para OTs manuales sin cotización ni precio pactado).
   try {
     const { data: otCheck } = await sb
       .from("ordenes_trabajo")
-      .select("cotizacion_id")
+      .select("cotizacion_id, precio_cliente")
       .eq("id", ordenTrabajoId)
       .maybeSingle();
-    let precioFinal = 0;
+    let precioFinal = Number(otCheck?.precio_cliente || 0);
     if (otCheck?.cotizacion_id) {
       const { data: cotCheck } = await sb
         .from("cotizaciones")
         .select("precio_final")
         .eq("id", otCheck.cotizacion_id)
         .maybeSingle();
-      precioFinal = Number(cotCheck?.precio_final || 0);
+      if (Number(cotCheck?.precio_final || 0) > 0) {
+        precioFinal = Number(cotCheck?.precio_final);
+      }
     }
-    if (otCheck?.cotizacion_id && precioFinal > 0) {
+    if (precioFinal > 0) {
       await generarRemisionDesdeOrdenTrabajo({ ordenTrabajoId, tipo: "remision" });
     }
   } catch (errRem) {

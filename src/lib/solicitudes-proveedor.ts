@@ -401,6 +401,34 @@ export async function abrirOrdenTrabajoSolicitud(sb: SupabaseClient, solicitudId
     const { data: exp } = s.expediente_id
       ? await sb.from("expedientes").select("prospecto_id, cliente, primer_apellido, tipo_negocio, necesidad").eq("id", s.expediente_id).maybeSingle()
       : { data: null as any };
+
+    // Si la solicitud no traía cotización, resolver si el cliente tiene una cotización activa reciente
+    let cotizacionIdResuelta = s.cotizacion_id || null;
+    let precioClienteResuelto: number | null = null;
+    const filtroClienteCot = [
+      s.expediente_id ? `expediente_id.eq.${s.expediente_id}` : null,
+      exp?.prospecto_id ? `prospecto_id.eq.${exp.prospecto_id}` : null,
+    ].filter(Boolean).join(",");
+
+    if (!cotizacionIdResuelta && filtroClienteCot) {
+      const { data: ultCot } = await sb
+        .from("cotizaciones")
+        .select("id, precio_final, estatus")
+        .or(filtroClienteCot)
+        .neq("estatus", "cancelada")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (ultCot) {
+        cotizacionIdResuelta = ultCot.id;
+        precioClienteResuelto = Number(ultCot.precio_final || 0) || null;
+        if (ultCot.estatus === "enviada" || ultCot.estatus === "calculando_costo") {
+          await sb.from("cotizaciones").update({ estatus: "aceptada", updated_at: new Date().toISOString() }).eq("id", ultCot.id);
+        }
+        await sb.from("solicitudes_proveedor").update({ cotizacion_id: cotizacionIdResuelta }).eq("id", solicitudId);
+      }
+    }
+
     const trabajo =
       s.productos_servicios?.nombre ||
       String(exp?.necesidad || "").split(/[;.]/)[0].trim() ||
@@ -413,12 +441,18 @@ export async function abrirOrdenTrabajoSolicitud(sb: SupabaseClient, solicitudId
       proveedor_concepto: concepto,
       ...(s.producto_id ? { producto_id: s.producto_id } : {}),
       ...(s.cantidad ? { cantidad_servicio: s.cantidad } : {}),
+      ...(cotizacionIdResuelta ? { cotizacion_id: cotizacionIdResuelta } : {}),
+      ...(precioClienteResuelto ? { precio_cliente: precioClienteResuelto } : {}),
     };
 
     // OT abierta de la misma cotización (o del cliente sin proveedor): se reutiliza.
     let q = sb.from("ordenes_trabajo").select("id, folio, proveedor_id").in("estatus", ["pendiente", "en_proceso"]);
-    q = s.cotizacion_id ? q.eq("cotizacion_id", s.cotizacion_id) : q.eq("expediente_id", s.expediente_id).is("cotizacion_id", null);
-    const { data: abiertas } = s.cotizacion_id || s.expediente_id ? await q.order("created_at", { ascending: false }) : { data: [] as any[] };
+    q = cotizacionIdResuelta
+      ? q.or(`cotizacion_id.eq.${cotizacionIdResuelta}${s.expediente_id ? `,expediente_id.eq.${s.expediente_id}` : ""}`)
+      : s.expediente_id
+      ? q.eq("expediente_id", s.expediente_id)
+      : q;
+    const { data: abiertas } = cotizacionIdResuelta || s.expediente_id ? await q.order("created_at", { ascending: false }) : { data: [] as any[] };
     const previa = (abiertas || []).find((o: any) => !o.proveedor_id || o.proveedor_id === s.proveedor_asignado_id);
     let otId: string;
     let folio: string;
@@ -435,7 +469,7 @@ export async function abrirOrdenTrabajoSolicitud(sb: SupabaseClient, solicitudId
           folio,
           token: crypto.randomUUID().replace(/-/g, ""),
           expediente_id: s.expediente_id || null,
-          cotizacion_id: s.cotizacion_id || null,
+          cotizacion_id: cotizacionIdResuelta,
           prospecto_id: exp?.prospecto_id || null,
           tipo_negocio: exp?.tipo_negocio || "construccion",
           estatus: "pendiente",

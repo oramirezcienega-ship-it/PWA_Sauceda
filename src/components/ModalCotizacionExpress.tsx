@@ -467,6 +467,15 @@ ${meses}${renglones.length ? `\n📋 *¿Qué incluye el servicio?*\n${renglones.
   function insertarTexto() {
     const texto = generarTexto();
     if (!texto) return;
+    if (telefono && producto) {
+      void registrarCotizacionExpress(telefono, {
+        productoId: producto.id,
+        productoNombre: producto.nombre,
+        cantidad: escalonSel ? escalonSel.hastaLitros : cantidadCobrada,
+        variacion: escalonSel ? `hasta ${formatoEscalon(escalonSel.hastaLitros, medida)}` : `${cantidadCobrada} ${unidad}`,
+        total,
+      });
+    }
     if (onInsertarTexto) {
       onInsertarTexto(texto);
       avisar("¡Texto insertado en el chat!", true);
