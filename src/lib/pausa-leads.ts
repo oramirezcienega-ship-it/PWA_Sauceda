@@ -1,7 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { registrarActividad } from "@/lib/actividades";
-import { enviarWhatsAppPlantilla, renderizarPlantilla } from "@/lib/whatsapp";
-import { enviarMensajeTelegram, obtenerConfiguracionTelegram } from "@/lib/telegram";
 
 /**
  * Leads en pausa ("retomar después").
@@ -52,30 +49,240 @@ export function hoyMexico(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date());
 }
 
-function sumarDias(fechaISO: string, dias: number): string {
+export function sumarDias(fechaISO: string, dias: number): string {
   const d = new Date(`${fechaISO}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + dias);
   return d.toISOString().slice(0, 10);
 }
 
+export interface InferenciaPausa {
+  detectado: boolean;
+  dias: number;
+  fecha: string;
+  motivo: string;
+  etiquetaCorta: string;
+}
+
 /**
- * Calcula la fecha para retomar a partir de lo que dijo el cliente.
- *  - "2026-12" (mes) o "2026-12-15" (día): se retoma `diasAnticipacion` días antes.
- *  - Sin fecha clara: dentro de 30 días.
+ * Infiere de manera inteligente los días y fecha de pausa a partir de lo que dijo el cliente
+ * en lenguaje natural mexicano (ej. "una semana más", "en 15 días", "el próximo mes", "hasta diciembre").
+ */
+export function inferirPausaDesdeTexto(texto: string, fechaBaseISO?: string): InferenciaPausa {
+  const base = fechaBaseISO || hoyMexico();
+  const raw = (texto || "").toLowerCase().trim();
+  const norm = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // 1 semana / una semana / la próxima semana / semana que viene / semana más / espérame una semana
+  if (/(1|una)\s*semana|proxima\s*semana|siguiente\s*semana|semana\s*que\s*viene|semana\s*mas|espera(nos|me)?\s*(1|una)\s*semana|dame\s*(1|una)\s*semana/.test(norm)) {
+    const dias = 7;
+    return {
+      detectado: true,
+      dias,
+      fecha: sumarDias(base, dias),
+      motivo: "Cliente pidió esperar una semana",
+      etiquetaCorta: "+1 sem (7 días)",
+    };
+  }
+
+  // 2 semanas / 15 días / quincena
+  if (/(2|dos)\s*semanas|15\s*dias|quince\s*dias|quincena|proxima\s*quincena/.test(norm)) {
+    const dias = 14;
+    return {
+      detectado: true,
+      dias,
+      fecha: sumarDias(base, dias),
+      motivo: "Cliente pidió esperar 2 semanas / quincena",
+      etiquetaCorta: "+2 sem (14 días)",
+    };
+  }
+
+  // 3 semanas / 20 días
+  if (/(3|tres)\s*semanas|20\s*dias|veinte\s*dias/.test(norm)) {
+    const dias = 21;
+    return {
+      detectado: true,
+      dias,
+      fecha: sumarDias(base, dias),
+      motivo: "Cliente pidió esperar 3 semanas",
+      etiquetaCorta: "+3 sem (21 días)",
+    };
+  }
+
+  // 1 mes / el próximo mes
+  if (/(1|un)\s*mes|proximo\s*mes|siguiente\s*mes|el\s*mes\s*que\s*entra|en\s*30\s*dias/.test(norm)) {
+    const dias = 30;
+    return {
+      detectado: true,
+      dias,
+      fecha: sumarDias(base, dias),
+      motivo: "Cliente pidió retomar el próximo mes",
+      etiquetaCorta: "+1 mes (30 días)",
+    };
+  }
+
+  // 2 meses
+  if (/(2|dos)\s*meses|en\s*60\s*dias/.test(norm)) {
+    const dias = 60;
+    return {
+      detectado: true,
+      dias,
+      fecha: sumarDias(base, dias),
+      motivo: "Cliente pidió esperar 2 meses",
+      etiquetaCorta: "+2 meses (60 días)",
+    };
+  }
+
+  // 3 meses
+  if (/(3|tres)\s*meses|en\s*90\s*dias/.test(norm)) {
+    const dias = 90;
+    return {
+      detectado: true,
+      dias,
+      fecha: sumarDias(base, dias),
+      motivo: "Cliente pidió esperar 3 meses",
+      etiquetaCorta: "+3 meses (90 días)",
+    };
+  }
+
+  // Días cortos
+  if (/unos\s*dias|par\s*de\s*dias|pocos\s*dias|3\s*dias|tres\s*dias/.test(norm)) {
+    const dias = 3;
+    return {
+      detectado: true,
+      dias,
+      fecha: sumarDias(base, dias),
+      motivo: "Cliente pidió unos días",
+      etiquetaCorta: "+3 días",
+    };
+  }
+
+  if (/pasado\s*manana/.test(norm)) {
+    const dias = 2;
+    return {
+      detectado: true,
+      dias,
+      fecha: sumarDias(base, dias),
+      motivo: "Cliente pidió retomar pasado mañana",
+      etiquetaCorta: "+2 días",
+    };
+  }
+
+  if (/\bmanana\b/.test(norm)) {
+    const dias = 1;
+    return {
+      detectado: true,
+      dias,
+      fecha: sumarDias(base, dias),
+      motivo: "Cliente pidió retomar mañana",
+      etiquetaCorta: "+1 día (mañana)",
+    };
+  }
+
+  // Días de la semana específicos (ej. el próximo lunes)
+  const diasSemana = [
+    { regex: /\blunes\b/, dia: 1, nombre: "lunes" },
+    { regex: /\bmartes\b/, dia: 2, nombre: "martes" },
+    { regex: /\bmiercoles\b/, dia: 3, nombre: "miércoles" },
+    { regex: /\bjueves\b/, dia: 4, nombre: "jueves" },
+    { regex: /\bviernes\b/, dia: 5, nombre: "viernes" },
+    { regex: /\bsabado\b/, dia: 6, nombre: "sábado" },
+    { regex: /\bdomingo\b/, dia: 0, nombre: "domingo" },
+  ];
+  for (const ds of diasSemana) {
+    if (ds.regex.test(norm) && /(el|proximo|siguiente|este)\s+/.test(norm)) {
+      const dObj = new Date(`${base}T12:00:00Z`);
+      const currentDay = dObj.getUTCDay();
+      let diff = (ds.dia - currentDay + 7) % 7;
+      if (diff === 0) diff = 7;
+      return {
+        detectado: true,
+        dias: diff,
+        fecha: sumarDias(base, diff),
+        motivo: `Cliente pidió retomar el ${ds.nombre}`,
+        etiquetaCorta: `Próx. ${ds.nombre} (${diff}d)`,
+      };
+    }
+  }
+
+  // Meses calendario (ej. "hasta diciembre", "en enero")
+  const meses = [
+    { nombre: "enero", idx: 0 },
+    { nombre: "febrero", idx: 1 },
+    { nombre: "marzo", idx: 2 },
+    { nombre: "abril", idx: 3 },
+    { nombre: "mayo", idx: 4 },
+    { nombre: "junio", idx: 5 },
+    { nombre: "julio", idx: 6 },
+    { nombre: "agosto", idx: 7 },
+    { nombre: "septiembre", idx: 8 },
+    { nombre: "octubre", idx: 9 },
+    { nombre: "noviembre", idx: 10 },
+    { nombre: "diciembre", idx: 11 },
+  ];
+  for (const m of meses) {
+    if (new RegExp(`\\b${m.nombre}\\b`).test(norm)) {
+      const dObj = new Date(`${base}T12:00:00Z`);
+      const currentYear = dObj.getUTCFullYear();
+      const currentMonth = dObj.getUTCMonth();
+      const targetYear = m.idx < currentMonth ? currentYear + 1 : currentYear;
+      const targetMonthStr = String(m.idx + 1).padStart(2, "0");
+      const targetFecha = `${targetYear}-${targetMonthStr}-01`;
+      const diffMs = new Date(`${targetFecha}T12:00:00Z`).getTime() - dObj.getTime();
+      const diffDias = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+      return {
+        detectado: true,
+        dias: diffDias,
+        fecha: targetFecha,
+        motivo: `Cliente pidió retomar en ${m.nombre}`,
+        etiquetaCorta: `${m.nombre.slice(0, 3)} ${targetYear}`,
+      };
+    }
+  }
+
+  // Fallback sin detección específica: +7 días como valor comercial predeterminado
+  return {
+    detectado: false,
+    dias: 7,
+    fecha: sumarDias(base, 7),
+    motivo: "",
+    etiquetaCorta: "+1 sem (7 días)",
+  };
+}
+
+/**
+ * Calcula la fecha para retomar a partir de lo que dijo el cliente:
+ *  - Lenguaje natural ("una semana más", "en 15 días", "el próximo mes", etc.): infiere los días exactos.
+ *  - "YYYY-MM" (mes): se retoma `diasAnticipacion` días antes.
+ *  - "YYYY-MM-DD" (día): si es de corto plazo (<= 35 días), se respeta la fecha exacta; si es lejana, con anticipación.
+ *  - Sin fecha clara: dentro de 7 días (evitando aplazar un mes completo a ciegas).
  * Nunca regresa una fecha anterior a mañana.
  */
 export function calcularFechaRetomar(fechaCliente: string | null | undefined, diasAnticipacion = DIAS_ANTICIPACION_DEFAULT): string {
   const hoy = hoyMexico();
   const manana = sumarDias(hoy, 1);
   const f = (fechaCliente || "").trim();
-  let objetivo: string | null = null;
-  if (/^\d{4}-\d{2}$/.test(f)) objetivo = `${f}-01`;
-  else if (/^\d{4}-\d{2}-\d{2}$/.test(f)) objetivo = f;
+  if (!f) return sumarDias(hoy, 7);
 
-  const resultado = objetivo && !Number.isNaN(Date.parse(objetivo))
-    ? sumarDias(objetivo, -Math.max(0, diasAnticipacion))
-    : sumarDias(hoy, DIAS_SIN_FECHA);
-  return resultado < manana ? manana : resultado;
+  // 1. Si es formato mes YYYY-MM
+  if (/^\d{4}-\d{2}$/.test(f)) {
+    const objetivo = `${f}-01`;
+    const anticipado = sumarDias(objetivo, -Math.max(0, diasAnticipacion));
+    return anticipado < manana ? manana : anticipado;
+  }
+
+  // 2. Si es formato fecha exacta YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(f)) {
+    const diffDias = Math.round((new Date(`${f}T12:00:00Z`).getTime() - new Date(`${hoy}T12:00:00Z`).getTime()) / 86400000);
+    if (diffDias <= 35) {
+      return f < manana ? manana : f;
+    }
+    const anticipado = sumarDias(f, -Math.max(0, diasAnticipacion));
+    return anticipado < manana ? manana : anticipado;
+  }
+
+  // 3. Lenguaje natural
+  const inf = inferirPausaDesdeTexto(f, hoy);
+  return inf.fecha < manana ? manana : inf.fecha;
 }
 
 async function leerConfig(sb: SupabaseClient): Promise<{ plantilla: string; diasAnticipacion: number }> {
@@ -171,6 +378,7 @@ export async function pausarExpediente(
       .eq("status", "activo");
   }
 
+  const { registrarActividad } = await import("./actividades.ts");
   await registrarActividad(sb, {
     expedienteId: exp.id,
     tipo: "etapa",
@@ -276,6 +484,7 @@ export async function despertarLeadsEnPausa(
 
   const { plantilla } = await leerConfig(sb);
   const { data: admins } = await sb.from("perfiles").select("id, nombre, telegram_chat_id").eq("rol", "admin").eq("activo", true);
+  const { obtenerConfiguracionTelegram, enviarMensajeTelegram } = await import("./telegram.ts");
   const { botToken } = await obtenerConfiguracionTelegram(sb);
 
   for (const exp of pendientes) {
@@ -295,6 +504,7 @@ export async function despertarLeadsEnPausa(
       let estadoPlantilla = "sin plantilla configurada";
       if (plantilla && exp.telefono) {
         const params = [primerNombre, servicio];
+        const { enviarWhatsAppPlantilla, renderizarPlantilla } = await import("./whatsapp.ts");
         const wa = await enviarWhatsAppPlantilla(exp.telefono, plantilla, "es_MX", params);
         if (wa.ok) {
           res.plantillas++;

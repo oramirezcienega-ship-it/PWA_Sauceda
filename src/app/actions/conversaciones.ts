@@ -551,13 +551,15 @@ export async function obtenerConversacion(
   let asesorNombre = "";
   let tipoNegocio: string | null = null;
   let etapa: string | null = null;
+  let retomarEn: string | null = null;
+  let motivoPausa: string | null = null;
 
   // Carga paralela de expediente y prospecto; ia_pausada se incluye directo en expediente
   const [expRes, prosRes] = await Promise.all([
     expedienteId
       ? sb
           .from("expedientes")
-          .select("cliente, primer_apellido, segundo_apellido, tipo_negocio, etapa, ia_pausada, perfiles:asesor_id(nombre)")
+          .select("cliente, primer_apellido, segundo_apellido, tipo_negocio, etapa, ia_pausada, retomar_en, motivo_pausa, perfiles:asesor_id(nombre)")
           .eq("id", expedienteId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -575,6 +577,8 @@ export async function obtenerConversacion(
   if (e) {
     nombreExpediente = nombreDe(e as any);
     etapa = (e as any).etapa ?? null;
+    retomarEn = (e as any).retomar_en ?? null;
+    motivoPausa = (e as any).motivo_pausa ?? null;
     if ((e as any).tipo_negocio) {
       tipoNegocio = (e as any).tipo_negocio;
     }
@@ -691,6 +695,8 @@ export async function obtenerConversacion(
     motivoAlerta,
     iaPausada,
     etapa,
+    retomarEn,
+    motivoPausa,
   };
 }
 

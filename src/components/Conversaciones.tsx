@@ -34,6 +34,7 @@ import { enviarDocumentoConversacion, type DocumentoVenta } from "@/app/actions/
 import { formatearTelefonoLegible, obtenerTelLink, normalizarTelefono } from "@/lib/telefono";
 import { obtenerProveedorIA, guardarProveedorIA, moverEtapa } from "@/app/actions/expedientes";
 import { posponerExpediente } from "@/app/actions/pausa";
+import { inferirPausaDesdeTexto, sumarDias, hoyMexico } from "@/lib/pausa-leads";
 import { ETAPAS, TODAS_LAS_ETAPAS_POR_ID } from "@/lib/etapas";
 import type { EtapaId } from "@/lib/types";
 import { DocumentosVentas } from "./DocumentosVentas";
@@ -896,7 +897,7 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [mostrarRescateMovil, setMostrarRescateMovil] = useState(false);
   const [cambiandoEtapa, setCambiandoEtapa] = useState(false);
   // Formulario para posponer (etapa "En pausa"): fecha para retomar y motivo
-  const [posponer, setPosponer] = useState<{ fecha: string; motivo: string } | null>(null);
+  const [posponer, setPosponer] = useState<{ fecha: string; motivo: string; sugerencia?: string } | null>(null);
   const [envioLead, setEnvioLead] = useState<EnvioLeadTelegram | null>(null);
   const finRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -2312,10 +2313,18 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           const nueva = e.target.value as EtapaId;
                           if (!nueva || nueva === detalle.etapa || !detalle.expedienteId) return;
                           if (nueva === "en_pausa") {
-                            // Por defecto, retomar en 30 días; el usuario la ajusta
-                            const d = new Date();
-                            d.setDate(d.getDate() + 30);
-                            setPosponer({ fecha: d.toISOString().slice(0, 10), motivo: "" });
+                            // Infiere inteligentemente de los últimos mensajes del cliente en la conversación
+                            const ultimosTextos = [...(detalle.mensajes || [])]
+                              .filter((m) => m.direccion === "in" && m.texto)
+                              .slice(-3)
+                              .map((m) => m.texto)
+                              .join(" ");
+                            const inf = inferirPausaDesdeTexto(ultimosTextos);
+                            setPosponer({
+                              fecha: inf.fecha,
+                              motivo: inf.detectado ? inf.motivo : "",
+                              sugerencia: inf.detectado ? inf.etiquetaCorta : undefined,
+                            });
                             return;
                           }
                           setCambiandoEtapa(true);
@@ -2353,22 +2362,86 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           </option>
                         ))}
                       </select>
+                      {detalle.etapa === "en_pausa" && !posponer && (
+                        <span
+                          className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-900 shadow-2xs"
+                          title={detalle.motivoPausa ? `Motivo: ${detalle.motivoPausa}` : "Negocio en pausa"}
+                        >
+                          <span>⏸ En pausa{detalle.retomarEn ? ` hasta ${new Date(detalle.retomarEn + "T12:00:00Z").toLocaleDateString("es-MX", { day: "numeric", month: "short" })}` : ""}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPosponer({
+                                fecha: detalle.retomarEn || sumarDias(hoyMexico(), 7),
+                                motivo: detalle.motivoPausa || "",
+                              });
+                            }}
+                            className="text-amber-700 hover:text-amber-950 underline text-[10px] ml-0.5 cursor-pointer"
+                            title="Cambiar fecha o motivo de pausa"
+                          >
+                            Editar
+                          </button>
+                        </span>
+                      )}
                       {posponer && (
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5 text-xs">
-                          <span className="font-bold text-slate-700">⏸ Retomar el</span>
+                        <span className="inline-flex items-center flex-wrap gap-1.5 rounded-2xl border border-amber-300 bg-amber-50/70 p-1.5 text-xs shadow-xs">
+                          <span className="font-bold text-slate-800 flex items-center gap-1">
+                            <span>⏸</span>
+                            <span>Retomar el:</span>
+                          </span>
                           <input
                             type="date"
                             value={posponer.fecha}
-                            min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
+                            min={sumarDias(hoyMexico(), 1)}
                             onChange={(e) => setPosponer({ ...posponer, fecha: e.target.value })}
-                            className="rounded border border-slate-300 px-1 py-0.5 text-xs"
+                            className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs font-semibold text-slate-800 shadow-2xs"
                           />
+                          {/* Presets rápidos */}
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setPosponer({ ...posponer, fecha: sumarDias(hoyMexico(), 7), motivo: posponer.motivo || "Pausa 1 semana" })}
+                              className="rounded border border-slate-300 bg-white hover:bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 shadow-2xs transition"
+                              title="Pausar por 1 semana (7 días)"
+                            >
+                              +1 sem
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPosponer({ ...posponer, fecha: sumarDias(hoyMexico(), 14), motivo: posponer.motivo || "Pausa 2 semanas / quincena" })}
+                              className="rounded border border-slate-300 bg-white hover:bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 shadow-2xs transition"
+                              title="Pausar por 2 semanas (14 días)"
+                            >
+                              +2 sem
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPosponer({ ...posponer, fecha: sumarDias(hoyMexico(), 30), motivo: posponer.motivo || "Pausa 1 mes" })}
+                              className="rounded border border-slate-300 bg-white hover:bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 shadow-2xs transition"
+                              title="Pausar por 1 mes (30 días)"
+                            >
+                              +1 mes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPosponer({ ...posponer, fecha: sumarDias(hoyMexico(), 60), motivo: posponer.motivo || "Pausa 2 meses" })}
+                              className="rounded border border-slate-300 bg-white hover:bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 shadow-2xs transition"
+                              title="Pausar por 2 meses (60 días)"
+                            >
+                              +2 meses
+                            </button>
+                          </div>
+                          {posponer.sugerencia && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold" title="Sugerencia inferida automáticamente de la conversación">
+                              🎯 Detectado del chat: {posponer.sugerencia}
+                            </span>
+                          )}
                           <input
                             type="text"
-                            placeholder="Motivo (ej. hasta diciembre)"
+                            placeholder="Motivo (ej. pidió 1 semana más)"
                             value={posponer.motivo}
                             onChange={(e) => setPosponer({ ...posponer, motivo: e.target.value })}
-                            className="w-40 rounded border border-slate-300 px-1 py-0.5 text-xs"
+                            className="w-48 rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-800 shadow-2xs"
                           />
                           <button
                             type="button"
@@ -2387,11 +2460,11 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                                 setCambiandoEtapa(false);
                               }
                             }}
-                            className="rounded-full bg-slate-700 px-2 py-0.5 font-bold text-white disabled:opacity-50"
+                            className="rounded-full bg-slate-800 hover:bg-black px-3 py-0.5 font-bold text-white shadow-2xs disabled:opacity-50 transition"
                           >
                             Pausar
                           </button>
-                          <button type="button" onClick={() => setPosponer(null)} className="text-slate-500 hover:text-slate-800">
+                          <button type="button" onClick={() => setPosponer(null)} className="text-slate-500 hover:text-slate-800 text-sm font-bold px-1" title="Cancelar">
                             ✕
                           </button>
                         </span>

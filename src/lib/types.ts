@@ -896,6 +896,10 @@ export interface ConversacionResumen {
   motivoAlerta?: string | null;
   /** Etapa del negocio (expediente) ligado a la conversación. */
   etapa?: string | null;
+  /** Fecha en que se retoma el negocio si está en pausa (YYYY-MM-DD). */
+  retomarEn?: string | null;
+  /** Motivo por el que el cliente o asesor pausó el expediente. */
+  motivoPausa?: string | null;
 }
 
 /** Detalle de una conversación (hilo completo). */

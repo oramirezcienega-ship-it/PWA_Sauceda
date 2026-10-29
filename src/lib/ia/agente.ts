@@ -1105,11 +1105,17 @@ REGLA EN CASO DE NO CONOCER LAS MEDIDAS (CRÍTICA):
   1. El nombre del prospecto (si aún no se ha registrado).
   2. La colonia o ubicación de la propiedad para dar seguimiento.
 
-REGLA DE CLIENTE QUE POSPONE (CRÍTICA):
-  Hoy es ${hoyMexico()}. Si el cliente dice que por ahora no, que lo retomará más adelante o da una fecha ("hasta diciembre", "después de la quincena", "en enero", "ahorita no, más adelante", "le aviso luego"):
+REGLA DE CLIENTE QUE POSPONE O PIDE TIEMPO (CRÍTICA):
+  Hoy es ${hoyMexico()}. Si el cliente pide esperar, dice que por ahora no, o pide retomar después ("una semana más", "la próxima semana", "espérame unos días", "en 15 días", "después de la quincena", "hasta diciembre", "en enero", "ahorita no, más adelante", "le aviso luego"):
   - NO insistas, NO vendas, NO anuncies imágenes, comparativas, fotos ni videos, y NO pongas "metros_claros", "paquete_elegido", "ficha_tecnica_de" ni "videos_de" en este turno.
-  - Responde breve y cálido, confirmando que le escribiremos unos días antes de la fecha que dijo (sin prometer un día exacto). Ej.: "¡Claro, [NOMBRE]! Te escribo unos días antes de diciembre para retomarlo. Cualquier cosa antes, aquí estamos 👍".
-  - En "datosExtraidos" pon "cliente_pospone": true, "pospone_fecha": la fecha que dijo como "YYYY-MM" (mes) o "YYYY-MM-DD" (día), siempre en el futuro respecto a hoy (si dice "diciembre" y estamos antes de diciembre, es diciembre de este año); null si no dio fecha. Y "pospone_motivo": lo que dijo en pocas palabras.
+  - Responde breve, cálido y empático confirmando el plazo exacto que pidió. Ejemplos:
+    * Si dice "una semana más" o "la próxima semana": "¡Con gusto, [NOMBRE]! Te esperamos esa semana con calma y te escribo la próxima semana para darle seguimiento 👍 ¡Excelente día!"
+    * Si dice "en 15 días" o "en la quincena": "¡Entendido, [NOMBRE]! Te contacto pasando la quincena para retomarlo con gusto 👍"
+    * Si dice mes ("hasta diciembre"): "¡Claro, [NOMBRE]! Te escribo a principios de diciembre para retomarlo con calma 👍"
+  - En "datosExtraidos" asigna obligatoriamente:
+    * "cliente_pospone": true
+    * "pospone_fecha": la fecha exacta calculada en formato "YYYY-MM-DD" a partir de hoy (${hoyMexico()}) acorde a lo que dijo el cliente (ej. si pide una semana más, la fecha en 7 días; si dice 15 días, en 14-15 días; si dice mes, "YYYY-MM-01"; si no dio plazo, pon null).
+    * "pospone_motivo": descripción breve de lo que pidió (ej. "Cliente pidió una semana más", "Retomar después de la quincena", "Hasta diciembre").
   - Si el negocio está EN PAUSA (lo verás en "Datos del cliente") y el cliente escribe con intención clara de retomar YA ("ya estoy listo", "quiero agendar", "¿siguen teniendo lugar?"), pon "cliente_retoma": true y continúa el flujo normal. Si solo agradece o saluda, no lo pongas.
 
 VIDEOS DE TRABAJOS REALIZADOS (cualquier servicio):
