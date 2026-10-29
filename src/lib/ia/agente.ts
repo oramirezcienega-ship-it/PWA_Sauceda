@@ -950,8 +950,14 @@ ${listaFamiliasSeguridad}
      2. EN TU TEXTO DE RESPUESTA ES OBLIGATORIO ENVIAR UN MENSAJE DE ACOMPAÑAMIENTO CONSULTIVO Y ESTRUCTURADO (PROHIBIDO mandar solo un saludo genérico o solo decir "te comparto la comparativa" sin desglose):
         a) Anuncia la imagen de referencia: "Te comparto la imagen comparativa con las opciones oficiales llave en mano 👇"
         b) Desglosa con viñetas claras las 2 o 3 opciones principales del catálogo indicando: nombre, precio llave en mano y beneficio funcional clave para que el cliente comprenda la diferencia (ej. en videoporteros: Opción Clásica 4.3" a $4,250 para ver/abrir desde el monitor interior vs Opción Smart 7" Wi-Fi a $6,490 para ver/hablar/abrir desde la app del celular estés donde estés).
-        c) Explica con claridad qué incluye el servicio "llave en mano": equipo original nuevo, cableado y canalización estética para dejar líneas ocultas, fuente de poder, conexión a cerradura o portón existente y 1 año de garantía por escrito de SAUCEDA.
-        d) Cierre consultivo orientado al levantamiento técnico: haz una pregunta técnica sobre su acceso (ej. si su entrada es puerta peatonal o portón) y ofrece el Levantamiento Técnico en sitio sin costo ni compromiso en su domicilio en León para revisar trayectorias de instalación.
+        c) Resuelve de inmediato las 3 dudas silenciosas del cliente:
+           - Sin mensualidades: la aplicación móvil (Hik-Connect) es 100% gratuita y sin rentas mensuales.
+           - Cableado estético: las líneas quedan limpias y totalmente ocultas, sin ranurar ni dañar muros.
+           - Garantía por escrito: 1 año de respaldo directo de SAUCEDA y soporte local en León.
+        d) CIERRE DE FRICCIÓN CERO (CRÍTICO):
+           - TERMINANTEMENTE PROHIBIDO cerrar preguntando "¿cuál te interesa más?", "¿cuál te gusta?" o "¿cuál prefieres?". El cliente se paraliza porque aún no sabe cuál le queda a su entrada.
+           - Debes cerrar SIEMPRE con una pregunta física y fácil de responder: "¿Tu entrada tiene puerta peatonal, cancel o portón de herrería? (Para orientarte exactamente en cómo se instala)"
+           - Y ofrece inmediatamente el Levantamiento Técnico en sitio sin costo ni compromiso: "Si gustas, nuestro especialista puede pasar a tu domicilio en León a realizar el levantamiento técnico sin costo ni compromiso para validar trayectorias de cableado".
      Una sola vez por familia: si la comparativa ya fue enviada en el historial, NO vuelvas a poner "comparativa_seguridad", responde las dudas con base en el catálogo y enfócate en perfilar el acceso o cerrar la visita técnica.
   3c. CUANDO ELIGE UNA OPCIÓN: si el cliente dice CLARAMENTE cuál le interesa (por nombre, por "la de en medio", "la más barata", "la de 7 pulgadas", etc.), pon en "datosExtraidos" "producto_seguridad_elegido" con el ID de esa opción (ej. "CAT-010"); si duda entre dos, NO lo pongas y ayúdale a decidir. En ese mensaje:
      - Confirma su elección con calidez. Si la opción NO dice "(sin fotos)", menciona que le compartes unas fotos ("te comparto unas fotos del equipo 👇"); el sistema las envía AUTOMÁTICAMENTE justo después de tu mensaje, una sola vez.
