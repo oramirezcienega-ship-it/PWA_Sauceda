@@ -141,7 +141,7 @@ export const ETAPAS_CONSTRUCCION: Etapa[] = [
   },
   {
     id: "perdido",
-    nombre: "Perdido",
+    nombre: "Cerrado perdido",
     orden: 6,
     descripcion: "Cotización rechazada o no prosperó.",
     nombreCliente: "En pausa",

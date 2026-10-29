@@ -534,7 +534,7 @@ export async function actualizarExpediente(
       try {
         const { data: pros } = await sb
           .from("prospectos")
-          .select("nombre, primer_apellido, segundo_apellido, correo, telefono, origen, estatus, ia_pausada")
+          .select("nombre, primer_apellido, segundo_apellido, correo, telefono, origen, estatus")
           .eq("id", prospectoId)
           .maybeSingle();
 
@@ -550,7 +550,7 @@ export async function actualizarExpediente(
             tipo_negocio: nuevos.tipo_negocio || "otro",
             etapa: nuevos.etapa || antes?.etapa || "nuevo-lead",
             estatus: pros.estatus,
-            ia_pausada: pros.ia_pausada,
+            ia_pausada: false,
           });
         }
       } catch (rudderErr) {
@@ -639,7 +639,7 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
       try {
         const { data: pros } = await sb
           .from("prospectos")
-          .select("nombre, primer_apellido, segundo_apellido, correo, telefono, origen, estatus, ia_pausada")
+          .select("nombre, primer_apellido, segundo_apellido, correo, telefono, origen, estatus")
           .eq("id", prospectoId)
           .maybeSingle();
 
@@ -661,7 +661,7 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
             tipo_negocio: currentExp?.tipo_negocio || "otro",
             etapa: etapa,
             estatus: pros.estatus,
-            ia_pausada: pros.ia_pausada,
+            ia_pausada: false,
           });
         }
       } catch (rudderErr) {

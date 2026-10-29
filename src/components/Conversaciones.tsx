@@ -35,7 +35,7 @@ import { formatearTelefonoLegible, obtenerTelLink, normalizarTelefono } from "@/
 import { obtenerProveedorIA, guardarProveedorIA, moverEtapa } from "@/app/actions/expedientes";
 import { posponerExpediente } from "@/app/actions/pausa";
 import { inferirPausaDesdeTexto, sumarDias, hoyMexico } from "@/lib/pausa-leads";
-import { ETAPAS, TODAS_LAS_ETAPAS_POR_ID } from "@/lib/etapas";
+import { ETAPAS, TODAS_LAS_ETAPAS_POR_ID, obtenerEtapasPorNegocio } from "@/lib/etapas";
 import type { EtapaId } from "@/lib/types";
 import { DocumentosVentas } from "./DocumentosVentas";
 import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
@@ -2350,17 +2350,24 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                             : "bg-violet-50 border-violet-300 text-violet-900"
                         }`}
                       >
-                        {detalle.etapa && !ETAPAS.some((et) => et.id === detalle.etapa) && (
-                          <option value={detalle.etapa}>
-                            📊 {TODAS_LAS_ETAPAS_POR_ID[detalle.etapa]?.nombre || detalle.etapa}
-                          </option>
-                        )}
-                        {!detalle.etapa && <option value="">📊 Sin etapa</option>}
-                        {ETAPAS.map((et) => (
-                          <option key={et.id} value={et.id}>
-                            📊 {et.nombre}
-                          </option>
-                        ))}
+                        {(() => {
+                          const etapasOpciones = obtenerEtapasPorNegocio(detalle.tipoNegocio);
+                          return (
+                            <>
+                              {detalle.etapa && !etapasOpciones.some((et) => et.id === detalle.etapa) && (
+                                <option value={detalle.etapa}>
+                                  📊 {TODAS_LAS_ETAPAS_POR_ID[detalle.etapa]?.nombre || detalle.etapa}
+                                </option>
+                              )}
+                              {!detalle.etapa && <option value="">📊 Sin etapa</option>}
+                              {etapasOpciones.map((et) => (
+                                <option key={et.id} value={et.id}>
+                                  📊 {et.nombre}
+                                </option>
+                              ))}
+                            </>
+                          );
+                        })()}
                       </select>
                       {detalle.etapa === "en_pausa" && !posponer && (
                         <span
