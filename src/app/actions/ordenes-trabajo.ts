@@ -18,6 +18,7 @@ import { MARCA } from "@/lib/marca";
 import { generarDocumentoProveedorAutomatico } from "@/app/actions/proveedores";
 import { aDocumentoProveedor } from "@/lib/supabase/mapeo";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
+import { expandirTiposNegocio } from "@/lib/ordenes-filtros";
 
 export interface EvidenciaFoto {
   url: string;
@@ -387,8 +388,11 @@ export async function obtenerOrdenesTrabajo(filtros?: {
   cotizacionId?: string;
   prospectoId?: string;
   estatus?: string;
+  estatuses?: string[];
   tipoNegocio?: string;
+  tiposNegocio?: string[];
   asesorEjecutorId?: string;
+  asesoresEjecutoresIds?: string[];
   busqueda?: string;
 }): Promise<OrdenTrabajo[]> {
   try {
@@ -416,26 +420,39 @@ export async function obtenerOrdenesTrabajo(filtros?: {
     if (filtros?.prospectoId) {
       query = query.eq("prospecto_id", filtros.prospectoId);
     }
-    if (filtros?.estatus && filtros.estatus !== "todos") {
+
+    // Filtro de estatus (soporta múltiple o individual)
+    if (filtros?.estatuses && filtros.estatuses.length > 0) {
+      const validos = filtros.estatuses.filter((s) => s && s !== "todos");
+      if (validos.length > 0) {
+        query = query.in("estatus", validos);
+      }
+    } else if (filtros?.estatus && filtros.estatus !== "todos") {
       query = query.eq("estatus", filtros.estatus);
     }
-    if (filtros?.tipoNegocio && filtros.tipoNegocio !== "todos") {
-      const tipo = filtros.tipoNegocio;
-      if (tipo === "impermeabilizacion" || tipo === "construccion-impermeabilizacion") {
-        query = query.in("tipo_negocio", ["impermeabilizacion", "construccion-impermeabilizacion"]);
-      } else if (tipo === "mantenimiento_cisternas" || tipo === "construccion-mantenimiento-cisternas") {
-        query = query.in("tipo_negocio", ["mantenimiento_cisternas", "construccion-mantenimiento-cisternas"]);
-      } else if (tipo === "piso_estampado" || tipo === "construccion-piso-estampado") {
-        query = query.in("tipo_negocio", ["piso_estampado", "construccion-piso-estampado"]);
-      } else if (tipo === "herreria" || tipo === "construccion-herreria") {
-        query = query.in("tipo_negocio", ["herreria", "construccion-herreria"]);
-      } else if (tipo === "remodelacion" || tipo === "construccion-remodelacion") {
-        query = query.in("tipo_negocio", ["remodelacion", "construccion-remodelacion"]);
-      } else {
-        query = query.eq("tipo_negocio", tipo);
+
+    // Filtro de tipos de negocio (soporta múltiple o individual)
+    if (filtros?.tiposNegocio && filtros.tiposNegocio.length > 0) {
+      const tiposExpandidos = expandirTiposNegocio(filtros.tiposNegocio);
+      if (tiposExpandidos.length > 0) {
+        query = query.in("tipo_negocio", tiposExpandidos);
+      }
+    } else if (filtros?.tipoNegocio && filtros.tipoNegocio !== "todos") {
+      const tiposExpandidos = expandirTiposNegocio([filtros.tipoNegocio]);
+      if (tiposExpandidos.length === 1) {
+        query = query.eq("tipo_negocio", tiposExpandidos[0]);
+      } else if (tiposExpandidos.length > 1) {
+        query = query.in("tipo_negocio", tiposExpandidos);
       }
     }
-    if (filtros?.asesorEjecutorId) {
+
+    // Filtro de asesores (soporta múltiple o individual)
+    if (filtros?.asesoresEjecutoresIds && filtros.asesoresEjecutoresIds.length > 0) {
+      const validos = filtros.asesoresEjecutoresIds.filter(Boolean);
+      if (validos.length > 0) {
+        query = query.in("asesor_ejecutor_id", validos);
+      }
+    } else if (filtros?.asesorEjecutorId) {
       query = query.eq("asesor_ejecutor_id", filtros.asesorEjecutorId);
     }
 
