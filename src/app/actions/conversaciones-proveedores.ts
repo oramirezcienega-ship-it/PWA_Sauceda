@@ -114,3 +114,40 @@ export async function enviarMensajeProveedorAction(
     agente: perfil?.nombre || "",
   });
 }
+
+export async function reintentarMensajeProveedorAction(
+  mensajeId: string
+): Promise<{ ok: boolean; via?: "texto" | "plantilla"; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data: msg } = await sb
+    .from("mensajes_whatsapp")
+    .select("id, proveedor_id, texto, telefono, agente")
+    .eq("id", mensajeId)
+    .maybeSingle();
+
+  if (!msg) return { ok: false, error: "Mensaje no encontrado." };
+  if (!msg.proveedor_id) return { ok: false, error: "No es un mensaje de proveedor." };
+
+  const { reenviarMensajeProveedorPorFallaMeta } = await import("@/lib/whatsapp-proveedores");
+  const rescatado = await reenviarMensajeProveedorPorFallaMeta(sb, msg);
+  if (rescatado) {
+    return { ok: true, via: "texto" };
+  }
+
+  const res = await enviarWhatsAppProveedor(sb, {
+    proveedorId: msg.proveedor_id,
+    texto: msg.texto,
+    resumen: `te escribimos de SAUCEDA: ${msg.texto.replace(/\s+/g, " ").trim().slice(0, 160)}`,
+    agente: msg.agente || "",
+  });
+
+  if (res.ok) {
+    await sb
+      .from("mensajes_whatsapp")
+      .update({ estado: "enviado", error_detalle: null, error_codigo: null })
+      .eq("id", mensajeId);
+  }
+
+  return res;
+}

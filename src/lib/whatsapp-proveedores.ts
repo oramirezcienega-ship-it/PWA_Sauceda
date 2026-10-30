@@ -30,7 +30,7 @@ export async function proveedorPorTelefono(sb: SupabaseClient, telefono: string)
   if (diez.length !== 10) return null;
   const { data } = await sb
     .from("proveedores")
-    .select("id, nombre, contacto_nombre, whatsapp, telefono")
+    .select("id, nombre, contacto_nombre, whatsapp, telefono, telegram_chat_id")
     .eq("activo", true)
     .or(`whatsapp.ilike.%${diez},telefono.ilike.%${diez}`);
   const p = (data || []).find((x: any) =>
@@ -44,7 +44,7 @@ export async function proveedorPorTelefono(sb: SupabaseClient, telefono: string)
 export async function datosProveedor(sb: SupabaseClient, proveedorId: string): Promise<ProveedorWhatsApp | null> {
   const { data: p } = await sb.from("proveedores").select("id, nombre, contacto_nombre, whatsapp, telefono").eq("id", proveedorId).maybeSingle();
   if (!p) return null;
-  return { id: p.id, nombre: p.nombre, contactoNombre: p.contacto_nombre || "", telefono: normalizarTelefono(p.whatsapp || p.telefono || "") };
+  return { id: p.id, nombre: p.nombre, contactoNombre: p.contacto_nombre || "", telefono: normalizarTelefono(p.whatsapp || p.telefono || ""), telegramChatId: p.telegram_chat_id || null };
 }
 
 /** ¿El proveedor escribió en las últimas 24 h? (se le puede mandar texto libre) */
@@ -85,6 +85,44 @@ export async function enviarWhatsAppProveedor(
   const agente = d.agente || "";
   const texto = d.texto.trim();
 
+  // Si el proveedor tiene Telegram, enviar copia simultánea para máxima garantía de entrega
+  if (prov.telegramChatId) {
+    try {
+      const { obtenerConfiguracionTelegram, enviarMensajeTelegram } = await import("@/lib/telegram");
+      const { botToken } = await obtenerConfiguracionTelegram(sb);
+      if (botToken) {
+        await enviarMensajeTelegram({
+          botToken,
+          chatId: prov.telegramChatId,
+          texto,
+        });
+      }
+    } catch (errTg) {
+      console.warn("[WhatsApp proveedores] No se pudo enviar copia por Telegram:", errTg);
+    }
+  }
+
+  // 1. Prioridad Proveedores: Evolution API (Línea Móvil Secundaria sin restricción de 24 h de Meta)
+  try {
+    const { enviarMensajeTextoEvolution } = await import("@/lib/evolution-api");
+    const evoRes = await enviarMensajeTextoEvolution(prov.telefono, texto);
+    if (evoRes.ok) {
+      await sb.from("mensajes_whatsapp").insert({
+        telefono: prov.telefono,
+        texto,
+        direccion: "out",
+        proveedor_id: prov.id,
+        estado: "enviado",
+        agente,
+        wa_message_id: evoRes.messageId || null,
+      });
+      return { ok: true, via: "texto" };
+    }
+  } catch (err) {
+    console.warn("[WhatsApp proveedores] Falló envío por Evolution API, intentando línea Meta:", err);
+  }
+
+  // 2. Si la ventana de 24h está abierta en la línea oficial de Meta
   if (await ventanaAbiertaProveedor(sb, prov.id)) {
     const r = await enviarWhatsAppTexto(prov.telefono, texto);
     if (r.ok) {
@@ -101,27 +139,7 @@ export async function enviarWhatsAppProveedor(
     }
   }
 
-  // Prioridad Proveedores / Rescate: Evolution API (Línea Móvil Secundaria sin restricción de 24 h)
-  try {
-    const { enviarMensajeTextoEvolution } = await import("@/lib/evolution-api");
-    const evoRes = await enviarMensajeTextoEvolution(prov.telefono, texto);
-    if (evoRes.ok) {
-      await sb.from("mensajes_whatsapp").insert({
-        telefono: prov.telefono,
-        texto,
-        direccion: "out",
-        proveedor_id: prov.id,
-        estado: "enviado",
-        agente,
-        wa_message_id: (evoRes as any).id || null,
-      });
-      return { ok: true, via: "texto" };
-    }
-  } catch (err) {
-    console.warn("[WhatsApp proveedores] Falló envío por Evolution API, intentando plantilla Meta:", err);
-  }
-
-  // Fallback si Evolution no está disponible: aviso por plantilla Meta y el mensaje queda en espera
+  // 3. Fallback: aviso por plantilla aprobada Meta y el mensaje completo queda en espera
   const nombre = (prov.contactoNombre || prov.nombre).split(/\s+/)[0];
   const resumen = d.resumen.replace(/\s+/g, " ").trim().slice(0, 900) || "tienes un aviso nuevo";
   const r = await enviarWhatsAppPlantilla(prov.telefono, PLANTILLA_AVISO, IDIOMA_PLANTILLA, [nombre, resumen]);
@@ -148,6 +166,75 @@ export async function enviarWhatsAppProveedor(
     },
   ]);
   return { ok: true, via: "plantilla" };
+}
+
+/**
+ * Auto-rescate para mensajes de proveedores que Meta rebotó con error 131047 (Ventana de 24h cerrada).
+ * Reenvía de inmediato por Evolution API y/o Telegram y actualiza el estado a entregado.
+ */
+export async function reenviarMensajeProveedorPorFallaMeta(sb: SupabaseClient, msg: any): Promise<boolean> {
+  if (!msg || !msg.proveedor_id || !msg.texto) return false;
+  const prov = await datosProveedor(sb, msg.proveedor_id);
+  if (!prov) return false;
+
+  let entregado = false;
+  let nuevoId: string | null = null;
+
+  // 1. Reintentar por Evolution API (Línea móvil secundaria sin restricción de 24h)
+  try {
+    const { enviarMensajeTextoEvolution } = await import("@/lib/evolution-api");
+    const evoRes = await enviarMensajeTextoEvolution(prov.telefono, msg.texto);
+    if (evoRes.ok) {
+      entregado = true;
+      nuevoId = evoRes.messageId || null;
+    }
+  } catch (e) {
+    console.warn("[Auto-Rescate Evolution] Falló:", e);
+  }
+
+  // 2. Si el proveedor tiene Telegram, enviar el mensaje completo
+  if (prov.telegramChatId) {
+    try {
+      const { obtenerConfiguracionTelegram, enviarMensajeTelegram } = await import("@/lib/telegram");
+      const { botToken } = await obtenerConfiguracionTelegram(sb);
+      if (botToken) {
+        await enviarMensajeTelegram({
+          botToken,
+          chatId: prov.telegramChatId,
+          texto: msg.texto,
+        });
+        entregado = true;
+      }
+    } catch (e) {
+      console.warn("[Auto-Rescate Telegram] Falló:", e);
+    }
+  }
+
+  // 3. Si se pudo entregar por Evolution o Telegram, actualizar el registro
+  if (entregado) {
+    await sb
+      .from("mensajes_whatsapp")
+      .update({
+        estado: "delivered",
+        error_detalle: null,
+        error_codigo: null,
+        entregado_at: new Date().toISOString(),
+        wa_message_id: nuevoId || msg.wa_message_id,
+      })
+      .eq("id", msg.id);
+    return true;
+  }
+
+  // 4. Si Evolution y Telegram fallaron, mandar la plantilla aviso_proveedor de Meta
+  try {
+    const nombre = (prov.contactoNombre || prov.nombre).split(/\s+/)[0];
+    const resumen = msg.texto.replace(/\s+/g, " ").trim().slice(0, 160) || "tienes un aviso nuevo";
+    await enviarWhatsAppPlantilla(prov.telefono, PLANTILLA_AVISO, IDIOMA_PLANTILLA, [nombre, resumen]);
+  } catch (e) {
+    console.warn("[Auto-Rescate Plantilla] Falló:", e);
+  }
+
+  return false;
 }
 
 /** El proveedor contestó: salen, en orden, los mensajes que esperaban la ventana. */

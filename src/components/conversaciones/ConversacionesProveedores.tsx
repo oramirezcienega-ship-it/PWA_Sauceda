@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   enviarMensajeProveedorAction,
+  reintentarMensajeProveedorAction,
   listarConversacionesProveedores,
   obtenerConversacionProveedor,
   type MensajeProveedor,
@@ -19,7 +20,15 @@ function hora(iso: string | null): string {
 }
 
 /** Palomitas como en WhatsApp: enviado ✓, entregado ✓✓, leído ✓✓ azul. */
-function Estado({ m }: { m: MensajeProveedor }) {
+function Estado({
+  m,
+  onReintentar,
+  reintentando,
+}: {
+  m: MensajeProveedor;
+  onReintentar?: (id: string) => void;
+  reintentando?: boolean;
+}) {
   if (m.direccion !== "out") return null;
   if (m.estado === "pendiente_ventana")
     return (
@@ -29,8 +38,21 @@ function Estado({ m }: { m: MensajeProveedor }) {
     );
   if (m.estado.startsWith("error"))
     return (
-      <span className="text-rojo" title={m.estado.replace(/^error:/, "")}>
-        ⚠️ no se envió
+      <span className="inline-flex items-center gap-1.5 text-rojo" title={m.estado.replace(/^error:/, "")}>
+        <span>⚠️ no se envió</span>
+        {onReintentar && (
+          <button
+            type="button"
+            disabled={reintentando}
+            onClick={(e) => {
+              e.stopPropagation();
+              onReintentar(m.id);
+            }}
+            className="underline font-semibold hover:text-rojo/80 disabled:opacity-50 text-[10px]"
+          >
+            {reintentando ? "Reenviando…" : "Reintentar"}
+          </button>
+        )}
       </span>
     );
   if (m.leidoAt)
@@ -59,6 +81,7 @@ export function ConversacionesProveedores({ proveedorInicial }: { proveedorInici
   const [ventanaAbierta, setVentanaAbierta] = useState(false);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [reintentandoId, setReintentandoId] = useState<string | null>(null);
   const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const finRef = useRef<HTMLDivElement>(null);
@@ -115,6 +138,25 @@ export function ConversacionesProveedores({ proveedorInicial }: { proveedorInici
       await Promise.all([cargarHilo(sel), cargarLista()]);
     } finally {
       setEnviando(false);
+    }
+  }
+
+  async function reintentar(mensajeId: string) {
+    if (reintentandoId || !sel) return;
+    setReintentandoId(mensajeId);
+    setAviso(null);
+    try {
+      const r = await reintentarMensajeProveedorAction(mensajeId);
+      if (!r.ok) {
+        setAviso({ ok: false, texto: r.error || "No se pudo reenviar el mensaje." });
+      } else {
+        setAviso({ ok: true, texto: "Mensaje reenviado exitosamente." });
+        await Promise.all([cargarHilo(sel), cargarLista()]);
+      }
+    } catch (e: any) {
+      setAviso({ ok: false, texto: e?.message || "Error al reintentar." });
+    } finally {
+      setReintentandoId(null);
     }
   }
 
@@ -214,7 +256,7 @@ export function ConversacionesProveedores({ proveedorInicial }: { proveedorInici
                     <div className="mt-1 flex items-center justify-end gap-1.5 text-[10px] text-carbon/45">
                       {m.direccion === "out" && m.agente && <span>{m.agente}</span>}
                       <span>{hora(m.createdAt)}</span>
-                      <Estado m={m} />
+                      <Estado m={m} onReintentar={reintentar} reintentando={reintentandoId === m.id} />
                     </div>
                   </div>
                 </div>

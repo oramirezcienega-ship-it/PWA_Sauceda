@@ -1259,8 +1259,18 @@ export async function procesarEstadosWhatsApp(payload: any): Promise<void> {
           .from("mensajes_whatsapp")
           .update(updatePayload)
           .eq("wa_message_id", waMessageId)
-          .select("telefono, expediente_id, prospecto_id, campana_origen, leido_at, entregado_at")
+          .select("id, telefono, texto, proveedor_id, expediente_id, prospecto_id, campana_origen, leido_at, entregado_at")
           .maybeSingle();
+
+        // Auto-rescate para mensajes a proveedores rebotados por Meta (ej. error 131047: Ventana de 24h cerrada)
+        if (estadoMeta === "failed" && msgActualizado?.proveedor_id) {
+          try {
+            const { reenviarMensajeProveedorPorFallaMeta } = await import("@/lib/whatsapp-proveedores");
+            await reenviarMensajeProveedorPorFallaMeta(sb, msgActualizado);
+          } catch (errRescate) {
+            console.warn("[WhatsApp Webhook] Falló auto-rescate de proveedor:", errRescate);
+          }
+        }
 
         // 1.0 Fallback de resiliencia: si el mensaje no existía previamente en mensajes_whatsapp
         // (por ejemplo, enviado por Mautic / despachador externo sin registrar en Supabase antes de ser entregado o leído):

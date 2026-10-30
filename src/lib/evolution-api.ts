@@ -5,8 +5,15 @@ import { MARCA } from "@/lib/marca";
  * CONFIGURACIÓN DE EVOLUTION API v2 (Línea Móvil Secundaria de Rescate)
  * Servidor Proxmox (Casa): 192.168.100.253:8085 / 100.96.122.113:8085
  */
+export const EVOLUTION_CANDIDATE_URLS = [
+  process.env.EVOLUTION_API_URL,
+  "http://100.96.122.113:8085",
+  "http://127.0.0.1:8085",
+  "http://192.168.100.253:8085",
+].filter(Boolean) as string[];
+
 export const EVOLUTION_CONFIG = {
-  baseUrl: process.env.EVOLUTION_API_URL || "http://192.168.100.253:8085",
+  baseUrl: process.env.EVOLUTION_API_URL || "http://100.96.122.113:8085",
   apiKey: process.env.EVOLUTION_API_KEY || "sauceda_evolution_api_key_2026",
   instanceName: process.env.EVOLUTION_INSTANCE_NAME || "linea-rescate",
   // Número oficial de SAUCEDA para el enlace puente (524774654700)
@@ -272,40 +279,45 @@ export async function enviarMensajeTextoEvolution(
       ? `521${tel.slice(2)}`
       : tel;
 
-    const url = `${EVOLUTION_CONFIG.baseUrl}/message/sendText/${EVOLUTION_CONFIG.instanceName}`;
     const payload = {
       number: numeroWhatsApp,
       text: mensaje,
       options: {
-        delay: 1200,
+        delay: 600,
         presence: "composing",
         linkPreview: false,
       },
     };
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: EVOLUTION_CONFIG.apiKey,
-      },
-      body: JSON.stringify(payload),
-    });
+    let lastError = "";
+    for (const baseUrl of EVOLUTION_CANDIDATE_URLS) {
+      try {
+        const url = `${baseUrl}/message/sendText/${EVOLUTION_CONFIG.instanceName}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: EVOLUTION_CONFIG.apiKey,
+          },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(5000),
+        });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      return {
-        ok: false,
-        error: `Error de Evolution API (Status ${res.status}): ${errText}`,
-      };
+        if (res.ok) {
+          const data = await res.json();
+          const msgId = data?.key?.id || data?.id;
+          return { ok: true, messageId: msgId };
+        } else {
+          lastError = `Status ${res.status}: ${await res.text()}`;
+        }
+      } catch (e: any) {
+        lastError = e?.message || "fetch failed";
+      }
     }
 
-    const data = await res.json();
-    const msgId = data?.key?.id || data?.id;
-
     return {
-      ok: true,
-      messageId: msgId,
+      ok: false,
+      error: `No se pudo enviar por Evolution API (${lastError})`,
     };
   } catch (err: any) {
     return {
