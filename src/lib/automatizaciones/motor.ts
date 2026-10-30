@@ -3,7 +3,7 @@ import { registrarActividad } from "@/lib/actividades";
 import { notificarCliente } from "@/lib/email";
 import { enviarWhatsAppTexto, enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import { aplicarParametros } from "@/lib/parametros";
-import { ETAPAS_POR_ID } from "@/lib/etapas";
+import { ETAPAS_POR_ID, TODAS_LAS_ETAPAS_POR_ID } from "@/lib/etapas";
 import type {
   AccionAutomatizacion,
   CondicionAutomatizacion,
@@ -193,7 +193,7 @@ async function ejecutarAccion(
       await registrarActividad(sb, {
         expedienteId: ctx.expedienteId,
         tipo: "etapa",
-        titulo: `Movido a ${ETAPAS_POR_ID[accion.etapa]?.nombre ?? accion.etapa} (automatización)`,
+        titulo: `Movido a ${TODAS_LAS_ETAPAS_POR_ID[accion.etapa]?.nombre || ETAPAS_POR_ID[accion.etapa]?.nombre || accion.etapa} (automatización)`,
       });
       return "mover-etapa: ok";
     }

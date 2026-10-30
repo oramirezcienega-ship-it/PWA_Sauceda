@@ -782,7 +782,7 @@ export async function moverEtapaMasivo(
     await registrarActividad(sb, {
       expedienteId: id,
       tipo: "etapa",
-      titulo: `Movido a ${ETAPAS_POR_ID[etapa].nombre}`,
+      titulo: `Movido a ${TODAS_LAS_ETAPAS_POR_ID[etapa]?.nombre || ETAPAS_POR_ID[etapa]?.nombre || etapa}`,
     });
     await dispararEvento(sb, "cambio-etapa", {
       expedienteId: id,

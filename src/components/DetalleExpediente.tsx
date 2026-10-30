@@ -761,7 +761,7 @@ export function DetalleExpediente({ id }: { id: string }) {
                   expediente.etapa === "perdido" ? "bg-rojo/10 text-rojo" :
                   "bg-sauce/10 text-sauce"
                 }`}>
-                  {expediente.etapa === "nuevo-lead" ? "Nuevo" : (ETAPAS_POR_ID[expediente.etapa]?.nombre || expediente.etapa)}
+                  {expediente.etapa === "nuevo-lead" ? "Nuevo" : (TODAS_LAS_ETAPAS_POR_ID[expediente.etapa]?.nombre || ETAPAS_POR_ID[expediente.etapa]?.nombre || expediente.etapa)}
                 </span>
               </div>
 
