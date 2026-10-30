@@ -3560,8 +3560,22 @@ export async function programarInstalacionYDetonarOT(datos: {
 
     if (datos.notificarProveedorWhatsApp && telefonoProveedor) {
       try {
-        const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
-        await enviarWhatsAppTexto(telefonoProveedor, mensajeProveedor);
+        if (datos.proveedorId) {
+          const { enviarWhatsAppProveedor } = await import("@/lib/whatsapp-proveedores");
+          await enviarWhatsAppProveedor(sb, {
+            proveedorId: datos.proveedorId,
+            texto: mensajeProveedor,
+            resumen: `Nueva OT ${otFolio}: ${servicioTipo} el ${fechaLegible}`,
+            agente: usuario?.email || "Sistema",
+          });
+        } else {
+          const { enviarMensajeTextoEvolution } = await import("@/lib/evolution-api");
+          const evoRes = await enviarMensajeTextoEvolution(telefonoProveedor, mensajeProveedor);
+          if (!evoRes.ok) {
+            const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+            await enviarWhatsAppTexto(telefonoProveedor, mensajeProveedor);
+          }
+        }
       } catch (errWProv) {
         console.warn("Aviso WhatsApp proveedor:", errWProv);
       }
