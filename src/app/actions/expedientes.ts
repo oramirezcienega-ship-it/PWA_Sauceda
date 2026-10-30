@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { aExpediente, aFila, type FilaExpediente } from "@/lib/supabase/mapeo";
-import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
+import { ETAPAS, ETAPAS_POR_ID, TODAS_LAS_ETAPAS_POR_ID } from "@/lib/etapas";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarBienvenida } from "@/lib/bienvenida";
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
@@ -563,119 +563,124 @@ export async function actualizarExpediente(
 }
 
 /** Cambia la etapa de un expediente. */
-export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
-  await requireAdmin();
-  if (etapa === "en_pausa") {
-    throw new Error('Para pausar un negocio usa "Posponer" y elige la fecha para retomarlo.');
-  }
-  const usuario = await usuarioActual();
-  if (!usuario) throw new Error("No autorizado.");
-  const { rol } = await rolDe(usuario.id);
-  const sb = supabaseServidor();
-
-  // Obtener prospecto_id antes de actualizar
-  const { data: exp } = await sb
-    .from("expedientes")
-    .select("prospecto_id, asesor_id, operador_id, etapa")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (rol === "asesor" || rol === "operaciones") {
-    const colId = rol === "asesor" ? "asesor_id" : "operador_id";
-    if (exp?.[colId] !== usuario.id) {
-      throw new Error("No estás autorizado para modificar este expediente.");
+export async function moverEtapa(id: string, etapa: EtapaId): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    if (etapa === "en_pausa") {
+      return { ok: false, error: 'Para pausar un negocio usa "Posponer" y elige la fecha para retomarlo.' };
     }
-  }
-
-  // Si estaba en pausa, se quita la pausa (fecha, cotizaciones pausadas) antes de moverlo
-  if (exp?.etapa === "en_pausa") {
-    const { reactivarExpediente } = await import("@/lib/pausa-leads");
-    await reactivarExpediente(sb, id, "Movido de etapa manualmente");
-  }
-
-  const updatePayload: any = { etapa, ultimo_movimiento: hoyISO() };
-  if (etapa === "perdido") {
-    updatePayload.asesor_id = null;
-  }
-
-  const { error } = await sb
-    .from("expedientes")
-    .update(updatePayload)
-    .eq("id", id);
-  if (error) throw new Error(error.message);
-
-  if (exp?.prospecto_id) {
-    if (etapa === "perdido") {
-      await sb
-        .from("prospectos")
-        .update({ asesor_id: null })
-        .eq("id", exp.prospecto_id);
+    const usuario = await usuarioActual();
+    if (!usuario) {
+      return { ok: false, error: "Tu sesión ha expirado o no estás autenticado. Por favor recarga la página." };
     }
-    const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
-    await sincronizarEstatusProspecto(sb, exp.prospecto_id);
-  }
+    const { rol } = await rolDe(usuario.id);
+    const sb = supabaseServidor();
 
-  await registrarActividad(sb, {
-    expedienteId: id,
-    tipo: "etapa",
-    titulo: `Movido a ${ETAPAS_POR_ID[etapa].nombre}`,
-  });
+    // Obtener prospecto_id antes de actualizar
+    const { data: exp } = await sb
+      .from("expedientes")
+      .select("prospecto_id, asesor_id, operador_id, etapa")
+      .eq("id", id)
+      .maybeSingle();
 
-  // Trigger automático: Si la etapa pasa a valuación (y tipo_negocio es promoción venta), inicializar portal del cliente
-  if (etapa === "valuacion") {
-    await asegurarPortalCliente(sb, id);
-  }
-
-  // Dispara automatizaciones del evento "cambio de etapa".
-  await dispararEvento(sb, "cambio-etapa", {
-    expedienteId: id,
-    cambios: ["etapa"],
-  });
-
-  // Enviar evento identify a RudderStack / Mautic en segundo plano si hay un prospecto enlazado
-  if (exp?.prospecto_id) {
-    const prospectoId = exp.prospecto_id;
-    (async () => {
-      try {
-        const { data: pros } = await sb
-          .from("prospectos")
-          .select("nombre, primer_apellido, segundo_apellido, correo, telefono, origen, estatus")
-          .eq("id", prospectoId)
-          .maybeSingle();
-
-        const { data: currentExp } = await sb
-          .from("expedientes")
-          .select("tipo_negocio")
-          .eq("id", id)
-          .maybeSingle();
-
-        if (pros) {
-          const { sincronizarConectorMautic } = await import("@/lib/conector-rudder-mautic");
-          await sincronizarConectorMautic({
-            userId: prospectoId,
-            firstname: pros.nombre,
-            lastname: [pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" "),
-            email: pros.correo,
-            phone: pros.telefono,
-            origen: pros.origen,
-            tipo_negocio: currentExp?.tipo_negocio || "otro",
-            etapa: etapa,
-            estatus: pros.estatus,
-            ia_pausada: false,
-          });
-        }
-      } catch (rudderErr) {
-        console.error("[Conector Mautic] Error en moverEtapa:", rudderErr);
+    if (rol === "asesor" || rol === "operaciones") {
+      const colId = rol === "asesor" ? "asesor_id" : "operador_id";
+      if (exp?.[colId] && exp[colId] !== usuario.id) {
+        return { ok: false, error: "No estás autorizado para modificar este expediente (pertenece a otro asesor)." };
       }
-    })();
+    }
+
+    // Si estaba en pausa, se quita la pausa (fecha, cotizaciones pausadas) antes de moverlo
+    if (exp?.etapa === "en_pausa") {
+      const { reactivarExpediente } = await import("@/lib/pausa-leads");
+      await reactivarExpediente(sb, id, "Movido de etapa manualmente");
+    }
+
+    const updatePayload: any = { etapa, ultimo_movimiento: hoyISO() };
+    if (etapa === "perdido") {
+      updatePayload.asesor_id = null;
+    }
+
+    const { error } = await sb
+      .from("expedientes")
+      .update(updatePayload)
+      .eq("id", id);
+    if (error) return { ok: false, error: error.message };
+
+    if (exp?.prospecto_id) {
+      if (etapa === "perdido") {
+        await sb
+          .from("prospectos")
+          .update({ asesor_id: null })
+          .eq("id", exp.prospecto_id);
+      }
+      const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
+      await sincronizarEstatusProspecto(sb, exp.prospecto_id);
+    }
+
+    const nombreEtapa = TODAS_LAS_ETAPAS_POR_ID[etapa]?.nombre || ETAPAS_POR_ID[etapa]?.nombre || etapa;
+    await registrarActividad(sb, {
+      expedienteId: id,
+      tipo: "etapa",
+      titulo: `Movido a ${nombreEtapa}`,
+    });
+
+    // Trigger automático: Si la etapa pasa a valuación (y tipo_negocio es promoción venta), inicializar portal del cliente
+    if (etapa === "valuacion") {
+      await asegurarPortalCliente(sb, id);
+    }
+
+    // Dispara automatizaciones del evento "cambio de etapa".
+    await dispararEvento(sb, "cambio-etapa", {
+      expedienteId: id,
+      cambios: ["etapa"],
+    });
+
+    // Enviar evento identify a RudderStack / Mautic en segundo plano si hay un prospecto enlazado
+    if (exp?.prospecto_id) {
+      const prospectoId = exp.prospecto_id;
+      (async () => {
+        try {
+          const { data: pros } = await sb
+            .from("prospectos")
+            .select("nombre, primer_apellido, segundo_apellido, correo, telefono, origen, estatus")
+            .eq("id", prospectoId)
+            .maybeSingle();
+
+          const { data: currentExp } = await sb
+            .from("expedientes")
+            .select("tipo_negocio")
+            .eq("id", id)
+            .maybeSingle();
+
+          if (pros) {
+            const { sincronizarConectorMautic } = await import("@/lib/conector-rudder-mautic");
+            await sincronizarConectorMautic({
+              userId: prospectoId,
+              firstname: pros.nombre,
+              lastname: [pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" "),
+              email: pros.correo,
+              phone: pros.telefono,
+              origen: pros.origen,
+              tipo_negocio: currentExp?.tipo_negocio || "otro",
+              etapa: etapa,
+              estatus: pros.estatus,
+              ia_pausada: false,
+            });
+          }
+        } catch (rudderErr) {
+          console.error("[Conector Mautic] Error en moverEtapa:", rudderErr);
+        }
+      })();
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al mover etapa:", err);
+    return { ok: false, error: err?.message || "Error al mover la etapa." };
   }
 }
 
-/**
- * Garantiza que exista la fila en promociones_expedientes y genera el
- * session_token_client + token_expiration si aún no los tiene.
- * Envía por WhatsApp el enlace público del portal si cuenta con teléfono.
- */
 export async function asegurarPortalCliente(
   sb: SupabaseClient,
   expedienteId: string,

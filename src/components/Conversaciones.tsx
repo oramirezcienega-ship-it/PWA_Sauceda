@@ -707,6 +707,9 @@ function formatoWhatsApp(texto: string): React.ReactNode {
 function humanizarError(error: any): string {
   if (!error) return "Ocurrió un error inesperado.";
   const msg = typeof error === "string" ? error : error?.message || String(error);
+  if (/server components render/i.test(msg) || /digest/i.test(msg)) {
+    return "Tu sesión en el servidor expiró o se requiere reautenticación. Por favor recarga la página (F5) para renovar tu acceso.";
+  }
   if (/failed to fetch/i.test(msg) || /network\s*error/i.test(msg) || /fetch\s*failed/i.test(msg)) {
     return "Error de conexión con el servidor. Por favor verifica tu conexión a internet o intenta nuevamente.";
   }
@@ -2330,8 +2333,12 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           setCambiandoEtapa(true);
                           setAviso(null);
                           try {
-                            await moverEtapa(detalle.expedienteId, nueva);
-                            await refrescar(detalle.telefono);
+                            const res = await moverEtapa(detalle.expedienteId, nueva);
+                            if (res && !res.ok) {
+                              setAviso(humanizarError(res.error || "No se pudo cambiar la etapa."));
+                            } else {
+                              await refrescar(detalle.telefono);
+                            }
                           } catch (err: any) {
                             setAviso(humanizarError(err));
                           } finally {
