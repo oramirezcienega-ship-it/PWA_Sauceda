@@ -2,7 +2,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { enviarWhatsAppPlantilla, enviarWhatsAppTexto } from "@/lib/whatsapp";
 
 export interface OpcionesCronAgenda {
-  forzar?: "matutino" | "nocturno" | "alertas_previas" | "todo";
+  forzar?: "matutino" | "nocturno" | "alertas_previas" | "recordatorios_dia" | "todo";
   ahoraOverride?: Date;
 }
 
@@ -30,6 +30,16 @@ export interface ResultadoCronAgenda {
     alertas1hEnviadas: number;
     errores: number;
     citasEvaluadas: number;
+  };
+  recordatoriosDia?: {
+    ejecutado: boolean;
+    totalCitas: number;
+    clientesEnviados: number;
+    clientesOmitidos: number;
+    clientesErrores: number;
+    proveedoresEnviados: number;
+    proveedoresOmitidos: number;
+    proveedoresErrores: number;
   };
 }
 
@@ -587,6 +597,34 @@ export async function procesarAlertasYResumenesAgenda(
       errores: erroresAlertas,
       citasEvaluadas: citasHoyAlertas?.length || 0,
     };
+  }
+
+  // =========================================================================
+  // D. RECORDATORIOS DEL DÍA A CLIENTES Y PROVEEDORES (PLANTILLAS META UTILITY)
+  // =========================================================================
+  const ejecutarRecordatorios =
+    opciones.forzar === "recordatorios_dia" ||
+    opciones.forzar === "matutino" ||
+    opciones.forzar === "todo" ||
+    !opciones.forzar; // En cada corrida periódica evalúa si hay citas de hoy pendientes de recordatorio
+
+  if (ejecutarRecordatorios) {
+    try {
+      const { procesarRecordatoriosDiaServicio } = await import("./recordatorios-dia-servicio");
+      const resRec = await procesarRecordatoriosDiaServicio(sb, tiempo.fechaHoy);
+      resultado.recordatoriosDia = {
+        ejecutado: true,
+        totalCitas: resRec.totalCitas,
+        clientesEnviados: resRec.clientesEnviados,
+        clientesOmitidos: resRec.clientesOmitidos,
+        clientesErrores: resRec.clientesErrores,
+        proveedoresEnviados: resRec.proveedoresEnviados,
+        proveedoresOmitidos: resRec.proveedoresOmitidos,
+        proveedoresErrores: resRec.proveedoresErrores,
+      };
+    } catch (errRec) {
+      console.error("[Notificaciones Agenda] Error al procesar recordatorios del día:", errRec);
+    }
   }
 
   return resultado;

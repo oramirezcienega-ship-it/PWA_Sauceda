@@ -5,6 +5,7 @@ import {
   obtenerAgendaRango,
   confirmarCita,
   cancelarCita,
+  enviarRecordatorioDiaAction,
   crearBloqueo,
   eliminarBloqueo,
   type Cita,
@@ -49,6 +50,7 @@ export function AgendaDashboard({
   const [bloqueos, setBloqueos] = useState<Bloqueo[]>([]);
   const [cargando, setCargando] = useState(true);
   const [copiado, setCopiado] = useState(false);
+  const [enviandoRecordatorioId, setEnviandoRecordatorioId] = useState<string | null>(null);
 
   // Estados de formularios
   const [bloqueoInicio, setBloqueoInicio] = useState("09:00");
@@ -149,6 +151,24 @@ export function AgendaDashboard({
     } catch (err) {
       console.error(err);
       alert("No se pudo cancelar la cita.");
+    }
+  }
+
+  async function handleEnviarRecordatorio(citaId: string) {
+    try {
+      setEnviandoRecordatorioId(citaId);
+      const res = await enviarRecordatorioDiaAction(citaId, "ambos", true);
+      if (!res.ok) {
+        alert(res.error || "No se pudo enviar el recordatorio.");
+        return;
+      }
+      alert("✅ Recordatorio del día enviado exitosamente con plantilla oficial de Meta.");
+      await cargarAgendaMes();
+    } catch (err: any) {
+      console.error(err);
+      alert("Error al enviar recordatorio: " + (err?.message || "error"));
+    } finally {
+      setEnviandoRecordatorioId(null);
     }
   }
 
@@ -447,6 +467,30 @@ export function AgendaDashboard({
                                 title="Cancelar Cita"
                               >
                                 Cancelar
+                              </button>
+                            )}
+
+                            {/* Botón Recordatorio del Día (Plantilla Meta UTILITY) */}
+                            {(c.tipo_cita === "instalacion" || c.tipo_cita === "inspeccion") && !esPendiente && (
+                              <button
+                                type="button"
+                                onClick={() => handleEnviarRecordatorio(c.id)}
+                                disabled={enviandoRecordatorioId === c.id}
+                                className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer ${
+                                  (c.confirmaciones_equipo?.recordatorio_cliente_enviado_at || c.recordatorio_cliente_enviado_at)
+                                    ? "bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                                    : "bg-sauce text-white hover:bg-sauce-oscuro"
+                                }`}
+                                title="Enviar recordatorio oficial por WhatsApp con plantilla de Meta para abrir ventana de 24h"
+                              >
+                                <span>{enviandoRecordatorioId === c.id ? "⏳" : "📲"}</span>
+                                <span>
+                                  {enviandoRecordatorioId === c.id
+                                    ? "Enviando..."
+                                    : (c.confirmaciones_equipo?.recordatorio_cliente_enviado_at || c.recordatorio_cliente_enviado_at)
+                                      ? "Recordatorio enviado ✓"
+                                      : "Recordatorio Hoy"}
+                                </span>
                               </button>
                             )}
                             

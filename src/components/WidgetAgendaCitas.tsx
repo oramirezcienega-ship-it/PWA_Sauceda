@@ -7,6 +7,7 @@ import {
   editarCita,
   cancelarCita,
   obtenerEstadoNotificacionCita,
+  enviarRecordatorioDiaAction,
   type Cita 
 } from "@/app/actions/agenda";
 import Link from "next/link";
@@ -74,6 +75,7 @@ export function WidgetAgendaCitas({
   const [procesando, setProcesando] = useState(false);
   const [actualizandoEstadoId, setActualizandoEstadoId] = useState<string | null>(null);
   const [ejecutandoCitaId, setEjecutandoCitaId] = useState<string | null>(null);
+  const [enviandoRecordatorioId, setEnviandoRecordatorioId] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   const handleMarcarEjecutada = async (citaId: string) => {
@@ -97,6 +99,27 @@ export function WidgetAgendaCitas({
       });
     } finally {
       setEjecutandoCitaId(null);
+    }
+  };
+
+  const handleEnviarRecordatorio = async (citaId: string) => {
+    try {
+      setEnviandoRecordatorioId(citaId);
+      const res = await enviarRecordatorioDiaAction(citaId, "ambos", true);
+      if (!res.ok) {
+        setMensaje({ tipo: "error", texto: res.error || "No se pudo enviar el recordatorio." });
+        return;
+      }
+      setMensaje({
+        tipo: "ok",
+        texto: "✅ ¡Recordatorio del día enviado exitosamente por WhatsApp usando plantilla oficial de Meta!",
+      });
+      await cargarDatos();
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      setMensaje({ tipo: "error", texto: err?.message || "Error al enviar recordatorio." });
+    } finally {
+      setEnviandoRecordatorioId(null);
     }
   };
 
@@ -774,6 +797,29 @@ export function WidgetAgendaCitas({
                     >
                       <span>✈️</span>
                       <span>{Object.keys(c.telegram_compartido || {}).length > 0 ? "Reenviar por Telegram" : "Compartir por Telegram"}</span>
+                    </button>
+                  )}
+
+                  {(isInstalacion || isInspeccion) && !isCancelada && (
+                    <button
+                      type="button"
+                      onClick={() => handleEnviarRecordatorio(c.id)}
+                      disabled={enviandoRecordatorioId === c.id}
+                      className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition shadow-xs flex items-center gap-1 cursor-pointer ${
+                        (c.confirmaciones_equipo?.recordatorio_cliente_enviado_at || c.recordatorio_cliente_enviado_at)
+                          ? "bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                          : "bg-sauce text-white hover:bg-sauce-oscuro"
+                      }`}
+                      title="Enviar recordatorio del día por WhatsApp con plantilla oficial de Meta para abrir la ventana de 24h"
+                    >
+                      <span>{enviandoRecordatorioId === c.id ? "⏳" : "📲"}</span>
+                      <span>
+                        {enviandoRecordatorioId === c.id
+                          ? "Enviando..."
+                          : (c.confirmaciones_equipo?.recordatorio_cliente_enviado_at || c.recordatorio_cliente_enviado_at)
+                            ? "Recordatorio enviado ✓"
+                            : "Recordatorio WhatsApp"}
+                      </span>
                     </button>
                   )}
 

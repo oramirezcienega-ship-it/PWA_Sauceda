@@ -39,7 +39,7 @@ export async function listarConversacionesProveedores(): Promise<ResumenConversa
   await requireAdmin();
   const sb = supabaseServidor();
   const [{ data: provs }, { data: msgs }] = await Promise.all([
-    sb.from("proveedores").select("id, nombre, categoria, whatsapp, telefono").eq("activo", true).order("nombre"),
+    sb.from("proveedores").select("id, nombre, contacto_nombre, razon_social, categoria, whatsapp, telefono").eq("activo", true).order("nombre"),
     sb
       .from("mensajes_whatsapp")
       .select("proveedor_id, direccion, texto, estado, created_at")
@@ -59,7 +59,7 @@ export async function listarConversacionesProveedores(): Promise<ResumenConversa
       const ultimo = arr[0];
       return {
         proveedorId: p.id,
-        nombre: p.nombre,
+        nombre: p.contacto_nombre?.trim() || p.razon_social?.trim() || p.nombre,
         categoria: p.categoria || "",
         telefono: normalizarTelefono(p.whatsapp || p.telefono || ""),
         ultimoTexto: ultimo?.texto || "",

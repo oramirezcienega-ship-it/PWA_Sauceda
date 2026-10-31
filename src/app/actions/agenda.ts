@@ -41,6 +41,9 @@ export interface Cita {
       enteradoVia?: "telegram" | "manual" | null;
     }
   > | null;
+  confirmaciones_equipo?: Record<string, any> | null;
+  recordatorio_cliente_enviado_at?: string | null;
+  recordatorio_proveedor_enviado_at?: string | null;
 }
 
 export interface Bloqueo {
@@ -1858,6 +1861,68 @@ export async function reenviarNotificacionInspeccion(datos: {
     return { ok: true, estadoWhatsApp: estadoWsp };
   } catch (err: any) {
     return { ok: false, error: err.message || "Error al reenviar notificación." };
+  }
+}
+
+/**
+ * Envía el recordatorio del día por WhatsApp al cliente y/o al proveedor.
+ * Utiliza plantillas oficiales aprobadas de Meta (categoría UTILITY para cliente, aviso_proveedor + Evolution para proveedor).
+ */
+export async function enviarRecordatorioDiaAction(
+  citaId: string,
+  destino: "cliente" | "proveedor" | "ambos" = "ambos",
+  forzar: boolean = true
+): Promise<{
+  ok: boolean;
+  cliente?: { ok: boolean; omitido?: boolean; canal?: string; error?: string };
+  proveedor?: { ok: boolean; omitido?: boolean; canal?: string; error?: string };
+  error?: string;
+}> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  try {
+    const { data: cita, error: errCita } = await sb
+      .from("agenda_citas")
+      .select("*")
+      .eq("id", citaId)
+      .maybeSingle();
+
+    if (errCita || !cita) {
+      return { ok: false, error: "No se encontró la cita especificada." };
+    }
+
+    const {
+      enviarRecordatorioDiaCliente,
+      enviarRecordatorioDiaProveedor,
+    } = await import("@/lib/recordatorios-dia-servicio");
+
+    let resCliente: any = null;
+    let resProveedor: any = null;
+
+    if (destino === "cliente" || destino === "ambos") {
+      resCliente = await enviarRecordatorioDiaCliente(sb, cita as any, { forzar });
+    }
+
+    if (destino === "proveedor" || destino === "ambos") {
+      resProveedor = await enviarRecordatorioDiaProveedor(sb, cita as any, { forzar });
+    }
+
+    revalidatePath("/agenda");
+    revalidatePath("/ordenes-trabajo");
+
+    const exitoTotal =
+      (resCliente ? resCliente.ok : true) &&
+      (resProveedor ? resProveedor.ok : true);
+
+    return {
+      ok: exitoTotal,
+      cliente: resCliente || undefined,
+      proveedor: resProveedor || undefined,
+    };
+  } catch (err: any) {
+    console.error("Error en enviarRecordatorioDiaAction:", err);
+    return { ok: false, error: err.message || "Error al procesar el recordatorio." };
   }
 }
 

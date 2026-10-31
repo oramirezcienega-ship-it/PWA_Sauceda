@@ -30,21 +30,37 @@ export async function proveedorPorTelefono(sb: SupabaseClient, telefono: string)
   if (diez.length !== 10) return null;
   const { data } = await sb
     .from("proveedores")
-    .select("id, nombre, contacto_nombre, whatsapp, telefono, telegram_chat_id")
+    .select("id, nombre, contacto_nombre, razon_social, whatsapp, telefono, telegram_chat_id")
     .eq("activo", true)
     .or(`whatsapp.ilike.%${diez},telefono.ilike.%${diez}`);
   const p = (data || []).find((x: any) =>
     [x.whatsapp, x.telefono].some((t) => t && normalizarTelefono(t).slice(-10) === diez)
   ) as any;
   return p
-    ? { id: p.id, nombre: p.nombre, contactoNombre: p.contacto_nombre || "", telefono: normalizarTelefono(p.whatsapp || p.telefono) }
+    ? {
+        id: p.id,
+        nombre: p.nombre,
+        contactoNombre: p.contacto_nombre?.trim() || p.razon_social?.trim() || p.nombre || "",
+        telefono: normalizarTelefono(p.whatsapp || p.telefono),
+        telegramChatId: p.telegram_chat_id || null,
+      }
     : null;
 }
 
 export async function datosProveedor(sb: SupabaseClient, proveedorId: string): Promise<ProveedorWhatsApp | null> {
-  const { data: p } = await sb.from("proveedores").select("id, nombre, contacto_nombre, whatsapp, telefono").eq("id", proveedorId).maybeSingle();
+  const { data: p } = await sb
+    .from("proveedores")
+    .select("id, nombre, contacto_nombre, razon_social, whatsapp, telefono, telegram_chat_id")
+    .eq("id", proveedorId)
+    .maybeSingle();
   if (!p) return null;
-  return { id: p.id, nombre: p.nombre, contactoNombre: p.contacto_nombre || "", telefono: normalizarTelefono(p.whatsapp || p.telefono || ""), telegramChatId: p.telegram_chat_id || null };
+  return {
+    id: p.id,
+    nombre: p.nombre,
+    contactoNombre: p.contacto_nombre?.trim() || p.razon_social?.trim() || p.nombre || "",
+    telefono: normalizarTelefono(p.whatsapp || p.telefono || ""),
+    telegramChatId: p.telegram_chat_id || null,
+  };
 }
 
 /** ¿El proveedor escribió en las últimas 24 h? (se le puede mandar texto libre) */
