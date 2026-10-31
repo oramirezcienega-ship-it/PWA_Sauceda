@@ -100,6 +100,7 @@ export interface ReciboPago {
   saldoAnterior: number;
   saldoRestante: number;
   recibidoPor: string | null;
+  proveedorId?: string | null;
   recibidoPorNombre: string | null;
   fechaPago: string;
   notas: string | null;
@@ -690,6 +691,7 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
       saldoAnterior: Number(r.saldo_anterior || 0),
       saldoRestante: Number(r.saldo_restante || 0),
       recibidoPor: r.recibido_por,
+      proveedorId: r.proveedor_id || null,
       recibidoPorNombre: r.recibido_por_nombre,
       fechaPago: r.fecha_pago,
       notas: r.notas,
@@ -1225,21 +1227,50 @@ export async function crearReciboPago(datos: {
     const token = crypto.randomBytes(24).toString("hex");
     const montoLetra = numeroALetras(monto);
 
-    // Obtener nombre del perfil que recibe el pago
+    // Obtener nombre del perfil o proveedor que recibe el pago
     let recibidoPorNombre = "Asesor Sauceda";
     let recibidoPorId: string | null = usuario?.id || null;
+    let proveedorId: string | null = null;
     const quienRecibe = datos.recibidoPorId || usuario?.id;
     if (quienRecibe) {
-      const { data: perf } = await sb
-        .from("perfiles")
-        .select("id, nombre")
-        .eq("id", quienRecibe)
-        .maybeSingle();
-      if (perf?.nombre) {
-        recibidoPorNombre = perf.nombre;
-        recibidoPorId = perf.id;
-      } else if (datos.recibidoPorId) {
-        return { ok: false, error: "La persona seleccionada para recibir el dinero no existe en el sistema." };
+      if (quienRecibe.startsWith("prov_")) {
+        const provUuid = quienRecibe.replace("prov_", "");
+        const { data: prov } = await sb
+          .from("proveedores")
+          .select("id, nombre, contacto_nombre")
+          .eq("id", provUuid)
+          .maybeSingle();
+        if (prov) {
+          recibidoPorNombre = prov.nombre || prov.contacto_nombre || "Proveedor";
+          recibidoPorId = null;
+          proveedorId = prov.id;
+        } else {
+          return { ok: false, error: "El proveedor seleccionado no existe en el sistema." };
+        }
+      } else {
+        const { data: perf } = await sb
+          .from("perfiles")
+          .select("id, nombre")
+          .eq("id", quienRecibe)
+          .maybeSingle();
+        if (perf?.nombre) {
+          recibidoPorNombre = perf.nombre;
+          recibidoPorId = perf.id;
+        } else {
+          // Checar si es UUID directo de proveedor
+          const { data: prov } = await sb
+            .from("proveedores")
+            .select("id, nombre, contacto_nombre")
+            .eq("id", quienRecibe)
+            .maybeSingle();
+          if (prov) {
+            recibidoPorNombre = prov.nombre || prov.contacto_nombre || "Proveedor";
+            recibidoPorId = null;
+            proveedorId = prov.id;
+          } else if (datos.recibidoPorId) {
+            return { ok: false, error: "La persona o proveedor seleccionado para recibir el dinero no existe en el sistema." };
+          }
+        }
       }
     }
 
@@ -1261,6 +1292,7 @@ export async function crearReciboPago(datos: {
         saldo_anterior: saldoAnterior,
         saldo_restante: saldoRestante,
         recibido_por: recibidoPorId,
+        proveedor_id: proveedorId,
         recibido_por_nombre: recibidoPorNombre,
         fecha_pago: datos.fechaPago || new Date().toISOString().split("T")[0],
         notas: datos.notas?.trim() || null,
@@ -1297,6 +1329,7 @@ export async function crearReciboPago(datos: {
         saldoAnterior: Number(nuevo.saldo_anterior),
         saldoRestante: Number(nuevo.saldo_restante),
         recibidoPor: nuevo.recibido_por,
+        proveedorId: nuevo.proveedor_id || null,
         recibidoPorNombre: nuevo.recibido_por_nombre,
         fechaPago: nuevo.fecha_pago,
         notas: nuevo.notas,
@@ -1310,19 +1343,52 @@ export async function crearReciboPago(datos: {
   }
 }
 
-/** Personas que pueden recibir dinero: todos los usuarios activos (admin, asesor, operaciones/instalador). */
-export async function listarReceptoresRecibo(): Promise<
-  { id: string; nombre: string; rol: string }[]
-> {
+export interface ReceptorRecibo {
+  id: string;
+  nombre: string;
+  rol: string;
+  tipo?: "perfil" | "proveedor";
+  categoria?: string | null;
+}
+
+/** Personas y proveedores que pueden recibir dinero: usuarios activos y proveedores activos. */
+export async function listarReceptoresRecibo(): Promise<ReceptorRecibo[]> {
   try {
     await requireAdmin();
     const sb = supabaseServidor();
-    const { data } = await sb
-      .from("perfiles")
-      .select("id, nombre, rol")
-      .eq("activo", true)
-      .order("nombre", { ascending: true });
-    return (data || []).map((p: any) => ({ id: p.id, nombre: p.nombre, rol: p.rol || "" }));
+    const [{ data: perfiles }, { data: proveedores }] = await Promise.all([
+      sb
+        .from("perfiles")
+        .select("id, nombre, rol")
+        .eq("activo", true)
+        .order("nombre", { ascending: true }),
+      sb
+        .from("proveedores")
+        .select("id, nombre, contacto_nombre, categoria")
+        .eq("activo", true)
+        .order("nombre", { ascending: true }),
+    ]);
+
+    const listaPerfiles: ReceptorRecibo[] = (perfiles || []).map((p: any) => ({
+      id: p.id,
+      nombre: p.nombre,
+      rol: p.rol || "",
+      tipo: "perfil" as const,
+    }));
+
+    const listaProveedores: ReceptorRecibo[] = (proveedores || []).map((pr: any) => {
+      const nombreMostrar = pr.nombre || pr.contacto_nombre || "Proveedor";
+      const detalle = pr.categoria ? `Proveedor (${pr.categoria})` : "Proveedor / Contratista";
+      return {
+        id: `prov_${pr.id}`,
+        nombre: nombreMostrar,
+        rol: detalle,
+        tipo: "proveedor" as const,
+        categoria: pr.categoria || null,
+      };
+    });
+
+    return [...listaPerfiles, ...listaProveedores];
   } catch {
     return [];
   }
@@ -1530,14 +1596,43 @@ export async function actualizarReciboPago(
     }
 
     if (datos.recibidoPorId) {
-      const { data: perf } = await sb
-        .from("perfiles")
-        .select("id, nombre")
-        .eq("id", datos.recibidoPorId)
-        .maybeSingle();
-      if (!perf) return { ok: false, error: "La persona seleccionada no existe en el sistema." };
-      cambios.recibido_por = perf.id;
-      cambios.recibido_por_nombre = perf.nombre;
+      if (datos.recibidoPorId.startsWith("prov_")) {
+        const provUuid = datos.recibidoPorId.replace("prov_", "");
+        const { data: prov } = await sb
+          .from("proveedores")
+          .select("id, nombre, contacto_nombre")
+          .eq("id", provUuid)
+          .maybeSingle();
+        if (!prov) return { ok: false, error: "El proveedor seleccionado no existe en el sistema." };
+        cambios.recibido_por = null;
+        cambios.proveedor_id = prov.id;
+        cambios.recibido_por_nombre = prov.nombre || prov.contacto_nombre || "Proveedor";
+      } else {
+        const { data: perf } = await sb
+          .from("perfiles")
+          .select("id, nombre")
+          .eq("id", datos.recibidoPorId)
+          .maybeSingle();
+        if (perf) {
+          cambios.recibido_por = perf.id;
+          cambios.proveedor_id = null;
+          cambios.recibido_por_nombre = perf.nombre;
+        } else {
+          // Checar si es UUID directo de proveedor
+          const { data: prov } = await sb
+            .from("proveedores")
+            .select("id, nombre, contacto_nombre")
+            .eq("id", datos.recibidoPorId)
+            .maybeSingle();
+          if (prov) {
+            cambios.recibido_por = null;
+            cambios.proveedor_id = prov.id;
+            cambios.recibido_por_nombre = prov.nombre || prov.contacto_nombre || "Proveedor";
+          } else {
+            return { ok: false, error: "La persona o proveedor seleccionado no existe en el sistema." };
+          }
+        }
+      }
     }
 
     const { error } = await sb.from("recibos_pago").update(cambios).eq("id", reciboId);
@@ -1626,6 +1721,7 @@ export async function obtenerReciboPorToken(token: string): Promise<ReciboPago |
       saldoAnterior: Number(r.saldo_anterior),
       saldoRestante: Number(r.saldo_restante),
       recibidoPor: r.recibido_por,
+      proveedorId: r.proveedor_id || null,
       recibidoPorNombre: r.recibido_por_nombre,
       fechaPago: r.fecha_pago,
       notas: r.notas,
@@ -2560,6 +2656,7 @@ export async function obtenerEntregaOrdenTrabajoPorToken(token: string): Promise
       saldoAnterior: Number(r.saldo_anterior || 0),
       saldoRestante: Number(r.saldo_restante || 0),
       recibidoPor: r.recibido_por,
+      proveedorId: r.proveedor_id || null,
       recibidoPorNombre: r.recibido_por_nombre,
       fechaPago: r.fecha_pago,
       notas: r.notas,

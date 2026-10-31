@@ -60,6 +60,17 @@ export function sanitizarRespuestaImper(texto: string, metros: number | null, va
     res = res.replace(/\$4[,.]?050(?:\s*MXN)?/gi, "$5,625 MXN");
     res = res.replace(/\$4[,.]?950(?:\s*MXN)?/gi, "$6,875 MXN");
     res = res.replace(/\$2[,.]?970(?:\s*MXN)?/gi, "$5,625 MXN");
+  } else {
+    // Para >= 25 m²: corregir alucinaciones de rango donde se tope en $225 diciendo que es de 10 años (el Premium cuesta $275/m²)
+    res = res.replace(
+      /desde\s*\$165(?:\/m²|\s*pesos|\s*mxn)?\s*en\s*sistema\s*acr[ií]lico\s*hasta\s*\$225(?:\/m²|\s*pesos|\s*mxn)?\s*en\s*manto\s*asf[aá]ltico[^\n]*/gi,
+      "va desde $165/m² en Acrílico (3 años), $225/m² en Manto Estándar 3.5 mm (5 años) hasta $275/m² en Manto Premium 4.0 mm (10 años)."
+    );
+    res = res.replace(
+      /(?:^|\n)\s*el\s+comparativo\s+de\s+las\s+3\s+opciones\s+con\s+su\s+inversión\s+estimada\s+total[^\n]*/gi,
+      "\nTe comparto la comparativa de nuestras 3 opciones con su inversión estimada total ya con material, sellado de grietas y mano de obra incluidos 👇"
+    );
+    res = res.replace(/va\s+va\s+desde/gi, "va desde");
   }
 
   // Si no se va a enviar imagen y el texto apunta hacia abajo al vacío

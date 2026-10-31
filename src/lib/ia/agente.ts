@@ -625,14 +625,19 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   - Si los metros son claros: en "datosExtraidos" pon "metros" (número entero) y "metros_claros": true. El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, una imagen comparativa con la inversión para esos metros.
 
   🚨 CASO A: SUPERFICIES DE 25 M² O MÁS (3 Opciones normales):
-  Si los metros son 25 o más, responde con este mensaje:
+  Si los metros son 25 o más:
+  - PROHIBIDO inventar rangos incompletos o erróneos como "va desde $165 hasta $225". Nuestras 3 opciones oficiales son:
+    1. Acrílico con malla (3 años de garantía): aprox. $165 MXN / m²
+    2. Manto Estándar 3.5 mm con gravilla (5 años de garantía - La más solicitada): aprox. $225 MXN / m²
+    3. Manto Premium 4.0 mm poliéster con gravilla (10 años de garantía - Máxima durabilidad): aprox. $275 MXN / m² (¡EL MÁS ELEVADO CUESTA $275/m², NUNCA digas que el tope es $225!).
+  - Responde siempre anunciando la comparativa con 👇:
   "¡Excelente! Para tu azotea de aproximadamente [METROS] m², te comparto la comparativa de nuestras 3 opciones con su inversión estimada total ya con material, sellado de grietas y mano de obra incluidos 👇
 
   Todas nuestras opciones incluyen preparación profunda de la losa, retiro de material suelto y garantía formal por escrito. Aceptamos efectivo, transferencia o tarjeta con opción a meses por Mercado Pago.
 
   Estos precios son un estimado con base en tus medidas. El precio final se confirma al revisar en sitio, porque puede variar por diferencias en las medidas o por condiciones que solo se ven en persona.
 
-  ¿Cuál de las 3 opciones (2, 5 o 10 años de garantía) se adapta mejor a lo que estás buscando para tu casa?"
+  ¿Cuál de las 3 opciones (3, 5 o 10 años de garantía) se adapta mejor a lo que estás buscando para tu casa?"
 
   🚨 CASO B: SUPERFICIES MENORES A 25 M² (TARIFA MÍNIMA DE SERVICIO - PROHIBIDO ACRÍLICO):
   Si los metros son MENORES a 25 m² (ej. 10, 15, 18, 20 m²):
@@ -1147,7 +1152,7 @@ ${listaVideos}
 
 REGLA DE PRECIOS (CRÍTICA):
   - PROHIBIDO escribir en texto precios, montos o totales de servicios no tabulados.
-  - ÚNICA EXCEPCIÓN: en impermeabilización, la inversión se comunica SOLO mediante la imagen comparativa que envía el sistema automáticamente (PASO 2). Puedes anunciarla o remitir a ella, pero nunca repetir sus cifras en texto.
+  - ÚNICA EXCEPCIÓN: en impermeabilización, la inversión se comunica mediante la imagen comparativa oficial (PASO 2) o refiriendo las 3 opciones oficiales ($165 Acrílico / $225 Estándar / $275 Premium). PROHIBIDO decir que el más alto cuesta $225 (el Premium cuesta $275 MXN/m²).
   - SEGUNDA EXCEPCIÓN: en mantenimiento de calentadores solares puedes escribir SOLO el precio oficial del escalón de tubos que corresponde dentro de León (flujo K), validando siempre la colonia o zona del cliente para determinar si el precio sigue siendo el mismo o varía por traslado. Nunca calcules, sumes ni estimes otros montos.
   - TERCERA EXCEPCIÓN (CONCRETO ESTAMPADO - OBLIGATORIO): En concreto estampado, una vez que conozcas los m² y el estado del suelo (firme vs tierra/pasto/placas), DEBES escribir y entregar la cotización oficial en texto inmediatamente usando el Tabulador Oficial del FLUJO G. Queda ESTRICTAMENTE PROHIBIDO decir "un asesor te contactará para cotizar" o "tu asesor te escribirá mañana con la cotización" si ya tienes los m² y el suelo. Entrega la cotización en ese mismo mensaje con la tarifa por m² y el monto total llave en mano.
   - CUARTA EXCEPCIÓN (SEGURIDAD Y CÁMARAS): En seguridad, cámaras y videoporteros, puedes y DEBES dar a conocer los paquetes estimados oficiales (Kit 2 Cámaras $3,950, Kit 4 Cámaras con DVR 1TB $6,850, Videoportero 4.3" $4,250, Videoportero Smart Wi-Fi $6,490) inmediatamente para que el cliente conozca la inversión y acepte el levantamiento técnico sin costo. Queda ESTRICTAMENTE PROHIBIDO decir "no te puedo dar precio por aquí".
@@ -2905,7 +2910,7 @@ export async function responderConIA(
       const ctxEnvio = { canal, telefono: ctx.telefono, expedienteId: ctx.expedienteId ?? null, agente: NOMBRE_AGENTE };
       const claros = (datosExtraidos as any).metros_claros === true || (datosExtraidos as any).metros_claros === "true" || (pideReenvioImper && Boolean(metrosImper));
       // Sólo se envían medios que el texto de Sofía anunció en este turno o si el cliente pidió reenvío explícito
-      const anunciaComparativa = /comparativa/i.test(textoRespuesta);
+      const anunciaComparativa = /comparativ[ao]|inversi[oó]n|opciones|cotizaci[oó]n|👇/i.test(textoRespuesta);
       const anunciaFotos = /(fotos?|im[aá]genes|imagen de referencia|👇)/i.test(textoRespuesta);
       const debeEnviarComp = (claros && metrosImper && anunciaComparativa && (datosExtraidos as any).paso_flujo === "paso_2") ||
                              (pideReenvioImper && metrosImper && (anunciaComparativa || /👇|cotizaci[óo]n/i.test(textoRespuesta)));

@@ -5,6 +5,7 @@ import {
   actualizarReciboPago,
   listarReceptoresRecibo,
   type ReciboPago,
+  type ReceptorRecibo,
 } from "@/app/actions/ordenes-trabajo";
 
 interface Props {
@@ -26,8 +27,8 @@ export function ModalEditarRecibo({ recibo, alCerrar, alGuardado }: Props) {
   const [referencia, setReferencia] = useState(recibo.referenciaPago || "");
   const [fecha, setFecha] = useState((recibo.fechaPago || "").slice(0, 10));
   const [notas, setNotas] = useState(recibo.notas || "");
-  const [recibidoPorId, setRecibidoPorId] = useState(recibo.recibidoPor || "");
-  const [receptores, setReceptores] = useState<{ id: string; nombre: string; rol: string }[]>([]);
+  const [recibidoPorId, setRecibidoPorId] = useState(recibo.proveedorId ? `prov_${recibo.proveedorId}` : (recibo.recibidoPor || ""));
+  const [receptores, setReceptores] = useState<ReceptorRecibo[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
@@ -115,11 +116,26 @@ export function ModalEditarRecibo({ recibo, alCerrar, alGuardado }: Props) {
               <label className={etiqueta}>Recibe el dinero</label>
               <select value={recibidoPorId} onChange={(e) => setRecibidoPorId(e.target.value)} className={`${campo} bg-white`}>
                 <option value="">{recibo.recibidoPorNombre ? `${recibo.recibidoPorNombre} (actual)` : "Sin cambio"}</option>
-                {receptores.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre} · {p.rol === "admin" ? "Administrador" : p.rol === "asesor" ? "Asesor" : p.rol === "operaciones" ? "Operaciones / Instalador" : p.rol}
-                  </option>
-                ))}
+                <optgroup label="Equipo Interno">
+                  {receptores
+                    .filter((p) => p.tipo !== "proveedor")
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre} · {p.rol === "admin" ? "Administrador" : p.rol === "asesor" ? "Asesor" : p.rol === "operaciones" ? "Operaciones / Instalador" : p.rol}
+                      </option>
+                    ))}
+                </optgroup>
+                {receptores.some((p) => p.tipo === "proveedor") && (
+                  <optgroup label="Proveedores / Contratistas">
+                    {receptores
+                      .filter((p) => p.tipo === "proveedor")
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nombre} · {p.rol}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
               </select>
             </div>
             <div>

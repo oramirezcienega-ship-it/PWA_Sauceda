@@ -7,6 +7,7 @@ import {
   listarReceptoresRecibo,
   enviarReciboPorWhatsApp,
   type ReciboPago,
+  type ReceptorRecibo,
 } from "@/app/actions/ordenes-trabajo";
 import { normalizarTelefono } from "@/lib/telefono";
 
@@ -57,7 +58,7 @@ export function ModalRegistrarRecibo({
   const [aNombreDe, setANombreDe] = useState(clienteNombre || "");
   const [recibidoPorId, setRecibidoPorId] = useState("");
   const [numRecibos, setNumRecibos] = useState(1);
-  const [receptores, setReceptores] = useState<{ id: string; nombre: string; rol: string }[]>([]);
+  const [receptores, setReceptores] = useState<ReceptorRecibo[]>([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [reciboCreado, setReciboCreado] = useState<ReciboPago | null>(null);
@@ -433,11 +434,26 @@ export function ModalRegistrarRecibo({
                   className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon focus:border-sauce focus:ring-1 focus:ring-sauce outline-none bg-white"
                 >
                   <option value="">Yo (usuario en sesión)</option>
-                  {receptores.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nombre} · {p.rol === "admin" ? "Administrador" : p.rol === "asesor" ? "Asesor" : p.rol === "operaciones" ? "Operaciones / Instalador" : p.rol}
-                    </option>
-                  ))}
+                  <optgroup label="Equipo Interno">
+                    {receptores
+                      .filter((p) => p.tipo !== "proveedor")
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nombre} · {p.rol === "admin" ? "Administrador" : p.rol === "asesor" ? "Asesor" : p.rol === "operaciones" ? "Operaciones / Instalador" : p.rol}
+                        </option>
+                      ))}
+                  </optgroup>
+                  {receptores.some((p) => p.tipo === "proveedor") && (
+                    <optgroup label="Proveedores / Contratistas">
+                      {receptores
+                        .filter((p) => p.tipo === "proveedor")
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.nombre} · {p.rol}
+                          </option>
+                        ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
 

@@ -43,3 +43,16 @@ test("sanitizarRespuestaImper: quita dedo apuntador si no se va a enviar imagen"
   const salida = sanitizarRespuestaImper(entrada, 50, false);
   assert.ok(!salida.includes("👇"), "No debe quedar el dedo apuntando al vacío");
 });
+
+test("sanitizarRespuestaImper: corrige rango engañoso hasta $225 y frase mocha de comparativo para 70 m²", () => {
+  const entrada = `¡Excelente! Para tu azotea de aproximadamente 70 m², el costo por metro cuadrado instalado va desde $165/m² en sistema acrílico hasta $225/m² en manto asfáltico termo-fusionado con gravilla (según el paquete y garantía de 3, 5 o 10 años).
+
+el comparativo de las 3 opciones con su inversión estimada total ya con material, sellado de grietas y mano de obra incluidos
+
+Estos precios son un estimado con base en tus medidas.`;
+
+  const salida = sanitizarRespuestaImper(entrada, 70, true);
+  assert.ok(salida.includes("$275/m² en Manto Premium"), "Debe corregir el precio más elevado a $275/m²");
+  assert.ok(salida.includes("Te comparto la comparativa de nuestras 3 opciones"), "Debe reparar la frase mocha");
+  assert.ok(salida.includes("👇"), "Debe incluir el emoji disparador de imagen");
+});
