@@ -1237,11 +1237,11 @@ export async function crearReciboPago(datos: {
         const provUuid = quienRecibe.replace("prov_", "");
         const { data: prov } = await sb
           .from("proveedores")
-          .select("id, nombre, contacto_nombre")
+          .select("id, nombre, contacto_nombre, razon_social")
           .eq("id", provUuid)
           .maybeSingle();
         if (prov) {
-          recibidoPorNombre = prov.nombre || prov.contacto_nombre || "Proveedor";
+          recibidoPorNombre = prov.contacto_nombre?.trim() || prov.razon_social?.trim() || prov.nombre || "Proveedor";
           recibidoPorId = null;
           proveedorId = prov.id;
         } else {
@@ -1260,11 +1260,11 @@ export async function crearReciboPago(datos: {
           // Checar si es UUID directo de proveedor
           const { data: prov } = await sb
             .from("proveedores")
-            .select("id, nombre, contacto_nombre")
+            .select("id, nombre, contacto_nombre, razon_social")
             .eq("id", quienRecibe)
             .maybeSingle();
           if (prov) {
-            recibidoPorNombre = prov.nombre || prov.contacto_nombre || "Proveedor";
+            recibidoPorNombre = prov.contacto_nombre?.trim() || prov.razon_social?.trim() || prov.nombre || "Proveedor";
             recibidoPorId = null;
             proveedorId = prov.id;
           } else if (datos.recibidoPorId) {
@@ -1364,7 +1364,7 @@ export async function listarReceptoresRecibo(): Promise<ReceptorRecibo[]> {
         .order("nombre", { ascending: true }),
       sb
         .from("proveedores")
-        .select("id, nombre, contacto_nombre, categoria")
+        .select("id, nombre, contacto_nombre, razon_social, categoria")
         .eq("activo", true)
         .order("nombre", { ascending: true }),
     ]);
@@ -1377,7 +1377,7 @@ export async function listarReceptoresRecibo(): Promise<ReceptorRecibo[]> {
     }));
 
     const listaProveedores: ReceptorRecibo[] = (proveedores || []).map((pr: any) => {
-      const nombreMostrar = pr.nombre || pr.contacto_nombre || "Proveedor";
+      const nombreMostrar = pr.contacto_nombre?.trim() || pr.razon_social?.trim() || pr.nombre || "Proveedor";
       const detalle = pr.categoria ? `Proveedor (${pr.categoria})` : "Proveedor / Contratista";
       return {
         id: `prov_${pr.id}`,
@@ -1600,13 +1600,13 @@ export async function actualizarReciboPago(
         const provUuid = datos.recibidoPorId.replace("prov_", "");
         const { data: prov } = await sb
           .from("proveedores")
-          .select("id, nombre, contacto_nombre")
+          .select("id, nombre, contacto_nombre, razon_social")
           .eq("id", provUuid)
           .maybeSingle();
         if (!prov) return { ok: false, error: "El proveedor seleccionado no existe en el sistema." };
         cambios.recibido_por = null;
         cambios.proveedor_id = prov.id;
-        cambios.recibido_por_nombre = prov.nombre || prov.contacto_nombre || "Proveedor";
+        cambios.recibido_por_nombre = prov.contacto_nombre?.trim() || prov.razon_social?.trim() || prov.nombre || "Proveedor";
       } else {
         const { data: perf } = await sb
           .from("perfiles")
@@ -1621,13 +1621,13 @@ export async function actualizarReciboPago(
           // Checar si es UUID directo de proveedor
           const { data: prov } = await sb
             .from("proveedores")
-            .select("id, nombre, contacto_nombre")
+            .select("id, nombre, contacto_nombre, razon_social")
             .eq("id", datos.recibidoPorId)
             .maybeSingle();
           if (prov) {
             cambios.recibido_por = null;
             cambios.proveedor_id = prov.id;
-            cambios.recibido_por_nombre = prov.nombre || prov.contacto_nombre || "Proveedor";
+            cambios.recibido_por_nombre = prov.contacto_nombre?.trim() || prov.razon_social?.trim() || prov.nombre || "Proveedor";
           } else {
             return { ok: false, error: "La persona o proveedor seleccionado no existe en el sistema." };
           }
@@ -1704,6 +1704,21 @@ export async function obtenerReciboPorToken(token: string): Promise<ReciboPago |
 
     if (error || !r) return null;
 
+    let recibidoPorNombre = r.recibido_por_nombre;
+    if (r.proveedor_id) {
+      const { data: prov } = await sb
+        .from("proveedores")
+        .select("nombre, contacto_nombre, razon_social")
+        .eq("id", r.proveedor_id)
+        .maybeSingle();
+      if (prov) {
+        const nombreFormal = (prov.contacto_nombre?.trim() || prov.razon_social?.trim());
+        if (nombreFormal) {
+          recibidoPorNombre = nombreFormal;
+        }
+      }
+    }
+
     return {
       id: r.id,
       folio: r.folio,
@@ -1722,7 +1737,7 @@ export async function obtenerReciboPorToken(token: string): Promise<ReciboPago |
       saldoRestante: Number(r.saldo_restante),
       recibidoPor: r.recibido_por,
       proveedorId: r.proveedor_id || null,
-      recibidoPorNombre: r.recibido_por_nombre,
+      recibidoPorNombre: recibidoPorNombre,
       fechaPago: r.fecha_pago,
       notas: r.notas,
       token: r.token,
