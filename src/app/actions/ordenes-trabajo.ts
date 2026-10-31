@@ -1047,11 +1047,22 @@ export async function agregarEvidenciaFotoOT(
     const path = `ordenes/${ordenId}/${Date.now()}-${cleanName}`;
     const buffer = Buffer.from(await archivo.arrayBuffer());
 
+    const ext = archivo.name.split('.').pop()?.toLowerCase();
+    let detectedType = archivo.type;
+    if (!detectedType || detectedType === "application/octet-stream") {
+      if (['mp4', 'm4v'].includes(ext || '')) detectedType = 'video/mp4';
+      else if (['mov', 'quicktime'].includes(ext || '')) detectedType = 'video/quicktime';
+      else if (['webm'].includes(ext || '')) detectedType = 'video/webm';
+      else if (['png'].includes(ext || '')) detectedType = 'image/png';
+      else if (['webp'].includes(ext || '')) detectedType = 'image/webp';
+      else detectedType = 'image/jpeg';
+    }
+
     let publicUrl = "";
     let { data: uploadData, error: uploadError } = await sb.storage
       .from("expedientes-fotos")
       .upload(path, buffer, {
-        contentType: archivo.type || "image/jpeg",
+        contentType: detectedType,
         upsert: true,
       });
 

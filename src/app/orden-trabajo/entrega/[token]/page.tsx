@@ -12,6 +12,11 @@ interface PaginaEntregaProps {
   };
 }
 
+function esVideo(url?: string | null): boolean {
+  if (!url) return false;
+  return /\.(mp4|mov|webm|m4v|ogv|ogg)(\?|$)/i.test(url) || url.startsWith("data:video/");
+}
+
 export default async function PaginaEntregaCliente({ params }: PaginaEntregaProps) {
   const { token } = params;
   const res = await obtenerEntregaOrdenTrabajoPorToken(token);
@@ -295,22 +300,38 @@ export default async function PaginaEntregaCliente({ params }: PaginaEntregaProp
                 </span>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {fotosEntrega.map((f, idx) => (
-                    <a
+                    <div
                       key={idx}
-                      href={f.url}
-                      target="_blank"
-                      rel="noreferrer"
                       className="group relative rounded-2xl overflow-hidden border border-carbon/15 bg-carbon/5 aspect-square block shadow-sm hover:shadow-md transition"
                     >
-                      <img
-                        src={f.url}
-                        alt={f.descripcion || "Entrega de obra"}
-                        className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
-                      />
-                      <span className="absolute bottom-1.5 left-1.5 rounded-md bg-emerald-800/80 backdrop-blur-xs text-white text-[9px] font-bold px-2 py-0.5">
-                        ✓ Entrega
+                      {esVideo(f.url) ? (
+                        <div className="relative h-full w-full bg-slate-900 flex items-center justify-center">
+                          <video
+                            src={f.url}
+                            controls
+                            preload="metadata"
+                            playsInline
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <a
+                          href={f.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block h-full w-full"
+                        >
+                          <img
+                            src={f.url}
+                            alt={f.descripcion || "Entrega de obra"}
+                            className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
+                          />
+                        </a>
+                      )}
+                      <span className="absolute bottom-1.5 left-1.5 rounded-md bg-emerald-800/80 backdrop-blur-xs text-white text-[9px] font-bold px-2 py-0.5 pointer-events-none">
+                        {esVideo(f.url) ? "🎥 Video Entrega" : "✓ Entrega"}
                       </span>
-                    </a>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -323,22 +344,38 @@ export default async function PaginaEntregaCliente({ params }: PaginaEntregaProp
                 </span>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {fotosProceso.map((f, idx) => (
-                    <a
+                    <div
                       key={idx}
-                      href={f.url}
-                      target="_blank"
-                      rel="noreferrer"
                       className="group relative rounded-2xl overflow-hidden border border-carbon/15 bg-carbon/5 aspect-square block shadow-2xs hover:shadow-md transition"
                     >
-                      <img
-                        src={f.url}
-                        alt={f.descripcion || "Proceso de obra"}
-                        className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
-                      />
-                      <span className="absolute bottom-1.5 left-1.5 rounded-md bg-carbon/70 backdrop-blur-xs text-white text-[9px] font-bold px-2 py-0.5">
-                        Proceso
+                      {esVideo(f.url) ? (
+                        <div className="relative h-full w-full bg-slate-900 flex items-center justify-center">
+                          <video
+                            src={f.url}
+                            controls
+                            preload="metadata"
+                            playsInline
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <a
+                          href={f.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block h-full w-full"
+                        >
+                          <img
+                            src={f.url}
+                            alt={f.descripcion || "Proceso de obra"}
+                            className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
+                          />
+                        </a>
+                      )}
+                      <span className="absolute bottom-1.5 left-1.5 rounded-md bg-carbon/70 backdrop-blur-xs text-white text-[9px] font-bold px-2 py-0.5 pointer-events-none">
+                        {esVideo(f.url) ? "🎥 Video Proceso" : "Proceso"}
                       </span>
-                    </a>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -351,22 +388,38 @@ export default async function PaginaEntregaCliente({ params }: PaginaEntregaProp
                 </span>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {fotosInicio.map((f, idx) => (
-                    <a
+                    <div
                       key={idx}
-                      href={f.url}
-                      target="_blank"
-                      rel="noreferrer"
                       className="group relative rounded-2xl overflow-hidden border border-carbon/15 bg-carbon/5 aspect-square block shadow-2xs hover:shadow-md transition"
                     >
-                      <img
-                        src={f.url}
-                        alt={f.descripcion || "Estado inicial"}
-                        className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
-                      />
-                      <span className="absolute bottom-1.5 left-1.5 rounded-md bg-carbon/70 backdrop-blur-xs text-white text-[9px] font-bold px-2 py-0.5">
-                        Inicio
+                      {esVideo(f.url) ? (
+                        <div className="relative h-full w-full bg-slate-900 flex items-center justify-center">
+                          <video
+                            src={f.url}
+                            controls
+                            preload="metadata"
+                            playsInline
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <a
+                          href={f.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block h-full w-full"
+                        >
+                          <img
+                            src={f.url}
+                            alt={f.descripcion || "Estado inicial"}
+                            className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
+                          />
+                        </a>
+                      )}
+                      <span className="absolute bottom-1.5 left-1.5 rounded-md bg-carbon/70 backdrop-blur-xs text-white text-[9px] font-bold px-2 py-0.5 pointer-events-none">
+                        {esVideo(f.url) ? "🎥 Video Inicio" : "Inicio"}
                       </span>
-                    </a>
+                    </div>
                   ))}
                 </div>
               </div>

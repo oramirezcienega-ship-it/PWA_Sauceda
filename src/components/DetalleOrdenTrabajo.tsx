@@ -41,6 +41,11 @@ interface DetalleOrdenTrabajoProps {
   soloLectura?: boolean;
 }
 
+function esVideo(url?: string | null): boolean {
+  if (!url) return false;
+  return /\.(mp4|mov|webm|m4v|ogv|ogg)(\?|$)/i.test(url) || url.startsWith("data:video/");
+}
+
 export function DetalleOrdenTrabajo({
   ordenInicial,
   recibosIniciales = [],
@@ -978,10 +983,10 @@ export function DetalleOrdenTrabajo({
 
               <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl bg-sauce hover:bg-verde-profundo px-3.5 py-1.5 text-xs font-bold text-white transition shadow-2xs">
                 <span>+</span>
-                <span>{subiendoFoto ? `Subiendo (${progresoFotos?.actual || 0}/${progresoFotos?.total || 0})...` : "Cargar Fotos"}</span>
+                <span>{subiendoFoto ? `Subiendo (${progresoFotos?.actual || 0}/${progresoFotos?.total || 0})...` : "Cargar Fotos o Videos"}</span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*"
                   multiple
                   disabled={subiendoFoto}
                   onChange={handleSubirFotos}
@@ -1003,14 +1008,37 @@ export function DetalleOrdenTrabajo({
                 key={f.url || idx}
                 className="group relative rounded-xl overflow-hidden border border-carbon/10 bg-slate-100 aspect-square shadow-2xs"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={f.url}
-                  alt={`Evidencia ${idx + 1}`}
-                  onClick={() => setFotoAmpliada(f.url)}
-                  className="h-full w-full object-cover transition duration-300 group-hover:scale-105 cursor-pointer"
-                  loading="lazy"
-                />
+                {esVideo(f.url) ? (
+                  <div
+                    onClick={() => setFotoAmpliada(f.url)}
+                    className="h-full w-full relative bg-slate-900 cursor-pointer flex items-center justify-center group/vid"
+                  >
+                    <video
+                      src={f.url}
+                      className="h-full w-full object-cover pointer-events-none"
+                      preload="metadata"
+                      muted
+                      playsInline
+                    />
+                    <div className="absolute inset-0 bg-black/25 flex items-center justify-center transition group-hover/vid:bg-black/10">
+                      <div className="h-10 w-10 rounded-full bg-sauce/90 text-white flex items-center justify-center text-sm shadow-md group-hover/vid:scale-110 transition">
+                        ▶
+                      </div>
+                    </div>
+                    <span className="absolute top-1.5 right-1.5 rounded bg-black/75 text-white text-[9px] font-bold px-1.5 py-0.5 pointer-events-none">
+                      VIDEO
+                    </span>
+                  </div>
+                ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={f.url}
+                    alt={`Evidencia ${idx + 1}`}
+                    onClick={() => setFotoAmpliada(f.url)}
+                    className="h-full w-full object-cover transition duration-300 group-hover:scale-105 cursor-pointer"
+                    loading="lazy"
+                  />
+                )}
                 <div className="absolute top-1.5 left-1.5 bg-black/60 backdrop-blur-xs text-white px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider">
                   {f.etapa || "Obra"}
                 </div>
@@ -1040,26 +1068,36 @@ export function DetalleOrdenTrabajo({
         <FlujoAsesoriaOT ordenTrabajoId={orden.id} expedienteId={orden.expedienteId ?? null} />
       )}
 
-      {/* Modal Foto Ampliada */}
+      {/* Modal Foto / Video Ampliado */}
       {fotoAmpliada && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-xs"
           onClick={() => setFotoAmpliada(null)}
         >
-          <div className="relative max-w-4xl max-h-[90vh]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={fotoAmpliada}
-              alt="Evidencia ampliada"
-              className="max-h-[85vh] rounded-xl object-contain shadow-2xl"
-            />
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               onClick={() => setFotoAmpliada(null)}
-              className="absolute top-3 right-3 rounded-full bg-black/60 text-white p-2 text-xs hover:bg-black"
+              className="absolute -top-10 right-0 text-white hover:text-amber-400 font-bold text-sm bg-white/10 hover:bg-white/20 px-3 py-1 rounded-lg transition"
             >
-              ✕
+              ✕ Cerrar
             </button>
+            {esVideo(fotoAmpliada) ? (
+              <video
+                src={fotoAmpliada}
+                controls
+                autoPlay
+                playsInline
+                className="max-w-full max-h-[85vh] rounded-xl shadow-2xl bg-black"
+              />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={fotoAmpliada}
+                alt="Evidencia ampliada"
+                className="max-h-[85vh] rounded-xl object-contain shadow-2xl"
+              />
+            )}
           </div>
         </div>
       )}

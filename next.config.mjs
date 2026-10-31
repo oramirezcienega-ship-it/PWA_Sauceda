@@ -57,7 +57,7 @@ const nextConfig = {
     // Las fotos de evidencia (celular) suelen pesar varios MB; el límite
     // por defecto de 1MB para Server Actions las rechazaba silenciosamente.
     serverActions: {
-      bodySizeLimit: "25mb",
+      bodySizeLimit: "100mb",
     },
   },
   async headers() {

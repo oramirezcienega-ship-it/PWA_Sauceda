@@ -43,6 +43,11 @@ interface ModuloOrdenesTrabajoProps {
   busqueda?: string;
 }
 
+function esVideo(url?: string | null): boolean {
+  if (!url) return false;
+  return /\.(mp4|mov|webm|m4v|ogv|ogg)(\?|$)/i.test(url) || url.startsWith("data:video/");
+}
+
 export function ModuloOrdenesTrabajo({
   expedienteId,
   prospectoId,
@@ -762,7 +767,7 @@ export function ModuloOrdenesTrabajo({
                           </span>
                           <input
                             type="file"
-                            accept="image/*"
+                            accept="image/*,video/*"
                             multiple
                             disabled={subiendoFotoOrdenId === ot.id}
                             onChange={(e) => handleSubirFoto(ot.id, e)}
@@ -1173,13 +1178,25 @@ export function ModuloOrdenesTrabajo({
                                   key={idx}
                                   className="group relative rounded-xl overflow-hidden border border-carbon/15 bg-carbon/5 aspect-square shadow-2xs hover:shadow-md transition"
                                 >
-                                  <a href={f.url} target="_blank" rel="noreferrer" className="block h-full w-full">
-                                    <img
-                                      src={f.url}
-                                      alt={f.descripcion || "Evidencia OT"}
-                                      className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
-                                    />
-                                  </a>
+                                  {esVideo(f.url) ? (
+                                    <div className="relative h-full w-full bg-slate-900 flex items-center justify-center">
+                                      <video
+                                        src={f.url}
+                                        controls
+                                        preload="metadata"
+                                        playsInline
+                                        className="h-full w-full object-cover"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <a href={f.url} target="_blank" rel="noreferrer" className="block h-full w-full">
+                                      <img
+                                        src={f.url}
+                                        alt={f.descripcion || "Evidencia OT"}
+                                        className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
+                                      />
+                                    </a>
+                                  )}
                                   <span className="absolute bottom-1 left-1 rounded-md bg-carbon/70 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.5 capitalize pointer-events-none">
                                     {f.etapa}
                                   </span>
