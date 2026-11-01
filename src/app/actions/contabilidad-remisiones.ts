@@ -529,8 +529,8 @@ async function recalcularRentabilidadProductos(
         // Especialidad: la del producto del catálogo, la del texto del concepto o la de la remisión
         codigoSubcuenta:
           (c.producto_servicio_id && subcuentaProd.get(c.producto_servicio_id)) ||
-          subcuentaPorTexto(nombre, p.subcuentas) ||
-          p.subcuentaVenta,
+          p.subcuentaVenta ||
+          subcuentaPorTexto(nombre, p.subcuentas),
       };
       g.cantidad += Number(c.cantidad || 0);
       g.importe += importe;
