@@ -40,6 +40,18 @@ export interface MetricasRentabilidad {
   /** Publicidad / ventas cerradas; null si no hubo ventas */
   cac: number | null;
   ventas: number;
+  /** Leads captados en el periodo */
+  leads: number;
+  /** Costo por Lead (publicidad / leads); null si no hubo leads o publicidad */
+  cpl: number | null;
+  /** Cotizaciones registradas en pipeline */
+  cotizacionesCount: number;
+  /** Monto total cotizado en pipeline ($) */
+  montoCotizado: number;
+  /** Utilidad bruta potencial de cotizaciones en pipeline ($) */
+  utilidadPotencial: number;
+  /** POAS Proyectado: (utilidad bruta real + utilidad bruta potencial cotizada) / publicidad */
+  poasProyectado: number | null;
 }
 
 export interface LineaSubcuenta extends MetricasRentabilidad {
@@ -87,6 +99,10 @@ type Acum = {
   publicidadDirecta: number;
   publicidadProrrateada: number;
   remisiones: Set<string>;
+  leads: number;
+  cotizacionesCount: number;
+  montoCotizado: number;
+  utilidadPotencial: number;
 };
 
 const nuevoAcum = (): Acum => ({
@@ -97,6 +113,10 @@ const nuevoAcum = (): Acum => ({
   publicidadDirecta: 0,
   publicidadProrrateada: 0,
   remisiones: new Set<string>(),
+  leads: 0,
+  cotizacionesCount: 0,
+  montoCotizado: 0,
+  utilidadPotencial: 0,
 });
 
 function metricas(a: Omit<Acum, "remisiones">, ventas: number): MetricasRentabilidad {
@@ -104,6 +124,13 @@ function metricas(a: Omit<Acum, "remisiones">, ventas: number): MetricasRentabil
   const costoTotal = a.costoDirecto + a.terminal + a.comision + publicidadTotal;
   const margenNeto = a.ingreso - costoTotal;
   const utilidadBruta = a.ingreso - (a.costoDirecto + a.terminal + a.comision);
+  const poas = publicidadTotal > 0 ? r2(utilidadBruta / publicidadTotal) : null;
+  const poasProyectado =
+    publicidadTotal > 0
+      ? r2((utilidadBruta + (a.utilidadPotencial || 0)) / publicidadTotal)
+      : null;
+  const cpl = publicidadTotal > 0 && a.leads > 0 ? r2(publicidadTotal / a.leads) : null;
+
   return {
     ingreso: r2(a.ingreso),
     costoDirecto: r2(a.costoDirecto),
@@ -117,10 +144,97 @@ function metricas(a: Omit<Acum, "remisiones">, ventas: number): MetricasRentabil
     margenPct: a.ingreso > 0 ? r2((margenNeto / a.ingreso) * 100) : 0,
     roi: costoTotal > 0 ? r2((margenNeto / costoTotal) * 100) : 0,
     roas: publicidadTotal > 0 ? r2(a.ingreso / publicidadTotal) : null,
-    poas: publicidadTotal > 0 ? r2(utilidadBruta / publicidadTotal) : null,
+    poas,
+    poasProyectado,
     cac: ventas > 0 && publicidadTotal > 0 ? r2(publicidadTotal / ventas) : null,
     ventas,
+    leads: a.leads || 0,
+    cpl,
+    cotizacionesCount: a.cotizacionesCount || 0,
+    montoCotizado: r2(a.montoCotizado || 0),
+    utilidadPotencial: r2(a.utilidadPotencial || 0),
   };
+}
+
+/** Clasifica prospecto o cotización a su subcuenta contable de marketing correspondiente */
+function resolverSubcuenta(
+  subcuentas: any[],
+  campaignName?: string | null,
+  tipoNegocio?: string | null,
+  servicioTipo?: string | null,
+  notas?: string | null
+): string | null {
+  const camp = (campaignName || "").toLowerCase();
+  const tipo = (tipoNegocio || "").toLowerCase();
+  const serv = (servicioTipo || "").toLowerCase();
+  const notStr = (notas || "").toLowerCase();
+
+  // 1. Aljibes y cisternas (601-01-008)
+  if (
+    camp.includes("cisterna") || tipo.includes("cisterna") || serv.includes("cisterna") || notStr.includes("cisterna") ||
+    camp.includes("aljibe") || tipo.includes("aljibe") || notStr.includes("aljibe")
+  ) {
+    return "601-01-008";
+  }
+  // 2. Tinacos (601-01-009)
+  if (camp.includes("tinaco") || tipo.includes("tinaco") || serv.includes("tinaco") || notStr.includes("tinaco")) {
+    return "601-01-009";
+  }
+  // 3. Calentadores solares (601-01-006)
+  if (
+    camp.includes("calentador") || tipo.includes("calentador") || serv.includes("calentador") || notStr.includes("calentador") ||
+    camp.includes("solar") || tipo.includes("solar")
+  ) {
+    return "601-01-006";
+  }
+  // 4. Seguridad y Alarmas (601-01-007)
+  if (
+    camp.includes("seguridad") || camp.includes("alarma") || camp.includes("protege") ||
+    tipo.includes("seguridad") || tipo.includes("alarma") || serv.includes("seguridad") ||
+    notStr.includes("camara") || notStr.includes("alarma") || notStr.includes("videoportero") || notStr.includes("dahua") || notStr.includes("dsc")
+  ) {
+    return "601-01-007";
+  }
+  // 5. Concreto y piso estampado (601-01-003)
+  if (
+    camp.includes("piso") || camp.includes("estamp") || camp.includes("concreto") ||
+    tipo.includes("piso") || tipo.includes("estamp") || tipo.includes("concreto") ||
+    serv.includes("piso") || serv.includes("estamp") || serv.includes("concreto")
+  ) {
+    return "601-01-003";
+  }
+  // 6. Sauceda Casa a Punto (601-01-004)
+  if (
+    camp.includes("casa a punto") || tipo.includes("casa a punto") || serv.includes("casa_a_punto") ||
+    camp.includes("mantenimiento") || tipo.includes("mantenimiento-postventa")
+  ) {
+    return "601-01-004";
+  }
+  // 7. Remodelación (601-01-002)
+  if (camp.includes("remodela") || tipo.includes("remodela") || serv.includes("remodela") || serv.includes("pintura")) {
+    return "601-01-002";
+  }
+  // 8. Herrería (601-01-005)
+  if (camp.includes("herreria") || tipo.includes("herreria") || serv.includes("herreria")) {
+    return "601-01-005";
+  }
+  // 9. Inmobiliaria (601-02-001)
+  if (camp.includes("compra") || camp.includes("inmob") || camp.includes("tramite") || tipo.includes("compra") || tipo.includes("tramite") || tipo.includes("asesoria_compra")) {
+    return "601-02-001";
+  }
+  // 10. Impermeabilización (601-01-001)
+  if (camp.includes("imper") || tipo.includes("imper") || serv.includes("imper")) {
+    return "601-01-001";
+  }
+
+  for (const s of subcuentas) {
+    const tipos = s.servicio_tipos || [];
+    if (tipos.some((t: string) => camp.includes(t.toLowerCase()) || tipo.includes(t.toLowerCase()) || serv.includes(t.toLowerCase()))) {
+      return s.codigo;
+    }
+  }
+
+  return null;
 }
 
 /** Reparte `monto` entre los destinos según su peso (ingreso). Devuelve false si no hay a quién. */
@@ -156,27 +270,42 @@ export async function obtenerRentabilidadComercial(
     .select("id, ultimo_movimiento, tipo_negocio")
     .eq("etapa", "cerrado")
     .not("tipo_negocio", "ilike", "construccion%");
+  // Prospectos / Leads generados en el periodo
+  let qProspectos = sb
+    .from("prospectos")
+    .select("id, campaign_name, tipo_negocio, created_at");
+  // Cotizaciones generadas en el periodo (pipeline comercial)
+  let qCotizaciones = sb
+    .from("cotizaciones")
+    .select("id, prospecto_id, servicio_tipo, estatus, precio_final, costo_estimado, utilidad_monto, cliente_nombre_personalizado, notas_internas, created_at");
 
   if (fechaInicio) {
     qRent = qRent.gte("fecha", fechaInicio);
     qMkt = qMkt.gte("fecha_operacion", fechaInicio);
     qIngInmob = qIngInmob.gte("fecha_operacion", fechaInicio);
     qCierres = qCierres.gte("ultimo_movimiento", fechaInicio);
+    qProspectos = qProspectos.gte("created_at", fechaInicio);
+    qCotizaciones = qCotizaciones.gte("created_at", fechaInicio);
   }
   if (fechaFin) {
+    const finIso = fechaFin.includes("T") ? fechaFin : `${fechaFin}T23:59:59`;
     qRent = qRent.lte("fecha", fechaFin);
     qMkt = qMkt.lte("fecha_operacion", fechaFin);
     qIngInmob = qIngInmob.lte("fecha_operacion", fechaFin);
     qCierres = qCierres.lte("ultimo_movimiento", fechaFin);
+    qProspectos = qProspectos.lte("created_at", finIso);
+    qCotizaciones = qCotizaciones.lte("created_at", finIso);
   }
 
-  const [resRent, resMkt, resIng, resCierres, resSub, resCc] = await Promise.all([
+  const [resRent, resMkt, resIng, resCierres, resSub, resCc, resProspectos, resCotizaciones] = await Promise.all([
     qRent,
     qMkt,
     qIngInmob,
     qCierres,
-    sb.from("marketing_subcuentas").select("codigo, nombre, cuenta_mayor_codigo, cuenta_mayor_nombre, business_unit_id, es_general, orden"),
+    sb.from("marketing_subcuentas").select("codigo, nombre, cuenta_mayor_codigo, cuenta_mayor_nombre, business_unit_id, es_general, orden, servicio_tipos"),
     sb.from("business_units").select("id, nombre, codigo, activo"),
+    qProspectos,
+    qCotizaciones,
   ]);
   if (resRent.error) throw new Error(resRent.error.message);
   if (resMkt.error) throw new Error(resMkt.error.message);
@@ -210,6 +339,40 @@ export async function obtenerRentabilidadComercial(
     centroId: string | null;
   };
   const productos = new Map<string, AcumProd>();
+
+  // ---- Leads y Cotizaciones (Pipeline Comercial) ----
+  const prospectosList = resProspectos.data || [];
+  const cotizacionesList = resCotizaciones.data || [];
+  const prospectosMap = new Map<string, any>(prospectosList.map((p: any) => [p.id, p]));
+
+  for (const p of prospectosList) {
+    const cod = resolverSubcuenta(subcuentas, p.campaign_name, p.tipo_negocio);
+    if (cod) {
+      linea(cod, null).leads += 1;
+    }
+  }
+
+  for (const c of cotizacionesList) {
+    if (c.estatus === "rechazada" || c.estatus === "cancelada") continue;
+    const p = prospectosMap.get(c.prospecto_id);
+    const cod =
+      resolverSubcuenta(
+        subcuentas,
+        p?.campaign_name,
+        p?.tipo_negocio,
+        c.servicio_tipo,
+        c.notas_internas
+      ) || "601-01-001";
+
+    const precio = Number(c.precio_final || 0);
+    const costo = Number(c.costo_estimado || 0);
+    const utilidad = Number(c.utilidad_monto || (precio - costo));
+
+    const l = linea(cod, null);
+    l.cotizacionesCount += 1;
+    l.montoCotizado += precio;
+    l.utilidadPotencial += utilidad;
+  }
 
   for (const f of resRent.data || []) {
     const ingreso = Number(f.ingreso || 0);
@@ -355,6 +518,10 @@ export async function obtenerRentabilidadComercial(
     a.comision += l.comision;
     a.publicidadDirecta += l.publicidadDirecta;
     a.publicidadProrrateada += l.publicidadProrrateada;
+    a.leads += l.leads;
+    a.cotizacionesCount += l.cotizacionesCount;
+    a.montoCotizado += l.montoCotizado;
+    a.utilidadPotencial += l.utilidadPotencial;
     l.remisiones.forEach((r) => a.remisiones.add(r));
   });
 
@@ -415,6 +582,10 @@ export async function obtenerRentabilidadComercial(
     tot.comision += c.comision;
     tot.publicidadDirecta += c.publicidadDirecta;
     tot.publicidadProrrateada += c.publicidadProrrateada;
+    tot.leads += c.leads;
+    tot.cotizacionesCount += c.cotizacionesCount;
+    tot.montoCotizado += c.montoCotizado;
+    tot.utilidadPotencial += c.utilidadPotencial;
     ventasTot += c.ventas;
   });
 

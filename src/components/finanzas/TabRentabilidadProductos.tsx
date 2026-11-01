@@ -20,6 +20,7 @@ const formatMoneda = (val: number) =>
 const formatPct = (val: number) => `${val.toFixed(1)}%`;
 const formatRoas = (val: number | null) => (val === null ? "—" : `${val.toFixed(2)}x`);
 const formatCac = (val: number | null) => (val === null ? "—" : formatMoneda(val));
+const formatCpl = (val: number | null) => (val === null ? "—" : formatMoneda(val));
 
 function CeldasMetricas({ m, negrita = false }: { m: MetricasRentabilidad; negrita?: boolean }) {
   const peso = negrita ? "font-bold" : "";
@@ -40,15 +41,53 @@ function CeldasMetricas({ m, negrita = false }: { m: MetricasRentabilidad; negri
       </td>
       <td className="py-2.5 px-3 text-right font-mono text-slate-700">{formatPct(m.margenPct)}</td>
       <td className="py-2.5 px-3 text-right font-mono font-bold text-[#2D4A2B]">{formatRoas(m.roas)}</td>
-      <td className={`py-2.5 px-3 text-right font-mono font-bold ${m.poas !== null && m.poas >= 1.5 ? "text-emerald-700" : m.poas !== null && m.poas >= 1 ? "text-blue-700" : "text-amber-700"}`} title="POAS: Utilidad bruta generada para Sauceda por cada $1 invertido en Meta Ads">
+      <td className={`py-2.5 px-3 text-right font-mono font-bold ${m.poas !== null && m.poas >= 1.5 ? "text-emerald-700" : m.poas !== null && m.poas >= 1 ? "text-blue-700" : "text-amber-700"}`} title="POAS Real: Utilidad bruta generada para Sauceda por cada $1 invertido en Meta Ads">
         {formatRoas(m.poas)}
       </td>
       <td className="py-2.5 px-3 text-right font-mono text-slate-700">{formatCac(m.cac)}</td>
+      <td className={`py-2.5 px-3 text-right font-mono ${peso} text-slate-800`} title="Leads / Prospectos generados">
+        {m.leads > 0 ? m.leads : "—"}
+      </td>
+      <td className={`py-2.5 px-3 text-right font-mono font-semibold ${m.cpl !== null && m.cpl <= 25 ? "text-emerald-700" : "text-slate-700"}`} title="Costo por Lead: Publicidad total ÷ Leads captados">
+        {formatCpl(m.cpl)}
+      </td>
+      <td className="py-2.5 px-3 text-right font-mono text-slate-800" title={`${m.cotizacionesCount} cotizaciones en pipeline`}>
+        {m.montoCotizado > 0 ? (
+          <>
+            <span className={peso}>{formatMoneda(m.montoCotizado)}</span>
+            <span className="block text-[10px] text-slate-400 font-normal">{m.cotizacionesCount} cots</span>
+          </>
+        ) : (
+          "—"
+        )}
+      </td>
+      <td className={`py-2.5 px-3 text-right font-mono font-semibold ${m.utilidadPotencial > 0 ? "text-blue-700" : "text-slate-400"}`} title="Utilidad bruta proyectada de cotizaciones en negociación">
+        {m.utilidadPotencial > 0 ? formatMoneda(m.utilidadPotencial) : "—"}
+      </td>
+      <td className={`py-2.5 px-3 text-right font-mono font-bold ${m.poasProyectado !== null && m.poasProyectado >= 5 ? "text-purple-700" : m.poasProyectado !== null && m.poasProyectado >= 1.5 ? "text-emerald-700" : "text-slate-600"}`} title="POAS Proyectado: (Utilidad Bruta Real + Utilidad Potencial Cotizada) ÷ Publicidad Total">
+        {formatRoas(m.poasProyectado)}
+      </td>
     </>
   );
 }
 
-const ENCABEZADOS_METRICAS = ["Venta", "Costo directo", "Terminal", "Comisiones", "Publicidad", "Margen neto", "Margen", "ROAS", "POAS", "CAC"];
+const ENCABEZADOS_METRICAS = [
+  "Venta",
+  "Costo directo",
+  "Terminal",
+  "Comisiones",
+  "Publicidad",
+  "Margen neto",
+  "Margen",
+  "ROAS",
+  "POAS",
+  "CAC",
+  "Leads",
+  "CPL",
+  "Cotizado",
+  "Util. Pot.",
+  "POAS Proy.",
+];
 
 export function TabRentabilidadProductos({ fechaInicio, fechaFin, onRecalculado }: TabRentabilidadProductosProps) {
   const [reporte, setReporte] = useState<ReporteRentabilidadComercial | null>(null);
@@ -90,7 +129,21 @@ export function TabRentabilidadProductos({ fechaInicio, fechaFin, onRecalculado 
   };
 
   const fila = (m: MetricasRentabilidad) => [
-    m.ingreso, m.costoDirecto, m.terminal, m.comision, m.publicidadTotal, m.margenNeto, m.margenPct, m.roas ?? "", m.poas ?? "", m.cac ?? "",
+    m.ingreso,
+    m.costoDirecto,
+    m.terminal,
+    m.comision,
+    m.publicidadTotal,
+    m.margenNeto,
+    m.margenPct,
+    m.roas ?? "",
+    m.poas ?? "",
+    m.cac ?? "",
+    m.leads,
+    m.cpl ?? "",
+    m.montoCotizado,
+    m.utilidadPotencial,
+    m.poasProyectado ?? "",
   ];
 
   const handleExportar = () => {
@@ -190,18 +243,27 @@ export function TabRentabilidadProductos({ fechaInicio, fechaFin, onRecalculado 
       )}
 
       {totales && (
-        <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
             ["Venta", formatMoneda(totales.ingreso), `${totales.ventas} ventas cerradas`],
             ["Publicidad", formatMoneda(totales.publicidadTotal), `ROAS ${formatRoas(totales.roas)}`],
-            ["CAC promedio", formatCac(totales.cac), "Publicidad ÷ ventas cerradas"],
-            ["Margen neto", formatMoneda(totales.margenNeto), `Margen ${formatPct(totales.margenPct)}`],
-            ["POAS Global", formatRoas(totales.poas), `Utilidad bruta ÷ pauta (ROI ${formatPct(totales.roi)})`],
+            ["CPL Promedio", formatCpl(totales.cpl), `${totales.leads} leads captados`],
+            ["POAS Real", formatRoas(totales.poas), `Utilidad bruta ÷ pauta`],
+            [
+              "Pipeline Cotizado",
+              formatMoneda(totales.montoCotizado),
+              `${totales.cotizacionesCount} cots · Util. ${formatMoneda(totales.utilidadPotencial)}`,
+            ],
+            [
+              "POAS Proyectado",
+              formatRoas(totales.poasProyectado),
+              `Potencial real con lo cotizado`,
+            ],
           ].map(([titulo, valor, detalle]) => (
             <div key={titulo} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
               <span className="text-[10px] uppercase font-bold text-slate-400 block">{titulo}</span>
               <span className="font-mono text-lg font-bold text-[#2D4A2B] block">{valor}</span>
-              <span className="text-[11px] text-slate-500">{detalle}</span>
+              <span className="text-[11px] text-slate-500 truncate block" title={detalle}>{detalle}</span>
             </div>
           ))}
         </section>
@@ -278,9 +340,8 @@ export function TabRentabilidadProductos({ fechaInicio, fechaFin, onRecalculado 
 
       <p className="text-[11px] text-slate-400">
         Margen neto = venta − costo directo − terminal − comisiones − publicidad directa − prorrateo de publicidad
-        general. La publicidad de Corporativo se reparte entre todas las especialidades según su venta, y la de un centro
-        sin subcuenta, entre las especialidades de ese centro. ROAS = venta ÷ publicidad. POAS = utilidad bruta ÷ publicidad (ganancia para Sauceda por cada $1 de pauta). CAC = publicidad ÷ ventas
-        cerradas (remisiones; en Inmobiliaria, expedientes cerrados por fecha de último movimiento).
+        general. ROAS = venta ÷ publicidad. POAS = utilidad bruta ÷ publicidad (ganancia real para Sauceda por cada $1 de pauta). CAC = publicidad ÷ ventas
+        cerradas. CPL = publicidad total ÷ leads captados. Pipeline = cotizaciones activas en negociación. POAS Proy. = (utilidad bruta cerrada + utilidad cotizada) ÷ publicidad total.
       </p>
     </div>
   );
