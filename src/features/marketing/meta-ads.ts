@@ -250,8 +250,11 @@ export async function aplicarMetaAdsMes(
 
 /** Especialidades que no salen de las palabras clave de obra (inmobiliaria e institucional). */
 const REGLAS_CAMPANA: [string, RegExp][] = [
-  // Servicios para el hogar sin subcuenta propia (antes que "casa" de inmobiliaria)
-  ["601-01-004", /casa a punto|seguridad|alarma|camara|calentador|solar/],
+  // Especialidades con subcuenta propia
+  ["601-01-006", /calentador|solar/],
+  ["601-01-007", /seguridad|alarma|camara|cctv|nvr|videoportero|portero/],
+  ["601-01-003", /estampad/],
+  ["601-01-004", /casa a punto|mantenimiento|tinaco|cisterna/],
   ["601-02-001", /compra|tramite|credito|infonavit|fovissste/],
   ["601-00-001", /whatsapp|mensaje/],
   ["601-02-002", /lead|inmobil|casa|propiedad|vende|renta/],

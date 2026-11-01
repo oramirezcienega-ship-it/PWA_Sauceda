@@ -21,9 +21,11 @@ const normalizar = (s: string) =>
 /** Palabras clave por subcuenta para textos libres (conceptos, títulos de obra). */
 const PALABRAS_CLAVE: [string, RegExp][] = [
   ["601-01-001", /impermeab/],
+  ["601-01-006", /calentador|solar/],
+  ["601-01-007", /seguridad|alarma|camara|cctv|nvr|videoportero|portero|control de acceso|cerradura/],
+  ["601-01-003", /estampad|concreto|firme|trazo|nivelacion|losa|cimentacion|colado/],
   ["601-01-004", /mantenimiento|tinaco|cisterna|limpieza/],
   ["601-01-005", /herreri|cancel|estructura metalica|porton|reja/],
-  ["601-01-003", /concreto|firme|trazo|nivelacion|losa|cimentacion|colado/],
   ["601-01-002", /remodel|pintura|acabado|piso|azulejo|tablaroca|construccion/],
 ];
 

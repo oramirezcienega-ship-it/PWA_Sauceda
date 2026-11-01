@@ -33,6 +33,13 @@ import { hoyMexico, pausarExpediente, reactivarExpediente } from "@/lib/pausa-le
 import { avisarAsesorDesdeIA } from "@/lib/ia/aviso-asesor";
 import { modeloClaude, opcionesClaude } from "@/lib/ia/claude";
 import {
+  clasificarZona,
+  detectarArquetipo,
+  asignarGrupoExperimento,
+  calcularLeadScore,
+  esLeadCalienteVIP,
+} from "@/lib/lead-scoring";
+import {
   calcularSlotsVespertinosRemodelacion,
   type SlotVespertinoRemodelacion,
 } from "@/lib/coordinacion-inspecciones";
@@ -230,6 +237,10 @@ interface FilaExp {
   adset_name?: string | null;
   ad_name?: string | null;
   calificacion?: string | null;
+  lead_score?: number | null;
+  arquetipo?: string | null;
+  zona_tier?: string | null;
+  experimento_flujo?: string | null;
 }
 
 function formatearFechaLegible(fechaStr: string, horaStr: string): string {
@@ -365,6 +376,7 @@ async function obtenerCatalogosSofia(sb: SupabaseClient): Promise<CacheCatalogos
 }
 
 async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<string> {
+  const esVarianteOptimizada = exp?.experimento_flujo !== "control_v1";
   // Catálogos cargados en paralelo con caché en memoria (0 ms en peticiones subsiguientes)
   const { productosImper, serviciosMant, productosConVideos, familiasSeguridad } = await obtenerCatalogosSofia(sb);
   const hayFotosImper = hayFotosEnCatalogo(productosImper);
@@ -602,7 +614,21 @@ REGLA ESTRICTA DE SALAS OPEN WORK:
 PROHIBIDO invitar o agendar citas presenciales en esta etapa preliminar. Las visitas físicas se reservan exclusivamente para cuando el cliente seleccione una propiedad en firme para formalizar el convenio y pago inicial.
 
 D) Si está interesado en la IMPERMEABILIZACIÓN (Servicio 2 - tipo_negocio: 'construccion-impermeabilizacion'):
-Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 3 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 4.0). Utiliza un tono cálido, natural, empático y profesional. PROHIBIDO enviar enlaces de cotización o de cita, o cualquier otra URL. ÚNICA EXCEPCIÓN: la página oficial https://saucedamx.com/impermeabilizacion.html, solo cuando el cliente pide ver ejemplos o más información:
+${esVarianteOptimizada ? `
+🚨 PROTOCOLO DE CONVERSIÓN COMERCIAL AGRESIVO (Variante v2 - Holdout 90%):
+1. CLIENTE RESIDENCIAL PREMIUM (Tier 1: Mayorazgo, Gran Jardín, El Molino, Campestre, Sierra Nogal, Punta del Este, etc.):
+   - Sofía reconoce con orgullo el nivel del proyecto: "¡Hola! Con gusto te cotizo la impermeabilización de tu residencia en [Zona]. En SAUCEDA somos especialistas en termofusión con manto gravillado de alta durabilidad (5 a 10 años de garantía formal por escrito y contrato formal con empresa). Para darte una propuesta precisa sin compromiso, ¿en qué horario de hoy o mañana te gustaría que pase nuestro técnico especialista a revisar tus losas, chaflanes y bajadas pluviales?"
+   - NO te trabes pidiéndole metros exactos: el objetivo con clientes residenciales es asegurar la visita del técnico o la llamada del especialista de inmediato.
+2. ARQUETIPO URGENTE (Goteras activas, filtraciones, humedad o prisa):
+   - Muestra empatía de inmediato y ofrece visita técnica de auxilio: "¡Hola! Comprendo la urgencia de las filtraciones; con gusto te auxiliamos para frenarlo antes de que dañe tus interiores. Tenemos cuadrillas en ruta técnica en León. ¿En qué colonia o zona te encuentras para programar una visita de diagnóstico gratuita hoy o mañana y darte el presupuesto cerrado?"
+3. ARQUETIPO CUIDADOSO / INFONAVIT (Pregunta precio por metro o casa de interés social):
+   - Da certidumbre de inmediato con el paquete estándar cerrado: "Para una casa estándar de Infonavit (aprox. 50 m²), el paquete más recomendado con manto gravillado de 3.5 mm e instalación profesional con soplete sale en un estimado de $11,250 MXN ya con materiales, sellador, limpieza y 5 años de garantía por escrito. Para medir exactamente tu azotea y que no pagues ni un solo metro de más, te visitamos sin costo. ¿En qué colonia te encuentras?"
+4. SOLICITUD DE INSPECCIÓN O VISITA TÉCNICA:
+   - Si el cliente solicita explícitamente una inspección, visita o que alguien vaya a medir, ESTÁ ESTRICTAMENTE PROHIBIDO RECHAZARLO O EXIGIRLE METROS PRIMERO. Acepta con gusto, recopila la colonia/dirección y confirma que el equipo coordinará la visita técnica sin costo.
+` : `
+(Grupo Control v1 - Flujo estándar de 3 pasos)
+`}
+Debes guiar al prospecto a través del siguiente flujo conversacional:
 
 - PASO 1: PRIMER CONTACTO (Al detectar el negocio y NO tener los metros cuadrados en el historial ni en los datos del cliente)
   REGLA DE ORO: responde A LO QUE EL CLIENTE PIDIÓ, en un mensaje corto (máximo 4-5 líneas). NO mandes un folleto: nada de listas largas, enlaces ni fotos que no pidió. Sin mencionar días ni tiempos de instalación.
@@ -1799,7 +1825,7 @@ export async function responderConIA(
       const { data: e } = await sb
         .from("expedientes")
         .select(
-          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, tipo_negocio, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id, sin_pagos, estado_fisico, habitada, asesor_id, ultimo_paso_flujo, ultimo_paso_alcanzado, campaign_name, adset_name, ad_name, calificacion"
+          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, tipo_negocio, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id, sin_pagos, estado_fisico, habitada, asesor_id, ultimo_paso_flujo, ultimo_paso_alcanzado, campaign_name, adset_name, ad_name, calificacion, lead_score, arquetipo, zona_tier, experimento_flujo"
         )
         .eq("id", ctx.expedienteId)
         .maybeSingle();
@@ -2659,10 +2685,36 @@ export async function responderConIA(
         tieneDatosInfonavit
       );
 
-      // Solo se marca la calificación (queda en el CRM y la bitácora); ya no se avisa
-      // al asesor por esto (el aviso "LEAD CALIENTE DETECTADO" se quitó).
+      // --- MOTOR DE LEAD SCORING, ARQUETIPOS Y HOLDOUT 90/10 ---
+      const ubicacionLead = updates.direccion || updates.fraccionamiento || exp?.fraccionamiento || exp?.direccion_propiedad;
+      const zonaInfo = clasificarZona(ubicacionLead as string | undefined);
+      const ultimosMensajesIn = historia.filter((m) => m.direccion === "in").map((m) => m.texto || "").join(" ");
+      const arquetipoDetectado = detectarArquetipo({
+        textoCliente: ultimosMensajesIn,
+        zonaTier: zonaInfo.tier,
+        metros: metrosNum || null,
+      });
+
+      const grupoExp = exp?.experimento_flujo || asignarGrupoExperimento(ctx.telefono || exp?.telefono || ctx.expedienteId || "");
+
+      const scoreCalculado = calcularLeadScore({
+        zonaTier: zonaInfo.tier,
+        metros: metrosNum || null,
+        haCompartidoUbicacion: Boolean(updates.direccion || updates.link_google_maps || /location:|maps\.google|calle|boulevard/i.test(ultimosMensajesIn)),
+        preguntaAgendaOCita: Boolean(citaAceptada || /cu[aá]ndo|agenda|cita|visita|horario|pueden venir/i.test(ultimosMensajesIn)),
+        solicitoLlamada: /llamad[ao]|marquen|tel[eé]fono|celular/i.test(ultimosMensajesIn),
+      });
+
+      updates.lead_score = scoreCalculado;
+      updates.arquetipo = arquetipoDetectado;
+      updates.zona_tier = zonaInfo.tier;
+      if (!exp?.experimento_flujo) {
+        updates.experimento_flujo = grupoExp;
+      }
+
+      const esVip = esLeadCalienteVIP(scoreCalculado);
       const yaEraCaliente = exp?.calificacion === "caliente";
-      if (esLeadCaliente && !yaEraCaliente && (datosExtraidos as any).descalificado !== true && exp?.calificacion !== "descalificado") {
+      if ((esLeadCaliente || esVip) && !yaEraCaliente && (datosExtraidos as any).descalificado !== true && exp?.calificacion !== "descalificado") {
         updates.calificacion = "caliente";
       }
 
@@ -2685,6 +2737,10 @@ export async function responderConIA(
               updatesPr.calificacion = "caliente";
               updatesPr.estatus = "sql";
             }
+            if (updates.lead_score !== undefined) updatesPr.lead_score = updates.lead_score;
+            if (updates.arquetipo) updatesPr.arquetipo = updates.arquetipo;
+            if (updates.zona_tier) updatesPr.zona_tier = updates.zona_tier;
+            if (updates.experimento_flujo) updatesPr.experimento_flujo = updates.experimento_flujo;
             if (Object.keys(updatesPr).length > 0) {
               const { error: errUpdatePr } = await sb
                 .from("prospectos")
