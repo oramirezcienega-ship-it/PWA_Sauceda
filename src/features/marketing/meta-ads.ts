@@ -252,9 +252,11 @@ export async function aplicarMetaAdsMes(
 const REGLAS_CAMPANA: [string, RegExp][] = [
   // Especialidades con subcuenta propia
   ["601-01-006", /calentador|solar/],
-  ["601-01-007", /seguridad|alarma|camara|cctv|nvr|videoportero|portero/],
+  ["601-01-007", /seguridad|alarma|camara|cctv|nvr|videoportero|portero|protege/],
+  ["601-01-008", /cisterna|aljibe/],
+  ["601-01-009", /tinaco/],
   ["601-01-003", /estampad/],
-  ["601-01-004", /casa a punto|mantenimiento|tinaco|cisterna/],
+  ["601-01-004", /casa a punto|mantenimiento/],
   ["601-02-001", /compra|tramite|credito|infonavit|fovissste/],
   ["601-00-001", /whatsapp|mensaje/],
   ["601-02-002", /lead|inmobil|casa|propiedad|vende|renta/],

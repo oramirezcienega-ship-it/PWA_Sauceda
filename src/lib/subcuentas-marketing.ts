@@ -22,9 +22,11 @@ const normalizar = (s: string) =>
 const PALABRAS_CLAVE: [string, RegExp][] = [
   ["601-01-001", /impermeab/],
   ["601-01-006", /calentador|solar/],
-  ["601-01-007", /seguridad|alarma|camara|cctv|nvr|videoportero|portero|control de acceso|cerradura/],
+  ["601-01-007", /seguridad|alarma|camara|cctv|nvr|videoportero|portero|control de acceso|cerradura|protege/],
+  ["601-01-008", /cisterna|aljibe|aljive/],
+  ["601-01-009", /tinaco/],
   ["601-01-003", /estampad|concreto|firme|trazo|nivelacion|losa|cimentacion|colado/],
-  ["601-01-004", /mantenimiento|tinaco|cisterna|limpieza/],
+  ["601-01-004", /casa a punto|mantenimiento|limpieza|plomer/],
   ["601-01-005", /herreri|cancel|estructura metalica|porton|reja/],
   ["601-01-002", /remodel|pintura|acabado|piso|azulejo|tablaroca|construccion/],
 ];
