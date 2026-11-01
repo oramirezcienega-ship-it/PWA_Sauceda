@@ -24,6 +24,7 @@ import { ModalGestionarGarantia } from "./ModalGestionarGarantia";
 import { ModalGenerarRemisionOT } from "./ModalGenerarRemisionOT";
 import { ModalNotificarEntregaOT } from "./ModalNotificarEntregaOT";
 import { ModalAsignarProveedorOT } from "./ModalAsignarProveedorOT";
+import { ModalReprogramarOT } from "./ModalReprogramarOT";
 import { ModalCompartirExpedienteWhatsApp } from "./ModalCompartirExpedienteWhatsApp";
 import { SeccionContratoOT } from "./SeccionContratoOT";
 import { TarjetaCotizacionOrigenOT } from "./TarjetaCotizacionOrigenOT";
@@ -70,6 +71,7 @@ export function DetalleOrdenTrabajo({
   const [modalGarantia, setModalGarantia] = useState(false);
   const [modalRemision, setModalRemision] = useState(false);
   const [modalNotificar, setModalNotificar] = useState(false);
+  const [modalReprogramar, setModalReprogramar] = useState(false);
   const [modalCompartirExpediente, setModalCompartirExpediente] = useState(false);
   const [copiadoPortal, setCopiadoPortal] = useState(false);
 
@@ -92,6 +94,7 @@ export function DetalleOrdenTrabajo({
   const [modalConcluir, setModalConcluir] = useState(false);
   const [notasConclusion, setNotasConclusion] = useState("");
   const [concluyendo, setConcluyendo] = useState(false);
+  const [fechaConclusionManual, setFechaConclusionManual] = useState("");
 
   // Fotos
   const [subiendoFoto, setSubiendoFoto] = useState(false);
@@ -156,6 +159,9 @@ export function DetalleOrdenTrabajo({
 
   const handleCambiarEstatus = async (nuevoEstatus: "pendiente" | "en_proceso" | "completada" | "cancelada") => {
     if (nuevoEstatus === "completada") {
+      setFechaConclusionManual(
+        orden.fechaProgramada || (orden.fechaConclusion ? orden.fechaConclusion.split("T")[0] : new Date().toISOString().split("T")[0])
+      );
       setModalConcluir(true);
       return;
     }
@@ -170,14 +176,16 @@ export function DetalleOrdenTrabajo({
   const handleConfirmarConclusion = async () => {
     try {
       setConcluyendo(true);
+      const fConc = fechaConclusionManual || new Date().toISOString().split("T")[0];
       await actualizarEstatusOrdenTrabajo(orden.id, "completada", {
         notasConclusion,
+        fechaConclusion: fConc,
       });
       setOrden((prev) => ({
         ...prev,
         estatus: "completada",
         notasConclusion,
-        fechaConclusion: new Date().toISOString(),
+        fechaConclusion: fConc.includes("T") ? fConc : `${fConc}T12:00:00Z`,
       }));
       setModalConcluir(false);
       await recargarDetalle();
@@ -438,9 +446,21 @@ export function DetalleOrdenTrabajo({
           </div>
 
           <div>
-            <span className="text-[10px] text-carbon/40 uppercase font-bold block mb-1">
-              Fechas de Obra
-            </span>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] text-carbon/40 uppercase font-bold block">
+                Fechas de Obra
+              </span>
+              {!soloLectura && (
+                <button
+                  type="button"
+                  onClick={() => setModalReprogramar(true)}
+                  className="text-[10px] font-bold text-sauce hover:underline flex items-center gap-0.5 cursor-pointer"
+                  title="Cambiar fecha programada y sincronizar cierre contable"
+                >
+                  ✏️ Mover fecha
+                </button>
+              )}
+            </div>
             <div className="font-mono text-carbon/80">
               📅 Prog: {orden.fechaProgramada || "Sin definir"}
             </div>
@@ -1110,8 +1130,23 @@ export function DetalleOrdenTrabajo({
               Concluir Orden de Trabajo: {orden.folio}
             </h3>
             <p className="text-xs text-carbon/60 font-cuerpo">
-              Al marcar como completada, se registrará la fecha actual de entrega y se generará automáticamente el registro contable del proveedor asignado (si aplica).
+              Al marcar como completada, se registrará la fecha de entrega y cierre operativo, sincronizando el periodo contable y registro del proveedor asignado.
             </p>
+            <div>
+              <label className="block text-[11px] font-bold text-carbon/70 uppercase mb-1">
+                Fecha de Conclusión / Cierre Operativo *
+              </label>
+              <input
+                type="date"
+                required
+                value={fechaConclusionManual}
+                onChange={(e) => setFechaConclusionManual(e.target.value)}
+                className="w-full rounded-xl border border-carbon/20 p-2.5 text-xs font-mono font-semibold text-carbon outline-none focus:border-sauce bg-white"
+              />
+              <span className="text-[10px] text-carbon/50 mt-1 block">
+                Define en qué fecha/mes cae el cierre formal de esta obra.
+              </span>
+            </div>
             <div>
               <label className="block text-[11px] font-bold text-carbon/70 uppercase mb-1">
                 Notas de Conclusión o Cierre Técnico
@@ -1240,6 +1275,7 @@ export function DetalleOrdenTrabajo({
         clienteTelefono={orden.clienteTelefono}
         clienteDireccion={orden.clienteDireccion}
         totalCotizado={orden.totalCotizado || 0}
+        fechaSugerida={orden.fechaProgramada || (orden.fechaConclusion ? orden.fechaConclusion.split("T")[0] : undefined)}
       />
 
       <ModalNotificarEntregaOT
@@ -1278,6 +1314,20 @@ export function DetalleOrdenTrabajo({
           clienteTelefono={orden.clienteTelefono || ""}
         />
       )}
+
+      <ModalReprogramarOT
+        orden={orden}
+        isOpen={modalReprogramar}
+        onClose={() => setModalReprogramar(false)}
+        onSuccess={(nuevaFecha) => {
+          setOrden((prev) => ({
+            ...prev,
+            fechaProgramada: nuevaFecha,
+            ...(prev.fechaConclusion ? { fechaConclusion: `${nuevaFecha}T12:00:00Z` } : {}),
+          }));
+          recargarDetalle();
+        }}
+      />
     </div>
   );
 }

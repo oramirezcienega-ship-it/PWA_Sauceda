@@ -808,7 +808,11 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
 export async function actualizarEstatusOrdenTrabajo(
   ordenId: string,
   nuevoEstatus: "pendiente" | "en_proceso" | "completada" | "cancelada",
-  extras?: { notasConclusion?: string; overrideContrato?: boolean }
+  extras?: {
+    notasConclusion?: string;
+    overrideContrato?: boolean;
+    fechaConclusion?: string;
+  }
 ): Promise<{ ok: boolean; error?: string; codigo?: "CONTRATO_PENDIENTE" }> {
   try {
     await requireAdmin();
@@ -867,9 +871,13 @@ export async function actualizarEstatusOrdenTrabajo(
     };
 
     if (nuevoEstatus === "en_proceso") {
-      actualizacion.fecha_inicio = new Date().toISOString().split("T")[0];
+      actualizacion.fecha_inicio = extras?.fechaConclusion
+        ? extras.fechaConclusion.split("T")[0]
+        : new Date().toISOString().split("T")[0];
     } else if (nuevoEstatus === "completada") {
-      actualizacion.fecha_conclusion = new Date().toISOString();
+      actualizacion.fecha_conclusion = extras?.fechaConclusion
+        ? (extras.fechaConclusion.includes("T") ? extras.fechaConclusion : `${extras.fechaConclusion}T12:00:00Z`)
+        : new Date().toISOString();
       if (extras?.notasConclusion) {
         actualizacion.notas_conclusion = extras.notasConclusion.trim();
       }
@@ -3770,3 +3778,229 @@ export async function programarInstalacionYDetonarOT(datos: {
 
 
 
+
+
+/**
+ * Reprograma la fecha de una Orden de Trabajo y sincroniza integralmente
+ * toda la operación: expediente, agenda de citas, remisiones/facturas (cierre contable)
+ * y póliza de garantía.
+ */
+export async function reprogramarFechaOrdenTrabajo(
+  ordenId: string,
+  nuevaFecha: string,
+  opciones?: {
+    horaInicio?: string;
+    horaFin?: string;
+    moverCitas?: boolean;
+    moverExpediente?: boolean;
+    moverCierreFinanciero?: boolean;
+    moverGarantia?: boolean;
+    motivo?: string;
+  }
+): Promise<{ ok: boolean; error?: string; fechaProgramada?: string; resumen?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const fechaLimpia = (nuevaFecha || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaLimpia)) {
+      return { ok: false, error: "Formato de fecha inválido. Debe ser YYYY-MM-DD." };
+    }
+
+    const { data: ot, error: otErr } = await sb
+      .from("ordenes_trabajo")
+      .select("id, folio, estatus, titulo, fecha_programada, fecha_inicio, fecha_conclusion, expediente_id, prospecto_id, cotizacion_id")
+      .eq("id", ordenId)
+      .maybeSingle();
+
+    if (otErr || !ot) {
+      return { ok: false, error: otErr?.message || "Orden de trabajo no encontrada." };
+    }
+
+    const fechaAnterior = ot.fecha_programada || "Sin definir";
+    const horaIni = opciones?.horaInicio || "09:00";
+    const horaFin = opciones?.horaFin || "13:00";
+    const moverCierre = opciones?.moverCierreFinanciero !== false;
+    const moverCitas = opciones?.moverCitas !== false;
+    const moverExpediente = opciones?.moverExpediente !== false;
+    const moverGarantia = opciones?.moverGarantia !== false;
+    const motivoTexto = opciones?.motivo?.trim() || "Reprogramación operativa";
+
+    // 1. Actualizar orden de trabajo
+    const actualizacionOT: Record<string, any> = {
+      fecha_programada: fechaLimpia,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Si la orden ya concluyó o tiene fecha_conclusion, y se pide mover cierre financiero:
+    if (moverCierre && ot.fecha_conclusion) {
+      actualizacionOT.fecha_conclusion = `${fechaLimpia}T12:00:00Z`;
+      if (ot.fecha_inicio && ot.fecha_inicio > fechaLimpia) {
+        actualizacionOT.fecha_inicio = fechaLimpia;
+      }
+    }
+
+    const { error: upOtErr } = await sb
+      .from("ordenes_trabajo")
+      .update(actualizacionOT)
+      .eq("id", ordenId);
+
+    if (upOtErr) {
+      return { ok: false, error: `Error al actualizar la orden: ${upOtErr.message}` };
+    }
+
+    // 2. Mover expediente si aplica
+    if (moverExpediente && ot.expediente_id) {
+      const fechaISO = `${fechaLimpia}T${horaIni}:00`;
+      await sb
+        .from("expedientes")
+        .update({
+          fecha_instalacion: fechaISO,
+          situacion: `Instalación OT ${ot.folio || ""} reprogramada para el ${fechaLimpia}.`,
+          ultimo_movimiento: new Date().toISOString().slice(0, 10),
+        })
+        .eq("id", ot.expediente_id);
+    }
+
+    // 3. Mover citas técnicas en la agenda (agenda_citas)
+    let citasMovidas = 0;
+    if (moverCitas) {
+      const filtrosCita: string[] = [];
+      if (ot.cotizacion_id) filtrosCita.push(`cotizacion_id.eq.${ot.cotizacion_id}`);
+      if (ot.expediente_id) filtrosCita.push(`expediente_id.eq.${ot.expediente_id}`);
+      if (ot.prospecto_id) filtrosCita.push(`prospecto_id.eq.${ot.prospecto_id}`);
+
+      if (filtrosCita.length > 0) {
+        const { data: citas } = await sb
+          .from("agenda_citas")
+          .select("id, notas")
+          .or(filtrosCita.join(","))
+          .eq("tipo_cita", "instalacion");
+
+        if (citas && citas.length > 0) {
+          citasMovidas = citas.length;
+          for (const c of citas) {
+            const notaHistorial = c.notas
+              ? `${c.notas} · Reprogramada al ${fechaLimpia} (${motivoTexto})`
+              : `Reprogramada al ${fechaLimpia} (${motivoTexto})`;
+            await sb
+              .from("agenda_citas")
+              .update({
+                fecha: fechaLimpia,
+                hora_inicio: horaIni,
+                hora_fin: horaFin,
+                notas: notaHistorial,
+              })
+              .eq("id", c.id);
+          }
+        }
+      }
+    }
+
+    // 4. Mover cierre financiero (remisiones/facturas y documentos de proveedor)
+    let remisionesMovidas = 0;
+    let docsProvMovidos = 0;
+    if (moverCierre) {
+      // a) Remisiones / Facturas
+      let queryRem = sb.from("remisiones_facturas").select("id, datos_documento");
+      if (ot.cotizacion_id) {
+        queryRem = queryRem.or(`orden_trabajo_id.eq.${ordenId},cotizacion_id.eq.${ot.cotizacion_id}`);
+      } else {
+        queryRem = queryRem.eq("orden_trabajo_id", ordenId);
+      }
+      const { data: rems } = await queryRem;
+
+      if (rems && rems.length > 0) {
+        remisionesMovidas = rems.length;
+        for (const r of rems) {
+          const docActualizado = {
+            ...(r.datos_documento || {}),
+            fechaInstalacion: fechaLimpia,
+          };
+          await sb
+            .from("remisiones_facturas")
+            .update({
+              fecha: fechaLimpia,
+              datos_documento: docActualizado,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", r.id);
+        }
+      }
+
+      // b) Documentos de Proveedor vinculados a la OT
+      let queryDocsProv = sb.from("documentos_proveedores").select("id");
+      if (ot.cotizacion_id) {
+        queryDocsProv = queryDocsProv.or(`orden_trabajo_id.eq.${ordenId},cotizacion_id.eq.${ot.cotizacion_id}`);
+      } else {
+        queryDocsProv = queryDocsProv.eq("orden_trabajo_id", ordenId);
+      }
+      const { data: docsP } = await queryDocsProv;
+      if (docsP && docsP.length > 0) {
+        docsProvMovidos = docsP.length;
+        for (const dp of docsP) {
+          await sb
+            .from("documentos_proveedores")
+            .update({
+              fecha: fechaLimpia,
+              fecha_operacion: fechaLimpia,
+            })
+            .eq("id", dp.id);
+        }
+      }
+    }
+
+    // 5. Mover o recalibrar garantía si ya existe
+    let garantiaActualizada = false;
+    if (moverGarantia) {
+      const { data: gar } = await sb
+        .from("garantias_documentos")
+        .select("id, anos_garantia")
+        .eq("orden_trabajo_id", ordenId)
+        .maybeSingle();
+
+      if (gar?.id) {
+        garantiaActualizada = true;
+        const anos = Number(gar.anos_garantia || 3);
+        const fInicio = new Date(`${fechaLimpia}T00:00:00`);
+        const fVenc = new Date(fInicio);
+        fVenc.setMonth(fVenc.getMonth() + Math.round(anos * 12));
+        const fVencStr = fVenc.toISOString().split("T")[0];
+
+        await sb
+          .from("garantias_documentos")
+          .update({
+            fecha_inicio: fechaLimpia,
+            fecha_vencimiento: fVencStr,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", gar.id);
+      }
+    }
+
+    // 6. Bitácora de actividad
+    const { registrarActividad } = await import("@/lib/actividades");
+    await registrarActividad(sb, {
+      expedienteId: ot.expediente_id || null,
+      prospectoId: ot.prospecto_id || null,
+      tipo: "construccion",
+      titulo: `🗓️ Orden ${ot.folio || ""} Reprogramada`,
+      detalle: `Fecha movida de ${fechaAnterior} al ${fechaLimpia}. Motivo: ${motivoTexto}. Sincronizados: Citas (${citasMovidas}), Remisiones/Facturas (${remisionesMovidas}), Costos Proveedor (${docsProvMovidos}), Garantía (${garantiaActualizada ? "Sí" : "No"}).`,
+    });
+
+    revalidatePath("/ordenes-trabajo");
+    revalidatePath(`/ordenes-trabajo/${ordenId}`);
+    revalidatePath("/remisiones");
+    revalidatePath("/agenda");
+    revalidatePath("/finanzas");
+
+    return {
+      ok: true,
+      fechaProgramada: fechaLimpia,
+      resumen: `Orden reprogramada al ${fechaLimpia}. Citas sincronizadas: ${citasMovidas}, cierres/remisiones: ${remisionesMovidas}.`,
+    };
+  } catch (err: any) {
+    console.error("Error al reprogramar OT:", err);
+    return { ok: false, error: err?.message || "Error al reprogramar orden de trabajo." };
+  }
+}

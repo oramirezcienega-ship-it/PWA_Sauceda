@@ -2,6 +2,8 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ModalReprogramarOT } from "./ModalReprogramarOT";
 import type { OrdenTrabajo } from "@/app/actions/ordenes-trabajo";
 import { visualNegocio } from "@/lib/negocios-visual";
 
@@ -20,7 +22,9 @@ export function TablaOrdenesTrabajo({
   alActualizarEstatus,
   alNuevaOrden,
 }: TablaOrdenesTrabajoProps) {
+  const router = useRouter();
   const [actualizandoId, setActualizandoId] = useState<string | null>(null);
+  const [ordenReprogramar, setOrdenReprogramar] = useState<OrdenTrabajo | null>(null);
 
   const formatMoneda = (val: number) => {
     return new Intl.NumberFormat("es-MX", {
@@ -229,8 +233,21 @@ export function TablaOrdenesTrabajo({
 
                   {/* Fechas */}
                   <td className="px-5 py-4 whitespace-nowrap text-[11px] font-mono">
-                    <div className="text-carbon/80">
-                      📅 {ot.fechaProgramada || ot.fechaInicio || "Por definir"}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-carbon/80">
+                        📅 {ot.fechaProgramada || ot.fechaInicio || "Por definir"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOrdenReprogramar(ot);
+                        }}
+                        className="opacity-50 hover:opacity-100 hover:text-sauce transition p-0.5 rounded cursor-pointer"
+                        title="Mover fecha y sincronizar cierre"
+                      >
+                        ✏️
+                      </button>
                     </div>
                     {ot.fechaConclusion ? (
                       <div className="text-emerald-700 font-semibold text-[10px] mt-0.5">
@@ -388,9 +405,22 @@ export function TablaOrdenesTrabajo({
                 <span className="text-carbon/50">Asesor:</span>
                 <span className="font-medium">👤 {ot.asesorEjecutorNombre || "Sin asignar"}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-carbon/50">Programada:</span>
-                <span className="font-mono">{ot.fechaProgramada || "Sin fecha"}</span>
+                <div className="flex items-center gap-1.5 font-mono">
+                  <span>{ot.fechaProgramada || "Sin fecha"}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOrdenReprogramar(ot);
+                    }}
+                    className="text-[11px] text-sauce hover:underline font-semibold cursor-pointer"
+                    title="Mover fecha"
+                  >
+                    ✏️ Mover
+                  </button>
+                </div>
               </div>
               {(ot.totalCotizado || 0) > 0 && (
                 <div className="flex justify-between pt-1 border-t border-carbon/5 font-mono">
@@ -409,6 +439,16 @@ export function TablaOrdenesTrabajo({
           </div>
         ))}
       </div>
+
+      <ModalReprogramarOT
+        orden={ordenReprogramar}
+        isOpen={!!ordenReprogramar}
+        onClose={() => setOrdenReprogramar(null)}
+        onSuccess={() => {
+          setOrdenReprogramar(null);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

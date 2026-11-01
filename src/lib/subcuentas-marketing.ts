@@ -26,7 +26,7 @@ const PALABRAS_CLAVE: [string, RegExp][] = [
   ["601-01-008", /cisterna|aljibe|aljive/],
   ["601-01-009", /tinaco/],
   ["601-01-003", /estampad|concreto|firme|trazo|nivelacion|losa|cimentacion|colado/],
-  ["601-01-004", /casa a punto|mantenimiento|limpieza|plomer/],
+  ["601-01-004", /casa a punto|sauceda casa|resane|paquete hogar/],
   ["601-01-005", /herreri|cancel|estructura metalica|porton|reja/],
   ["601-01-002", /remodel|pintura|acabado|piso|azulejo|tablaroca|construccion/],
 ];

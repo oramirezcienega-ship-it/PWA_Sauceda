@@ -22,6 +22,8 @@ interface ModalGenerarRemisionOTProps {
   cotizacionToken?: string;
   /** Si viene, el modal edita los datos del documento de esa remisión/factura (nombre, entrega, fiscales). */
   remisionExistente?: RemisionFactura | null;
+  /** Fecha sugerida (ej. fecha programada o de conclusión de la OT) para que el cierre caiga en ese periodo. */
+  fechaSugerida?: string;
 }
 
 export function ModalGenerarRemisionOT({
@@ -34,12 +36,13 @@ export function ModalGenerarRemisionOT({
   clienteDireccion = "",
   totalCotizado = 0,
   remisionExistente = null,
+  fechaSugerida,
 }: ModalGenerarRemisionOTProps) {
   const editando = !!remisionExistente;
   const dd = (remisionExistente?.datosDocumento || {}) as Record<string, any>;
   const [tipo, setTipo] = useState<"remision" | "factura">(remisionExistente?.tipo === "factura" ? "factura" : "remision");
   const [fecha, setFecha] = useState(
-    (remisionExistente?.fecha || new Date().toISOString()).split("T")[0]
+    (remisionExistente?.fecha || fechaSugerida || new Date().toISOString()).split("T")[0]
   );
 
   // Datos Remisión. "A nombre de" puede ser distinto del contacto que compró.

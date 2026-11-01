@@ -256,7 +256,7 @@ const REGLAS_CAMPANA: [string, RegExp][] = [
   ["601-01-008", /cisterna|aljibe/],
   ["601-01-009", /tinaco/],
   ["601-01-003", /estampad/],
-  ["601-01-004", /casa a punto|mantenimiento/],
+  ["601-01-004", /casa a punto|sauceda casa/],
   ["601-02-001", /compra|tramite|credito|infonavit|fovissste/],
   ["601-00-001", /whatsapp|mensaje/],
   ["601-02-002", /lead|inmobil|casa|propiedad|vende|renta/],
