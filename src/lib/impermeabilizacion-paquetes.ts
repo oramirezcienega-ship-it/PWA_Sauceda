@@ -34,7 +34,7 @@ export const PAQUETES_DEFAULT: PaqueteInfo[] = [
     minimoM2: 25,
     preciosVolumen: [
       { desde: 26, precio: 165 },
-      { desde: 101, precio: 155 },
+      { desde: 101, precio: 160 },
     ],
     garantia: "3 años",
     mejorPara: "Mantenimiento preventivo, azoteas con poco tráfico y presupuesto accesible.",
@@ -56,7 +56,7 @@ export const PAQUETES_DEFAULT: PaqueteInfo[] = [
     minimoM2: 25,
     preciosVolumen: [
       { desde: 26, precio: 225 },
-      { desde: 101, precio: 210 },
+      { desde: 101, precio: 220 },
     ],
     garantia: "5 años",
     mejorPara: "Solución eficaz y económica para azoteas con buen estado estructural.",
@@ -74,11 +74,11 @@ export const PAQUETES_DEFAULT: PaqueteInfo[] = [
     badge: "PREMIUM",
     titulo: "Impermeabilizante 4.0 Poliéster",
     subtitulo: "Con gravilla roja o gris a elegir",
-    precioM2: 275,
+    precioM2: 295,
     minimoM2: 25,
     preciosVolumen: [
-      { desde: 26, precio: 275 },
-      { desde: 101, precio: 260 },
+      { desde: 26, precio: 295 },
+      { desde: 101, precio: 290 },
     ],
     garantia: "10 años",
     mejorPara: "Máxima durabilidad y tranquilidad a largo plazo. La elección más inteligente.",

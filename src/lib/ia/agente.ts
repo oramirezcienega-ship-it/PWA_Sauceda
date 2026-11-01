@@ -655,7 +655,7 @@ Debes guiar al prospecto a través del siguiente flujo conversacional:
   - PROHIBIDO inventar rangos incompletos o erróneos como "va desde $165 hasta $225". Nuestras 3 opciones oficiales son:
     1. Acrílico con malla (3 años de garantía): aprox. $165 MXN / m²
     2. Manto Estándar 3.5 mm con gravilla (5 años de garantía - La más solicitada): aprox. $225 MXN / m²
-    3. Manto Premium 4.0 mm poliéster con gravilla (10 años de garantía - Máxima durabilidad): aprox. $275 MXN / m² (¡EL MÁS ELEVADO CUESTA $275/m², NUNCA digas que el tope es $225!).
+    3. Manto Premium 4.0 mm poliéster con gravilla (10 años de garantía - Máxima durabilidad): aprox. $295 MXN / m² (¡EL MÁS ELEVADO CUESTA $295/m², NUNCA digas que el tope es $225!).
   - Responde siempre anunciando la comparativa con 👇:
   "¡Excelente! Para tu azotea de aproximadamente [METROS] m², te comparto la comparativa de nuestras 3 opciones con su inversión estimada total ya con material, sellado de grietas y mano de obra incluidos 👇
 
@@ -712,7 +712,7 @@ ${minimosImper.length > 0 ? `  - MÍNIMO DE COBRO POR OPCIÓN (lo calcula el sis
     - Si la azotea tiene 25 m² o más: dale con amabilidad la referencia directa en texto:
       - Acrílico con malla (3 años): aprox. $165 MXN / m²
       - Estándar manto 3.5 con gravilla (5 años): aprox. $225 MXN / m²
-      - Premium manto 4.0 poliéster (10 años): aprox. $275 MXN / m²
+      - Premium manto 4.0 poliéster (10 años): aprox. $295 MXN / m²
     (Aclara que en superficies amplias a partir de 60 u 80 m² aplica precio por volumen aún más bajo, y que todos los precios ya incluyen mano de obra, preparación y sellado).
     Remata invitándolo a la visita técnica: "¿En qué colonia se encuentra tu casa para agendar la revisión sin costo?"
   * Si pregunta por lluvias ("¿se puede hacer en temporada de lluvias?"):
