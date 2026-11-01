@@ -22,6 +22,7 @@ import { ModalGestionarGarantia } from "./ModalGestionarGarantia";
 import { ModalGenerarRemisionOT } from "./ModalGenerarRemisionOT";
 import { ModalNotificarEntregaOT } from "./ModalNotificarEntregaOT";
 import { ModalAsignarProveedorOT } from "./ModalAsignarProveedorOT";
+import { ModalReprogramarOT } from "./ModalReprogramarOT";
 import { PanelInfonavitCompraventa } from "./PanelInfonavitCompraventa";
 import { PanelAsesoriaCompraOT } from "./asesoria-compra/PanelAsesoriaCompraOT";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
@@ -100,6 +101,8 @@ export function ModuloOrdenesTrabajo({
   const [ordenParaConcluir, setOrdenParaConcluir] = useState<OrdenTrabajo | null>(null);
   const [notasConclusion, setNotasConclusion] = useState("");
   const [concluyendo, setConcluyendo] = useState(false);
+  const [fechaConclusionManual, setFechaConclusionManual] = useState("");
+  const [ordenReprogramar, setOrdenReprogramar] = useState<OrdenTrabajo | null>(null);
 
   const cargarDatos = async () => {
     try {
@@ -171,8 +174,10 @@ export function ModuloOrdenesTrabajo({
     if (!ordenParaConcluir) return;
     try {
       setConcluyendo(true);
+      const fConc = fechaConclusionManual || new Date().toISOString().split("T")[0];
       await actualizarEstatusOrdenTrabajo(ordenParaConcluir.id, "completada", {
         notasConclusion,
+        fechaConclusion: fConc,
       });
       const otConcluida = ordenParaConcluir;
       setOrdenes((prev) =>
@@ -182,7 +187,7 @@ export function ModuloOrdenesTrabajo({
                 ...o,
                 estatus: "completada",
                 notasConclusion,
-                fechaConclusion: new Date().toISOString(),
+                fechaConclusion: fConc.includes("T") ? fConc : `${fConc}T12:00:00Z`,
               }
             : o
         )
@@ -575,9 +580,24 @@ export function ModuloOrdenesTrabajo({
                     </div>
 
                     <div>
-                      <span className="text-[10px] text-carbon/40 uppercase block font-semibold">
-                        Programación / Inicio
-                      </span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-carbon/40 uppercase block font-semibold">
+                          Programación / Inicio
+                        </span>
+                        {!soloLectura && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOrdenReprogramar(ot);
+                            }}
+                            className="text-[10px] text-sauce hover:underline font-semibold cursor-pointer"
+                            title="Mover fecha de la orden"
+                          >
+                            ✏️ Mover
+                          </button>
+                        )}
+                      </div>
                       <span className="font-mono text-carbon/80 mt-0.5 block">
                         📅 {ot.fechaProgramada || "Sin fecha pactada"}
                         {ot.fechaInicio && (
@@ -1351,9 +1371,21 @@ export function ModuloOrdenesTrabajo({
             <h3 className="font-titular text-lg font-bold text-verde-profundo mb-2">
               Concluir Orden de Trabajo ({ordenParaConcluir.folio})
             </h3>
-            <p className="text-xs text-carbon/60 font-cuerpo mb-4">
-              Ingresa los comentarios finales o acuerdos de entrega técnica con el cliente.
+            <p className="text-xs text-carbon/60 font-cuerpo mb-3">
+              Ingresa la fecha de entrega y los comentarios finales o acuerdos técnicos con el cliente.
             </p>
+            <div className="mb-3">
+              <label className="block text-[11px] font-bold text-carbon/70 uppercase mb-1">
+                Fecha de Conclusión / Cierre Operativo *
+              </label>
+              <input
+                type="date"
+                required
+                value={fechaConclusionManual}
+                onChange={(e) => setFechaConclusionManual(e.target.value)}
+                className="w-full rounded-xl border border-carbon/20 p-2 text-xs font-mono font-semibold text-carbon focus:border-sauce outline-none bg-white"
+              />
+            </div>
             <textarea
               rows={4}
               value={notasConclusion}
@@ -1412,6 +1444,7 @@ export function ModuloOrdenesTrabajo({
           clienteNombre={ordenParaRemision.clienteNombre || clienteNombreDefault}
           clienteTelefono={ordenParaRemision.clienteTelefono || clienteTelefonoDefault}
           remisionExistente={detalleOT.remisionFactura}
+          fechaSugerida={ordenParaRemision.fechaProgramada || (ordenParaRemision.fechaConclusion ? ordenParaRemision.fechaConclusion.split("T")[0] : undefined)}
         />
       )}
 
@@ -1441,6 +1474,17 @@ export function ModuloOrdenesTrabajo({
       />
 
       {/* Modal Confirmar Eliminación de Orden */}
+      <ModalReprogramarOT
+        orden={ordenReprogramar}
+        isOpen={!!ordenReprogramar}
+        onClose={() => setOrdenReprogramar(null)}
+        onSuccess={(nuevaFecha) => {
+          setOrdenReprogramar(null);
+          cargarDatos();
+          if (otExpandidaId) cargarDetalle(otExpandidaId);
+        }}
+      />
+
       {ordenParaEliminar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-carbon/10 space-y-4 animate-in fade-in duration-200">
