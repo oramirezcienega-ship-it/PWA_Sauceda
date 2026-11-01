@@ -64,8 +64,16 @@ export async function cargarServiciosMantenimiento(
     );
 
   const out: Partial<Record<ServicioMant, ProductoMant>> = {};
-  // Primero los que tienen modelo de negocio asignado; el nombre sólo es respaldo.
-  const filas = [...(data || [])].sort((x: any, y: any) => Number(!x.tipo_negocio) - Number(!y.tipo_negocio));
+  // Priorizar productos específicos de mantenimiento que tengan tarifas_capacidad configuradas
+  const filas = [...(data || [])].sort((x: any, y: any) => {
+    const xTarifas = Array.isArray(x.tarifas_capacidad) ? x.tarifas_capacidad.length : 0;
+    const yTarifas = Array.isArray(y.tarifas_capacidad) ? y.tarifas_capacidad.length : 0;
+    if (xTarifas !== yTarifas) return yTarifas - xTarifas;
+    const xMant = (x.nombre || "").toLowerCase().includes("mantenimiento") ? 1 : 0;
+    const yMant = (y.nombre || "").toLowerCase().includes("mantenimiento") ? 1 : 0;
+    if (xMant !== yMant) return yMant - xMant;
+    return Number(!x.tipo_negocio) - Number(!y.tipo_negocio);
+  });
   for (const f of filas) {
     if (f.activo === false) continue;
     const servicio = f.tipo_negocio ? servicioDeTipoNegocio(f.tipo_negocio) : servicioDeNombre(f.nombre);
