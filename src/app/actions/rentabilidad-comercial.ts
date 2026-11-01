@@ -35,6 +35,8 @@ export interface MetricasRentabilidad {
   roi: number;
   /** Ingreso / publicidad (veces); null si no hubo publicidad */
   roas: number | null;
+  /** Utilidad bruta (ingreso - costo directo - terminal - comisión) / publicidad; ganancia para Sauceda por peso de pauta */
+  poas: number | null;
   /** Publicidad / ventas cerradas; null si no hubo ventas */
   cac: number | null;
   ventas: number;
@@ -101,6 +103,7 @@ function metricas(a: Omit<Acum, "remisiones">, ventas: number): MetricasRentabil
   const publicidadTotal = a.publicidadDirecta + a.publicidadProrrateada;
   const costoTotal = a.costoDirecto + a.terminal + a.comision + publicidadTotal;
   const margenNeto = a.ingreso - costoTotal;
+  const utilidadBruta = a.ingreso - (a.costoDirecto + a.terminal + a.comision);
   return {
     ingreso: r2(a.ingreso),
     costoDirecto: r2(a.costoDirecto),
@@ -114,6 +117,7 @@ function metricas(a: Omit<Acum, "remisiones">, ventas: number): MetricasRentabil
     margenPct: a.ingreso > 0 ? r2((margenNeto / a.ingreso) * 100) : 0,
     roi: costoTotal > 0 ? r2((margenNeto / costoTotal) * 100) : 0,
     roas: publicidadTotal > 0 ? r2(a.ingreso / publicidadTotal) : null,
+    poas: publicidadTotal > 0 ? r2(utilidadBruta / publicidadTotal) : null,
     cac: ventas > 0 && publicidadTotal > 0 ? r2(publicidadTotal / ventas) : null,
     ventas,
   };

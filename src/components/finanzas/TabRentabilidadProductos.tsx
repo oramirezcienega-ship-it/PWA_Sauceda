@@ -40,12 +40,15 @@ function CeldasMetricas({ m, negrita = false }: { m: MetricasRentabilidad; negri
       </td>
       <td className="py-2.5 px-3 text-right font-mono text-slate-700">{formatPct(m.margenPct)}</td>
       <td className="py-2.5 px-3 text-right font-mono font-bold text-[#2D4A2B]">{formatRoas(m.roas)}</td>
+      <td className={`py-2.5 px-3 text-right font-mono font-bold ${m.poas !== null && m.poas >= 1.5 ? "text-emerald-700" : m.poas !== null && m.poas >= 1 ? "text-blue-700" : "text-amber-700"}`} title="POAS: Utilidad bruta generada para Sauceda por cada $1 invertido en Meta Ads">
+        {formatRoas(m.poas)}
+      </td>
       <td className="py-2.5 px-3 text-right font-mono text-slate-700">{formatCac(m.cac)}</td>
     </>
   );
 }
 
-const ENCABEZADOS_METRICAS = ["Venta", "Costo directo", "Terminal", "Comisiones", "Publicidad", "Margen neto", "Margen", "ROAS", "CAC"];
+const ENCABEZADOS_METRICAS = ["Venta", "Costo directo", "Terminal", "Comisiones", "Publicidad", "Margen neto", "Margen", "ROAS", "POAS", "CAC"];
 
 export function TabRentabilidadProductos({ fechaInicio, fechaFin, onRecalculado }: TabRentabilidadProductosProps) {
   const [reporte, setReporte] = useState<ReporteRentabilidadComercial | null>(null);
@@ -87,7 +90,7 @@ export function TabRentabilidadProductos({ fechaInicio, fechaFin, onRecalculado 
   };
 
   const fila = (m: MetricasRentabilidad) => [
-    m.ingreso, m.costoDirecto, m.terminal, m.comision, m.publicidadTotal, m.margenNeto, m.margenPct, m.roas ?? "", m.cac ?? "",
+    m.ingreso, m.costoDirecto, m.terminal, m.comision, m.publicidadTotal, m.margenNeto, m.margenPct, m.roas ?? "", m.poas ?? "", m.cac ?? "",
   ];
 
   const handleExportar = () => {
@@ -193,7 +196,7 @@ export function TabRentabilidadProductos({ fechaInicio, fechaFin, onRecalculado 
             ["Publicidad", formatMoneda(totales.publicidadTotal), `ROAS ${formatRoas(totales.roas)}`],
             ["CAC promedio", formatCac(totales.cac), "Publicidad ÷ ventas cerradas"],
             ["Margen neto", formatMoneda(totales.margenNeto), `Margen ${formatPct(totales.margenPct)}`],
-            ["ROI", formatPct(totales.roi), "Margen neto ÷ costo total"],
+            ["POAS Global", formatRoas(totales.poas), `Utilidad bruta ÷ pauta (ROI ${formatPct(totales.roi)})`],
           ].map(([titulo, valor, detalle]) => (
             <div key={titulo} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
               <span className="text-[10px] uppercase font-bold text-slate-400 block">{titulo}</span>
@@ -276,7 +279,7 @@ export function TabRentabilidadProductos({ fechaInicio, fechaFin, onRecalculado 
       <p className="text-[11px] text-slate-400">
         Margen neto = venta − costo directo − terminal − comisiones − publicidad directa − prorrateo de publicidad
         general. La publicidad de Corporativo se reparte entre todas las especialidades según su venta, y la de un centro
-        sin subcuenta, entre las especialidades de ese centro. ROAS = venta ÷ publicidad. CAC = publicidad ÷ ventas
+        sin subcuenta, entre las especialidades de ese centro. ROAS = venta ÷ publicidad. POAS = utilidad bruta ÷ publicidad (ganancia para Sauceda por cada $1 de pauta). CAC = publicidad ÷ ventas
         cerradas (remisiones; en Inmobiliaria, expedientes cerrados por fecha de último movimiento).
       </p>
     </div>
