@@ -2945,6 +2945,7 @@ export async function responderConIA(
           expedienteId: ctx.expedienteId ?? null,
           prospectoId: exp?.prospecto_id ?? null,
           motivo: "Lead de seguridad atendido con cotización inicial; transferido a Gerardo para seguimiento",
+          pausarSofia: false,
         });
       } catch (errSeg) {
         console.error("[Sofía Agente] Error al pasar lead de seguridad a Gerardo tras responder:", errSeg);

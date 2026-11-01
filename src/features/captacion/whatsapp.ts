@@ -1010,6 +1010,7 @@ export async function registrarLeadWhatsApp(
           expedienteId: exp.id,
           prospectoId: efectivoProspectoId,
           motivo: "Lead de seguridad entrante (IA apagada)",
+          pausarSofia: true,
         });
       } catch (errAuto) {
         console.error("[Captación] Error al pasar lead de seguridad a Gerardo:", errAuto);
@@ -1091,6 +1092,7 @@ export async function registrarLeadWhatsApp(
         expedienteId: id,
         prospectoId,
         motivo: "Nuevo lead de seguridad captado (IA apagada)",
+        pausarSofia: true,
       });
     } catch (errAuto) {
       console.error("[Captación] Error al pasar lead de seguridad a Gerardo:", errAuto);

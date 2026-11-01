@@ -12,6 +12,7 @@ export interface ParametrosAsignacionSeguridad {
   prospectoId?: string | null;
   motivo?: string;
   forzar?: boolean;
+  pausarSofia?: boolean;
 }
 
 export interface ResultadoAsignacionSeguridad {
@@ -161,12 +162,18 @@ export async function pasarLeadSeguridadAGerardoAutomatico(
       console.warn("[Asignación Seguridad Automática] No se pudo guardar en mensajes_whatsapp de Gerardo:", errDbMsg);
     }
 
-    // 7. Pausar a Sofía inmediatamente para que Gerardo atienda sin interferencia
-    try {
-      await setConversacionPausada(sb, telCliente, true, datosLead.expedienteId, datosLead.prospectoId);
-      console.log(`[Asignación Seguridad Automática] Sofía pausada para el cliente ${telCliente}.`);
-    } catch (errPausa) {
-      console.error("[Asignación Seguridad Automática] Error al pausar a Sofía:", errPausa);
+    // 7. Pausar a Sofía SOLO si se solicitó explícitamente (ej. IA apagada o transferencia manual).
+    // Por defecto, Sofía DEBE permanecer activa para responder dudas, entregar paquetes, imágenes
+    // y cerrar el levantamiento técnico en sitio. Si el asesor responde desde el CRM, se pausa automáticamente.
+    if (params.pausarSofia) {
+      try {
+        await setConversacionPausada(sb, telCliente, true, datosLead.expedienteId, datosLead.prospectoId);
+        console.log(`[Asignación Seguridad Automática] Sofía pausada explícitamente para el cliente ${telCliente}.`);
+      } catch (errPausa) {
+        console.error("[Asignación Seguridad Automática] Error al pausar a Sofía:", errPausa);
+      }
+    } else {
+      console.log(`[Asignación Seguridad Automática] Sofía permanece ACTIVA para nutrir y calificar al lead ${telCliente}.`);
     }
 
     // 8. Asignar lead a Gerardo en expedientes y prospectos
@@ -220,7 +227,9 @@ export async function pasarLeadSeguridadAGerardoAutomatico(
       const detalleActividad = [
         `Asignado automáticamente por el Sistema a ${asesorNombre} vía Evolution API.`,
         `Ficha y resumen enviados a su WhatsApp (+52 ${asesorTel}).`,
-        `Sofía quedó pausada para este cliente para atención humana directa.`,
+        params.pausarSofia
+          ? `Sofía quedó pausada para este cliente para atención humana directa.`
+          : `Sofía continúa activa para resolver dudas del cliente y cerrar levantamiento técnico en sitio.`,
         resumen ? `Resumen:\n${resumen}` : "",
       ]
         .filter(Boolean)
