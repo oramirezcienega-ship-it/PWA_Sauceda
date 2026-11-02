@@ -19,7 +19,10 @@ import {
   editarMensajeIndividual,
   enviarStickerConversacion,
   listarVideosCatalogoChat,
+  listarEvidenciasCatalogoChat,
   enviarVideoCatalogoConversacion,
+  enviarFotoCatalogoConversacion,
+  enviarPaqueteEvidenciasConversacion,
   prepararSubidaAdjuntoConversacion,
   enviarAdjuntoSubidoConversacion,
   actualizarTipoNegocioConversacion,
@@ -58,6 +61,10 @@ import type {
 } from "@/lib/types";
 import { labelTipoNegocio } from "@/lib/types";
 import { visualNegocio } from "@/lib/negocios-visual";
+import {
+  ENLACES_WEB_EVIDENCIAS,
+  type ProductoConEvidencias,
+} from "@/lib/ia/videos-catalogo";
 import type { PlantillaWhatsApp } from "@/lib/whatsapp";
 import { videoRequiereConversion, convertirVideoParaWhatsApp } from "@/lib/convertir-video";
 import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
@@ -888,6 +895,11 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [mostrarVideosCatalogo, setMostrarVideosCatalogo] = useState(false);
   const [videosCatalogo, setVideosCatalogo] = useState<Awaited<ReturnType<typeof listarVideosCatalogoChat>> | null>(null);
   const [enviandoVideoUrl, setEnviandoVideoUrl] = useState<string | null>(null);
+  const [mostrarEvidencias, setMostrarEvidencias] = useState(false);
+  const [evidenciasCatalogo, setEvidenciasCatalogo] = useState<ProductoConEvidencias[] | null>(null);
+  const [enviandoEvidenciaUrl, setEnviandoEvidenciaUrl] = useState<string | null>(null);
+  const [enviandoPaqueteEvidencias, setEnviandoPaqueteEvidencias] = useState(false);
+  const [tabEvidencias, setTabEvidencias] = useState<"todas" | "fotos" | "videos" | "web">("todas");
   const [corrigiendoOrtografia, setCorrigiendoOrtografia] = useState(false);
   const [exitoOrtografia, setExitoOrtografia] = useState(false);
   const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
@@ -1634,6 +1646,57 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
       setAviso(humanizarError(err));
     } finally {
       setEnviandoVideoUrl(null);
+    }
+  }
+
+  async function abrirEvidenciasCatalogo() {
+    const abrir = !mostrarEvidencias;
+    setMostrarEvidencias(abrir);
+    if (abrir) {
+      setEvidenciasCatalogo(await listarEvidenciasCatalogoChat().catch(() => []));
+    }
+  }
+
+  async function handleEnviarFotoCatalogo(productoId: string, url: string) {
+    if (!sel || enviandoEvidenciaUrl) return;
+    setEnviandoEvidenciaUrl(url);
+    setAviso(null);
+    try {
+      const r = await enviarFotoCatalogoConversacion(sel, productoId, url);
+      if (!r.ok) {
+        setAviso(humanizarError(r.error ?? "No se pudo enviar la foto."));
+      } else {
+        await refrescar(sel);
+      }
+    } catch (err: any) {
+      setAviso(humanizarError(err));
+    } finally {
+      setEnviandoEvidenciaUrl(null);
+    }
+  }
+
+  async function handleEnviarPaqueteEvidencias(productoId?: string) {
+    if (!sel || enviandoPaqueteEvidencias) return;
+    setEnviandoPaqueteEvidencias(true);
+    setAviso(null);
+    try {
+      const r = await enviarPaqueteEvidenciasConversacion(sel, {
+        productoId,
+        tipoNegocio: detalle?.tipoNegocio,
+        incluirFotos: true,
+        incluirVideos: true,
+        incluirLinkWeb: true,
+      });
+      if (!r.ok) {
+        setAviso(humanizarError(r.error ?? "No se pudo enviar el paquete de evidencias."));
+      } else {
+        setMostrarEvidencias(false);
+        await refrescar(sel);
+      }
+    } catch (err: any) {
+      setAviso(humanizarError(err));
+    } finally {
+      setEnviandoPaqueteEvidencias(false);
     }
   }
 
@@ -3530,70 +3593,288 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         </>
                       )}
                     </div>
-                    {/* Botón videos del catálogo (solo WhatsApp: se envían por link) */}
+                    {/* Botón evidencias y catálogo del servicio (fotos, videos y web) */}
                     {canalDe(detalle.telefono) === "whatsapp" && (
                     <div className="relative shrink-0">
                       <button
                         type="button"
-                        onClick={() => void abrirVideosCatalogo()}
-                        disabled={!!enviandoVideoUrl || !detalle.ventanaAbierta}
-                        title="Enviar videos de trabajos realizados del catálogo"
+                        onClick={() => void abrirEvidenciasCatalogo()}
+                        disabled={!!enviandoEvidenciaUrl || enviandoPaqueteEvidencias || !detalle.ventanaAbierta}
+                        title="Enviar evidencias: fotos, videos y catálogo web del servicio"
                         className="flex h-[42px] w-[42px] items-center justify-center rounded-md border border-carbon/20 bg-white text-lg hover:bg-sauce/10 hover:border-sauce/40 transition disabled:opacity-50"
                       >
-                        {enviandoVideoUrl ? <span className="text-sm animate-pulse">⏳</span> : "🎬"}
+                        {enviandoEvidenciaUrl || enviandoPaqueteEvidencias ? (
+                          <span className="text-sm animate-pulse">⏳</span>
+                        ) : (
+                          "📸"
+                        )}
                       </button>
-                      {mostrarVideosCatalogo && (
+                      {mostrarEvidencias && (
                         <>
                           <div
                             className="fixed inset-0 z-40 bg-black/30 sm:hidden"
-                            onClick={() => setMostrarVideosCatalogo(false)}
+                            onClick={() => setMostrarEvidencias(false)}
                           />
-                          <div className="fixed inset-x-3 bottom-20 sm:inset-auto sm:absolute sm:right-0 sm:bottom-full sm:mb-2 z-50 max-h-[75vh] sm:max-h-[420px] sm:w-80 overflow-y-auto rounded-xl border border-carbon/15 bg-white shadow-xl">
-                            <div className="sticky top-0 bg-white border-b border-carbon/10 px-3 py-2 flex items-center justify-between z-10">
-                              <span className="text-xs font-bold text-verde-profundo flex items-center gap-1">🎬 Videos del catálogo</span>
+                          <div className="fixed inset-x-3 bottom-20 sm:inset-auto sm:absolute sm:right-0 sm:bottom-full sm:mb-2 z-50 max-h-[82vh] sm:max-h-[520px] sm:w-96 overflow-y-auto rounded-xl border border-carbon/15 bg-white shadow-2xl flex flex-col">
+                            {/* Cabecera */}
+                            <div className="sticky top-0 bg-white border-b border-carbon/10 px-3.5 py-2.5 flex items-center justify-between z-10 shadow-xs">
+                              <div>
+                                <span className="text-xs font-bold text-verde-profundo flex items-center gap-1.5">
+                                  📸 Evidencias y Catálogo Web
+                                </span>
+                                <span className="text-[10px] text-carbon/60 block">
+                                  Fotos y videos de trabajos realizados
+                                </span>
+                              </div>
                               <button
                                 type="button"
-                                onClick={() => setMostrarVideosCatalogo(false)}
+                                onClick={() => setMostrarEvidencias(false)}
                                 className="text-carbon/40 hover:text-carbon text-sm p-1 rounded hover:bg-carbon/5 transition cursor-pointer"
                               >✕</button>
                             </div>
-                            <div className="p-3 space-y-3">
-                              {videosCatalogo === null ? (
-                                <p className="text-xs text-carbon/50 text-center py-4 animate-pulse">Cargando videos…</p>
-                              ) : videosCatalogo.length === 0 ? (
-                                <p className="text-xs text-carbon/60 text-center py-4 leading-relaxed">
-                                  Aún no hay videos en el catálogo. Súbelos desde Productos y Servicios.
+
+                            {/* Banner de servicio detectado + Botón de envío en 1 clic */}
+                            {(() => {
+                              const neg = visualNegocio(detalle.tipoNegocio);
+                              const enlaceWeb = detalle.tipoNegocio ? ENLACES_WEB_EVIDENCIAS[detalle.tipoNegocio] : null;
+                              const prodCotizado = evidenciasCatalogo?.find(
+                                (p) => p.tipoNegocio === detalle.tipoNegocio || (detalle.tipoNegocio && /estampad/i.test(detalle.tipoNegocio) && /estampad/i.test(p.nombre))
+                              ) || evidenciasCatalogo?.[0];
+
+                              const totalFotos = prodCotizado?.fotos.length || 0;
+                              const totalVideos = prodCotizado?.videos.length || 0;
+
+                              return (
+                                <div className="p-3 bg-gradient-to-br from-sauce/15 via-sauce/5 to-white border-b border-carbon/10 space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] uppercase font-bold tracking-wider text-verde-profundo flex items-center gap-1">
+                                      🎯 Cotizando: <span className="text-carbon underline">{neg.nombre || "Servicio"}</span>
+                                    </span>
+                                    <span className="text-[10px] font-medium text-carbon/60">
+                                      {totalFotos} fotos · {totalVideos} video{totalVideos === 1 ? "" : "s"}
+                                    </span>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleEnviarPaqueteEvidencias(prodCotizado?.id)}
+                                    disabled={enviandoPaqueteEvidencias || !!enviandoEvidenciaUrl}
+                                    title="Enviar paquete completo: todas las fotos, videos y el enlace del catálogo web oficial"
+                                    className="w-full bg-verde-profundo text-white font-bold text-xs py-2.5 px-3 rounded-lg shadow-md hover:bg-verde-profundo/90 active:scale-[0.99] transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                  >
+                                    {enviandoPaqueteEvidencias ? (
+                                      <>
+                                        <span className="animate-spin text-sm">⏳</span>
+                                        <span>Enviando evidencias al chat...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>🚀</span>
+                                        <span>Enviar paquete de evidencias (1 clic)</span>
+                                      </>
+                                    )}
+                                  </button>
+
+                                  {enlaceWeb && (
+                                    <div className="flex items-center justify-between text-[10px] text-carbon/70 pt-0.5">
+                                      <span className="truncate">🌐 {enlaceWeb.titulo}</span>
+                                      <a
+                                        href={enlaceWeb.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sauce hover:underline shrink-0 ml-1 font-semibold"
+                                      >
+                                        Abrir web ↗
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
+                            {/* Selector de pestañas */}
+                            <div className="flex border-b border-carbon/10 bg-slate-50 text-[11px] font-semibold text-carbon/70">
+                              <button
+                                type="button"
+                                onClick={() => setTabEvidencias("todas")}
+                                className={`flex-1 py-1.5 text-center transition cursor-pointer ${tabEvidencias === "todas" ? "bg-white text-verde-profundo border-b-2 border-verde-profundo font-bold" : "hover:bg-slate-100"}`}
+                              >
+                                Todo
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTabEvidencias("fotos")}
+                                className={`flex-1 py-1.5 text-center transition cursor-pointer ${tabEvidencias === "fotos" ? "bg-white text-verde-profundo border-b-2 border-verde-profundo font-bold" : "hover:bg-slate-100"}`}
+                              >
+                                🖼️ Fotos
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTabEvidencias("videos")}
+                                className={`flex-1 py-1.5 text-center transition cursor-pointer ${tabEvidencias === "videos" ? "bg-white text-verde-profundo border-b-2 border-verde-profundo font-bold" : "hover:bg-slate-100"}`}
+                              >
+                                ▶️ Videos
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTabEvidencias("web")}
+                                className={`flex-1 py-1.5 text-center transition cursor-pointer ${tabEvidencias === "web" ? "bg-white text-verde-profundo border-b-2 border-verde-profundo font-bold" : "hover:bg-slate-100"}`}
+                              >
+                                🌐 Enlace
+                              </button>
+                            </div>
+
+                            {/* Lista de evidencias */}
+                            <div className="p-3 space-y-3.5 flex-1 overflow-y-auto">
+                              {evidenciasCatalogo === null ? (
+                                <p className="text-xs text-carbon/50 text-center py-6 animate-pulse">Cargando catálogo de evidencias…</p>
+                              ) : evidenciasCatalogo.length === 0 ? (
+                                <p className="text-xs text-carbon/60 text-center py-6 leading-relaxed">
+                                  Aún no hay evidencias en el catálogo. Sube fotos y videos desde Productos y Servicios.
                                 </p>
                               ) : (
-                                videosCatalogo.map((p) => (
-                                  <div key={p.id} className="space-y-1.5">
-                                    <p className="text-[10px] uppercase font-bold text-carbon/50 tracking-wider">{p.nombre}</p>
-                                    {p.videos.map((v) => (
-                                      <div key={v.url} className="flex items-center gap-2 rounded-lg border border-carbon/10 p-2 hover:bg-sauce/10 hover:border-sauce/40 transition">
-                                        <button
-                                          type="button"
-                                          onClick={() => void handleEnviarVideoCatalogo(p.id, v.url)}
-                                          disabled={!!enviandoVideoUrl}
-                                          title="Enviar este video al cliente"
-                                          className="min-w-0 flex-1 flex items-center gap-2 text-left disabled:opacity-50 cursor-pointer"
-                                        >
-                                          <span className="text-lg shrink-0">{enviandoVideoUrl === v.url ? "⏳" : "▶️"}</span>
-                                          <span className="min-w-0 flex-1">
-                                            <span className="block text-xs font-semibold text-verde-profundo truncate">{v.titulo || p.nombre}</span>
-                                            {v.descripcion && <span className="block text-[10px] text-carbon/60 truncate">{v.descripcion}</span>}
-                                          </span>
-                                        </button>
-                                        <a
-                                          href={v.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="shrink-0 text-[10px] text-carbon/50 hover:text-sauce underline"
-                                          title="Ver el video antes de enviarlo"
-                                        >Ver</a>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ))
+                                evidenciasCatalogo.map((p) => {
+                                  const tieneFotos = p.fotos && p.fotos.length > 0;
+                                  const tieneVideos = p.videos && p.videos.length > 0;
+                                  if (!tieneFotos && !tieneVideos) return null;
+
+                                  return (
+                                    <div key={p.id} className="space-y-2">
+                                      <p className="text-[10px] uppercase font-bold text-carbon/50 tracking-wider flex items-center justify-between">
+                                        <span>{p.nombre}</span>
+                                        <span className="text-[9px] font-normal lowercase text-carbon/40">
+                                          {[
+                                            tieneFotos ? `${p.fotos.length} foto${p.fotos.length === 1 ? "" : "s"}` : "",
+                                            tieneVideos ? `${p.videos.length} video${p.videos.length === 1 ? "" : "s"}` : "",
+                                          ].filter(Boolean).join(" · ")}
+                                        </span>
+                                      </p>
+
+                                      {/* Fotos del producto */}
+                                      {(tabEvidencias === "todas" || tabEvidencias === "fotos") && tieneFotos && (
+                                        <div className="space-y-1.5">
+                                          {p.fotos.map((f) => (
+                                            <div
+                                              key={f.url}
+                                              className="flex items-center gap-2.5 rounded-lg border border-carbon/10 p-2 hover:bg-sauce/10 hover:border-sauce/40 transition group"
+                                            >
+                                              <button
+                                                type="button"
+                                                onClick={() => void handleEnviarFotoCatalogo(p.id, f.url)}
+                                                disabled={!!enviandoEvidenciaUrl || enviandoPaqueteEvidencias}
+                                                title="Enviar esta foto al cliente por WhatsApp"
+                                                className="min-w-0 flex-1 flex items-center gap-2.5 text-left disabled:opacity-50 cursor-pointer"
+                                              >
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img
+                                                  src={f.url}
+                                                  alt={f.titulo || p.nombre}
+                                                  className="w-11 h-11 object-cover rounded-md border border-carbon/10 shrink-0 bg-slate-100"
+                                                  loading="lazy"
+                                                />
+                                                <span className="min-w-0 flex-1">
+                                                  <span className="block text-xs font-semibold text-verde-profundo truncate">
+                                                    {f.titulo || p.nombre}
+                                                  </span>
+                                                  {f.descripcion && (
+                                                    <span className="block text-[10px] text-carbon/60 line-clamp-1">
+                                                      {f.descripcion}
+                                                    </span>
+                                                  )}
+                                                  <span className="inline-block text-[9px] font-bold text-sauce group-hover:underline mt-0.5">
+                                                    {enviandoEvidenciaUrl === f.url ? "Enviando… ⏳" : "Enviar foto →"}
+                                                  </span>
+                                                </span>
+                                              </button>
+                                              <a
+                                                href={f.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="shrink-0 text-[10px] text-carbon/50 hover:text-sauce underline px-1 py-0.5"
+                                                title="Ver foto en tamaño completo"
+                                              >
+                                                Ver
+                                              </a>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {/* Videos del producto */}
+                                      {(tabEvidencias === "todas" || tabEvidencias === "videos") && tieneVideos && (
+                                        <div className="space-y-1.5">
+                                          {p.videos.map((v) => (
+                                            <div
+                                              key={v.url}
+                                              className="flex items-center gap-2.5 rounded-lg border border-carbon/10 p-2 hover:bg-sauce/10 hover:border-sauce/40 transition group"
+                                            >
+                                              <button
+                                                type="button"
+                                                onClick={() => void handleEnviarVideoCatalogo(p.id, v.url)}
+                                                disabled={!!enviandoEvidenciaUrl || enviandoPaqueteEvidencias}
+                                                title="Enviar este video al cliente por WhatsApp"
+                                                className="min-w-0 flex-1 flex items-center gap-2 text-left disabled:opacity-50 cursor-pointer"
+                                              >
+                                                <div className="w-11 h-11 rounded-md bg-emerald-50 border border-emerald-200 flex items-center justify-center text-lg shrink-0">
+                                                  {enviandoEvidenciaUrl === v.url ? "⏳" : "▶️"}
+                                                </div>
+                                                <span className="min-w-0 flex-1">
+                                                  <span className="block text-xs font-semibold text-verde-profundo truncate">
+                                                    {v.titulo || p.nombre}
+                                                  </span>
+                                                  {v.descripcion && (
+                                                    <span className="block text-[10px] text-carbon/60 line-clamp-1">
+                                                      {v.descripcion}
+                                                    </span>
+                                                  )}
+                                                  <span className="inline-block text-[9px] font-bold text-emerald-700 group-hover:underline mt-0.5">
+                                                    {enviandoEvidenciaUrl === v.url ? "Enviando… ⏳" : "Enviar video →"}
+                                                  </span>
+                                                </span>
+                                              </button>
+                                              <a
+                                                href={v.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="shrink-0 text-[10px] text-carbon/50 hover:text-sauce underline px-1 py-0.5"
+                                                title="Ver el video antes de enviarlo"
+                                              >
+                                                Ver
+                                              </a>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {/* Pestaña de enlace web */}
+                                      {tabEvidencias === "web" && (() => {
+                                        const enlace = detalle.tipoNegocio ? ENLACES_WEB_EVIDENCIAS[detalle.tipoNegocio] : null;
+                                        if (!enlace) return null;
+                                        return (
+                                          <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-2.5 space-y-1.5">
+                                            <span className="text-xs font-bold text-verde-profundo block">
+                                              🌐 {enlace.titulo}
+                                            </span>
+                                            <span className="text-[10px] text-carbon/70 block leading-relaxed">
+                                              {enlace.descripcion}
+                                            </span>
+                                            <span className="text-[10px] text-sauce underline block break-all font-mono">
+                                              {enlace.url}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => void handleEnviarPaqueteEvidencias(p.id)}
+                                              disabled={enviandoPaqueteEvidencias}
+                                              className="mt-1 w-full text-center bg-white border border-emerald-300 text-verde-profundo font-bold text-[11px] py-1.5 px-2 rounded-md hover:bg-emerald-50 transition cursor-pointer"
+                                            >
+                                              {enviandoPaqueteEvidencias ? "Enviando… ⏳" : "Enviar enlace web por WhatsApp"}
+                                            </button>
+                                          </div>
+                                        );
+                                      })()}
+                                    </div>
+                                  );
+                                })
                               )}
                             </div>
                           </div>

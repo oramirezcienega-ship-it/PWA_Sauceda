@@ -9,7 +9,15 @@ import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { variantesTelefono, normalizarTelefono } from "@/lib/telefono";
 import { diagnosticoIA } from "@/lib/ia/agente";
-import { cargarProductosConVideos, enviarUnVideoCatalogo, type ProductoConVideos } from "@/lib/ia/videos-catalogo";
+import {
+  cargarProductosConVideos,
+  cargarProductosConEvidencias,
+  enviarUnVideoCatalogo,
+  enviarUnaFotoCatalogo,
+  enviarPaqueteEvidencias,
+  type ProductoConVideos,
+  type ProductoConEvidencias,
+} from "@/lib/ia/videos-catalogo";
 import { esConversacionPausada, esPausaAutomatica, setConversacionPausada } from "@/lib/ia/control-pausa";
 import type {
   ConversacionDetalle,
@@ -1776,5 +1784,88 @@ export async function enviarVideoCatalogoConversacion(
   } catch (err: any) {
     console.error("Error al enviar video del catálogo:", err);
     return { ok: false, error: err.message || "Error al enviar el video." };
+  }
+}
+
+/** Productos del catálogo con evidencias (fotos o videos), para el selector y envío de evidencias. */
+export async function listarEvidenciasCatalogoChat(): Promise<ProductoConEvidencias[]> {
+  await requireAdmin();
+  return cargarProductosConEvidencias(supabaseServidor(), { soloIA: false }).catch(() => []);
+}
+
+/** El asesor envía una foto del catálogo (por link público de Supabase Storage). */
+export async function enviarFotoCatalogoConversacion(
+  telefono: string,
+  productoId: string,
+  url: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  if (!telefono) return { ok: false, error: "Falta el teléfono." };
+  if (esCanalSocial(telefono)) return { ok: false, error: "Las fotos del catálogo solo se pueden enviar por WhatsApp." };
+
+  const sb = supabaseServidor();
+  try {
+    const producto = (await cargarProductosConEvidencias(sb, { soloIA: false })).find((p) => p.id === productoId);
+    const foto = producto?.fotos.find((f) => f.url === url);
+    if (!producto || !foto) return { ok: false, error: "Esa foto ya no está en el catálogo." };
+
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+    const agente = await nombreAgenteActual(sb);
+    const r = await enviarUnaFotoCatalogo(
+      sb,
+      { canal: telefono, telefono: normalizarTelefono(telefono), expedienteId, prospectoId, agente },
+      { ...foto, producto: producto.nombre },
+    );
+    if (!r.ok) return { ok: false, error: r.error ?? "No se pudo enviar la foto por WhatsApp." };
+
+    if (expedienteId) {
+      await registrarActividad(sb, {
+        expedienteId,
+        tipo: "mensaje",
+        titulo: "Foto del catálogo enviada por WhatsApp",
+        detalle: `Se envió la foto "${foto.titulo || producto.nombre}" (${producto.nombre}).`,
+      });
+      await avanzarAContactoInicialPorRespuesta(sb, expedienteId, agente);
+    }
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al enviar foto del catálogo:", err);
+    return { ok: false, error: err.message || "Error al enviar la foto." };
+  }
+}
+
+/** El asesor envía el paquete completo de evidencias del servicio cotizado (fotos + videos + link web). */
+export async function enviarPaqueteEvidenciasConversacion(
+  telefono: string,
+  params: {
+    productoId?: string;
+    tipoNegocio?: string | null;
+    incluirFotos?: boolean;
+    incluirVideos?: boolean;
+    incluirLinkWeb?: boolean;
+  }
+): Promise<{ ok: boolean; fotosEnviadas: number; videosEnviados: number; linkEnviado: boolean; error?: string }> {
+  await requireAdmin();
+  if (!telefono) return { ok: false, fotosEnviadas: 0, videosEnviados: 0, linkEnviado: false, error: "Falta el teléfono." };
+  if (esCanalSocial(telefono)) return { ok: false, fotosEnviadas: 0, videosEnviados: 0, linkEnviado: false, error: "Las evidencias del catálogo solo se pueden enviar por WhatsApp." };
+
+  const sb = supabaseServidor();
+  try {
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+    const agente = await nombreAgenteActual(sb);
+    const r = await enviarPaqueteEvidencias(
+      sb,
+      { canal: telefono, telefono: normalizarTelefono(telefono), expedienteId, prospectoId, agente },
+      params
+    );
+    if (!r.ok) return { ...r, error: r.error ?? "No se pudo enviar el paquete de evidencias." };
+
+    if (expedienteId) {
+      await avanzarAContactoInicialPorRespuesta(sb, expedienteId, agente);
+    }
+    return r;
+  } catch (err: any) {
+    console.error("Error al enviar paquete de evidencias:", err);
+    return { ok: false, fotosEnviadas: 0, videosEnviados: 0, linkEnviado: false, error: err.message || "Error al enviar las evidencias." };
   }
 }
