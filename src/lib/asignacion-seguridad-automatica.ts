@@ -201,22 +201,9 @@ export async function pasarLeadSeguridadAGerardoAutomatico(
         .eq("id", prosId);
     }
 
-    // Actualizar el agente en el último mensaje de la conversación del cliente
-    try {
-      const { data: ultMsg } = await sb
-        .from("mensajes_whatsapp")
-        .select("id")
-        .in("telefono", variantesTelefono(telCliente))
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (ultMsg?.id) {
-        await sb.from("mensajes_whatsapp").update({ agente: asesorNombre }).eq("id", ultMsg.id);
-      }
-    } catch {
-      /* ignore */
-    }
+    // NOTA: No sobreescribir 'agente' en el último mensaje de la IA a 'Gerardo',
+    // ya que eso hace que la protección de humano reciente (<4h) bloquee a Sofía.
+    // El lead ya queda correctamente asignado a Gerardo en expedientes y prospectos arriba.
 
     // 9. Registrar el envío en leads_envios_telegram (canal: 'whatsapp') para el badge del CRM
     const envioId = crypto.randomUUID();
