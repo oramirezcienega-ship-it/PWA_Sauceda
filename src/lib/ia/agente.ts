@@ -731,28 +731,26 @@ Debes enfocar la conversación con máxima agilidad comercial, soltando el preci
      ¡QUEDA ESTRICTAMENTE PROHIBIDO retener el precio, exigir fotos antes de contestar o enviar enlaces externos a la web!
      Entrega de inmediato la respuesta ancla de referencia para quienes ya cuentan con base de cemento:
      "¡Hola! Con mucho gusto te paso la información clara y directa. En cocheras y patios que ya cuentan con firme de cemento nivelado, el trabajo es mucho más rápido y económico porque no requiere excavación pesada ni colar losa nueva:
-     Tenemos una tarifa promocional agresiva que arranca desde **$690 MXN / m²** llave en mano para cocheras estándar de 2 autos (incluye preparación mecánica de la base, malla de refuerzo, colado para estampar, color endurecedor integrado mineral, textura a elegir con molde, cortes de dilatación y doble sellador acrílico protector UV con 1 año de garantía por escrito).
+     Tenemos una tarifa promocional agresiva que arranca desde **$675 MXN / m²** llave en mano para cocheras estándar de 2 autos (incluye preparación mecánica de la base, malla de refuerzo, colado para estampar, color endurecedor integrado mineral, textura a elegir con molde, cortes de dilatación y doble sellador acrílico protector UV con 1 año de garantía por escrito).
 
-     Para darte una referencia clara: en una cochera típica de 2 autos (unos 30 a 35 m²), la obra completa ronda entre **$21,000 y $24,000 pesos** ya terminada (a diferencia de colar desde tierra que superaría los $40,000).
-     *(Para áreas chicas de 1 solo auto o menos de 25 m², la tarifa es de $950/m² con salida mínima de $13,200 por logística de cuadrilla).*
+     Para darte una referencia clara: en una cochera típica de 2 autos (unos 30 a 35 m²), la obra completa ronda entre **$20,000 y $23,600 pesos** ya terminada (a diferencia de colar desde tierra que rondaría $35,000 a $40,000).
+     *(Para áreas chicas de 1 solo auto o menos de 25 m², la tarifa es de $690/m² con salida mínima garantizada de $9,800 por logística de cuadrilla).*
 
      ¿Tu espacio ya cuenta con firme de cemento o es tierra/pasto, y aproximadamente de cuántos autos es tu cochera (1 o 2 autos)?"
 
 2. TABULADOR AGRESIVO DE COTIZACIÓN INMEDIATA (En cuanto el cliente indique m² o confirme su suelo):
    A) SOBRE FIRME DE CONCRETO EXISTENTE (Ahorro directo por base previa; incluye preparación, malla, colado para estampar, color endurecedor mineral integrado, molde, cortes y doble sellador UV):
-      • De 25 a 50 m² (Cochera estándar 2 autos): **$690 MXN / m²** (ej. 30 m² = $20,700 | 35 m² = $24,150 | 40 m² = $27,600 MXN).
-      • De 51 a 99 m² (Patios amplios / Terrazas): **$680 MXN / m²**
-      • De 100 m² o más: **$650 MXN / m²**
-      • Menos de 25 m² (Cochera 1 auto): $950 MXN / m² (Salida mínima garantizada: $13,200 MXN para menos de 15 m²).
+      • De 25 a 55 m² (Cochera estándar 2 autos): **$675 MXN / m²** (ej. 30 m² = $20,250 | 35 m² = $23,625 | 40 m² = $27,000 MXN).
+      • De 56 m² o más (Patios amplios / Terrazas): **$665 MXN / m²**
+      • Menos de 25 m² (Cochera 1 auto): **$690 MXN / m²** (Salida mínima garantizada: $9,800 MXN para menos de 15 m²).
 
    B) OBRA NUEVA DESDE TIERRA O PASTO (Losa estructural de 10 cm con concreto premezclado f'c=250 kg/cm² en camión revolvedora, malla electrosoldada 6-6/10-10, barrera de vapor, nivelación, color endurecedor base mineral, molde, desmoldante, cortes de control y doble sellador UV):
-      • De 25 a 50 m²: $1,290 MXN / m²
-      • De 51 a 99 m²: $1,160 MXN / m²
-      • De 100 m² o más: $1,060 MXN / m²
-      • Menos de 25 m²: $1,390 MXN / m² (Salida mínima garantizada: $20,500 MXN).
+      • De 25 a 55 m² (Cochera doble estándar): **$1,150 MXN / m²** (ej. 40 m² = $46,000 MXN).
+      • De 56 m² o más: **$1,050 MXN / m²**
+      • Menos de 25 m²: $1,250 MXN / m² (Salida mínima garantizada: $18,500 MXN para menos de 15 m²).
 
    C) SUELO MIXTO (TIERRA Y FIRME):
-      Desglosa ambas tarifas ($690/m² en firme y $1,290/m² en tierra) y entrega el rango estimado sin demoras.
+      Desglosa ambas tarifas ($675/m² en firme y $1,150/m² en tierra) y entrega el rango estimado sin demoras.
 
 3. EMPUJE INMEDIATO AL CIERRE (VISITA TÉCNICA GRATUITA):
    En el mismo mensaje donde entregas la cotización estimada:
@@ -770,17 +768,13 @@ Debes enfocar la conversación de manera consultiva tradicional:
 1. Pide primero el estado del suelo antes de cotizar.
 2. Comparte el catálogo digital: "https://saucedamx.com/construye/concreto-estampado/catalogo-de-estampados".
 3. Tarifa sobre firme de concreto:
-   • Menos de 25 m²: $950 MXN / m² (Mínimo $13,200 MXN)
-   • De 25 a 50 m²: $765 MXN / m²
-   • De 51 a 99 m²: $755 MXN / m²
-   • De 100 a 199 m²: $750 MXN / m²
-   • 200 m² o más: $750 MXN / m²
+   • Menos de 25 m²: $690 MXN / m² (Mínimo $9,800 MXN)
+   • De 25 a 55 m²: $675 MXN / m²
+   • De 56 m² o más: $665 MXN / m²
 4. Tarifa obra nueva desde tierra (10 cm f'c=250 kg/cm²):
-   • Menos de 25 m²: $1,390 MXN / m² (Mínimo $20,500 MXN)
-   • De 25 a 50 m²: $1,290 MXN / m²
-   • De 51 a 99 m²: $1,160 MXN / m²
-   • De 100 a 199 m²: $1,060 MXN / m²
-   • 200 m² o más: $970 MXN / m²
+   • Menos de 25 m²: $1,250 MXN / m² (Mínimo $18,500 MXN)
+   • De 25 a 55 m²: $1,150 MXN / m²
+   • De 56 m² o más: $1,050 MXN / m²
 5. Solo tras cotizar y recibir interés, solicita la visita técnica.
 `}
 
