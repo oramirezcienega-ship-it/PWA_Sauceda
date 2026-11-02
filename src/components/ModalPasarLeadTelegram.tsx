@@ -82,8 +82,8 @@ export function ModalPasarLeadTelegram({ telefono, atiendeActual, alCerrar, alEn
         tipo: "ok",
         texto:
           canal === "whatsapp"
-            ? `Se abrió tu WhatsApp con el mensaje para ${asesor.nombre}: pulsa enviar ahí. Se le asignó el lead, Sofía quedó en pausa y se registró en la bitácora.`
-            : `Enviado a ${asesor.nombre} por Telegram. Se le asignó el lead, Sofía quedó en pausa y se registró en la bitácora.`,
+            ? `Se abrió tu WhatsApp con el mensaje para ${asesor.nombre}: pulsa enviar ahí. Sofía le avisó al cliente con el teléfono del asesor y quedó en pausa.`
+            : `Enviado a ${asesor.nombre} por Telegram. Sofía le avisó al cliente con el teléfono del asesor y quedó en pausa.`,
         avisos: r.avisos,
       });
       await alEnviado(r.envio);
@@ -276,6 +276,7 @@ export function ModalPasarLeadTelegram({ telefono, atiendeActual, alCerrar, alEn
             <div className="rounded-xl bg-slate-50 border border-carbon/10 p-2.5 text-[11px] text-carbon/70 space-y-0.5">
               <div className="font-bold text-carbon/80">Al enviar:</div>
               <div>• Se asigna la conversación y el lead a <strong>{asesor?.nombre || "el asesor"}</strong>.</div>
+              <div>• Sofía le envía un mensaje al cliente con el nombre y teléfono directo del asesor asignado para que lo reconozca.</div>
               <div>• Se pausa a Sofía para este cliente.</div>
               <div>
                 • Queda registrado en la bitácora{" "}

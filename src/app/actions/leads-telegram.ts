@@ -17,6 +17,115 @@ import {
 } from "@/lib/lead-telegram";
 import { alternarPausaIA, asignarAgente } from "@/app/actions/conversaciones";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
+import { enviarWhatsAppTexto } from "@/lib/whatsapp";
+import { enviarMessengerTexto } from "@/lib/messenger";
+import { enviarInstagramTexto } from "@/lib/instagram";
+
+
+function formatearTelefonoParaCliente(tel: string): string {
+  const d = (tel || "").replace(/\D/g, "");
+  let diezd = d;
+  if (d.startsWith("521") && d.length === 13) {
+    diezd = d.slice(3);
+  } else if (d.startsWith("52") && d.length >= 12) {
+    diezd = d.slice(2);
+  } else if (d.length > 10) {
+    diezd = d.slice(-10);
+  }
+  if (diezd.length === 10) {
+    return `${diezd.slice(0, 3)} ${diezd.slice(3, 6)} ${diezd.slice(6)}`;
+  }
+  return tel.trim();
+}
+
+async function notificarClientePaseAsesor(params: {
+  sb: ReturnType<typeof supabaseServidor>;
+  telefonoCliente: string;
+  clienteNombre?: string;
+  asesorNombre: string;
+  asesorTelefono?: string;
+  expedienteId?: string | null;
+  prospectoId?: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { sb, telefonoCliente, clienteNombre, asesorNombre, asesorTelefono, expedienteId, prospectoId } = params;
+    const telLimpio = telefonoCliente.trim();
+    if (!telLimpio) return { ok: false, error: "Sin teléfono de cliente." };
+
+    const primerNombre = (clienteNombre || "").trim().split(/\s+/)[0] || "";
+    const esNombreGenerico = !primerNombre || /^(cliente|prospecto|\d+)$/i.test(primerNombre);
+    const saludo = esNombreGenerico ? "¡Hola! 🤝" : `¡Hola, ${primerNombre}! 🤝`;
+    const telFormateado = formatearTelefonoParaCliente(asesorTelefono || "");
+
+    const bloqueTelefono = telFormateado
+      ? `📱 *Teléfono directo / WhatsApp:* ${telFormateado}\n\nTe comparto su número para que lo reconozcas: *en unos momentos te estará mandando un mensaje o marcando directamente de esa línea* para coordinarse contigo. Por favor tómale la llamada o revisa su mensaje con toda confianza.`
+      : `*En unos momentos te estará mandando un mensaje o marcando directamente* para coordinarse contigo.`;
+
+    const texto = `${saludo} Te habla Sofía de SAUCEDA.
+
+Para brindarte la mejor atención y dar seguimiento puntual a tu solicitud, he canalizado tu caso con nuestro especialista:
+
+👤 *Asesor asignado:* ${asesorNombre}
+${bloqueTelefono}
+
+¡Quedas en excelentes manos! 💚`;
+
+    let r: { ok: boolean; error?: string; messageId?: string; errorDetail?: string } = { ok: false };
+
+    if (telLimpio.startsWith("messenger:")) {
+      const psid = telLimpio.slice(10);
+      const res = await enviarMessengerTexto(psid, texto);
+      r = { ok: res.ok, error: res.error };
+    } else if (telLimpio.startsWith("instagram:")) {
+      const igsid = telLimpio.slice(10);
+      const res = await enviarInstagramTexto(igsid, texto);
+      r = { ok: res.ok, error: res.error };
+    } else {
+      const res = await enviarWhatsAppTexto(telLimpio, texto);
+      r = {
+        ok: res.ok,
+        error: res.error,
+        messageId: res.messageId,
+        errorDetail: res.errorDetail,
+      };
+    }
+
+    const estadoFinal = r.ok
+      ? "enviado"
+      : r.errorDetail
+      ? `error:${r.errorDetail}`
+      : r.error
+      ? `error:${r.error}`
+      : "error";
+
+    const esSocial = telLimpio.startsWith("messenger:") || telLimpio.startsWith("instagram:");
+    const telDb = esSocial ? telLimpio : normalizarTelefono(telLimpio);
+
+    const { error: insertErr } = await sb.from("mensajes_whatsapp").insert({
+      telefono: telDb,
+      texto,
+      direccion: "out",
+      expediente_id: expedienteId || null,
+      prospecto_id: prospectoId || null,
+      estado: estadoFinal,
+      agente: "IA",
+      wa_message_id: r.messageId || null,
+    });
+
+    if (insertErr) {
+      console.error("Error al registrar mensaje de pase a asesor en DB:", insertErr);
+    }
+
+    if (!r.ok) {
+      return { ok: false, error: r.errorDetail || r.error || "No se pudo entregar el mensaje al cliente." };
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error en notificarClientePaseAsesor:", err);
+    return { ok: false, error: err?.message || "Fallo inesperado al notificar al cliente." };
+  }
+}
 
 export interface EnvioLeadTelegram {
   id: string;
@@ -128,7 +237,7 @@ export async function enviarLeadTelegramAction(input: {
 
     const { data: asesor } = await sb
       .from("perfiles")
-      .select("id, nombre, telegram_chat_id")
+      .select("id, nombre, telegram_chat_id, telefono, telefono_whatsapp")
       .eq("id", input.asesorId)
       .maybeSingle();
     if (!asesor) return { ok: false, error: "No se encontró al asesor." };
@@ -221,12 +330,32 @@ export async function enviarLeadTelegramAction(input: {
     const asig = await asignarAgente(input.telefono, asesor.nombre);
     if (!asig.ok) avisos.push(`No se pudo asignar la conversación: ${asig.error}`);
 
+    // 4.1 Notificación automática al cliente de parte de Sofía
+    const resNotif = await notificarClientePaseAsesor({
+      sb,
+      telefonoCliente: input.telefono,
+      clienteNombre: info.datos.clienteNombre,
+      asesorNombre: asesor.nombre,
+      asesorTelefono: asesor.telefono_whatsapp || asesor.telefono || "",
+      expedienteId: info.datos.expedienteId,
+      prospectoId: info.datos.prospectoId,
+    });
+    if (!resNotif.ok && resNotif.error) {
+      avisos.push(`Aviso al cliente: ${resNotif.error}`);
+    }
+
     // 5. Bitácora (el título refleja el estado actual por si el asesor ya confirmó)
     const { data: actual } = await sb.from("leads_envios_telegram").select("*").eq("id", envioId).maybeSingle();
     let actividadId: string | null = null;
     if (fila.expediente_id || fila.prospecto_id) {
       const detalle = [
-        `Enviado por ${yo.nombre || "—"}. Se asignó a ${asesor.nombre} y se pausó a Sofía.`,
+        `Enviado por ${yo.nombre || "—"}. Se asignó a ${asesor.nombre}${
+          resNotif.ok
+            ? " (Sofía notificó al cliente de su asignación por WhatsApp)"
+            : resNotif.error
+            ? ` (Aviso al cliente no entregado: ${resNotif.error})`
+            : ""
+        } y se pausó a Sofía.`,
         `Incluye: ficha del cliente, conversación (${info.datos.totalMensajes} mensajes, TXT)${
           compEnviadas ? `, ${compEnviadas} comparativa(s) de precios` : ""
         }${fotosEnviadas ? ` y ${fotosEnviadas} foto(s) del cliente` : ""}.`,
@@ -258,6 +387,7 @@ export async function enviarLeadTelegramAction(input: {
 
     if (fila.expediente_id) revalidatePath(`/expedientes/${fila.expediente_id}`);
     if (fila.prospecto_id) revalidatePath(`/prospectos/${fila.prospecto_id}`);
+    revalidatePath("/conversaciones");
 
     return { ok: true, avisos, envio: guardado ? aEnvio(guardado) : undefined };
   } catch (err: any) {
@@ -282,7 +412,7 @@ export async function registrarLeadWhatsAppAction(input: {
     const sb = supabaseServidor();
     const avisos: string[] = [];
 
-    const { data: asesor } = await sb.from("perfiles").select("id, nombre").eq("id", input.asesorId).maybeSingle();
+    const { data: asesor } = await sb.from("perfiles").select("id, nombre, telefono, telefono_whatsapp").eq("id", input.asesorId).maybeSingle();
     if (!asesor) return { ok: false, error: "No se encontró al asesor." };
 
     const yo = await nombreUsuarioActual(sb);
@@ -313,10 +443,29 @@ export async function registrarLeadWhatsAppAction(input: {
     const asig = await asignarAgente(input.telefono, asesor.nombre);
     if (!asig.ok) avisos.push(`No se pudo asignar la conversación: ${asig.error}`);
 
+    const resNotif = await notificarClientePaseAsesor({
+      sb,
+      telefonoCliente: input.telefono,
+      clienteNombre: info.datos.clienteNombre,
+      asesorNombre: asesor.nombre,
+      asesorTelefono: asesor.telefono_whatsapp || asesor.telefono || "",
+      expedienteId: info.datos.expedienteId,
+      prospectoId: info.datos.prospectoId,
+    });
+    if (!resNotif.ok && resNotif.error) {
+      avisos.push(`Aviso al cliente: ${resNotif.error}`);
+    }
+
     let actividadId: string | null = null;
     if (fila.expediente_id || fila.prospecto_id) {
       const detalle = [
-        `Enviado por ${yo.nombre || "—"} desde su WhatsApp. Se asignó a ${asesor.nombre} y se pausó a Sofía.`,
+        `Enviado por ${yo.nombre || "—"} desde su WhatsApp. Se asignó a ${asesor.nombre}${
+          resNotif.ok
+            ? " (Sofía notificó al cliente de su asignación por WhatsApp)"
+            : resNotif.error
+            ? ` (Aviso al cliente no entregado: ${resNotif.error})`
+            : ""
+        } y se pausó a Sofía.`,
         `Incluye: ficha del cliente y resumen (la conversación y las fotos quedan en el CRM).`,
         fila.nota ? `Nota: ${fila.nota}` : "",
         fila.resumen ? `Resumen:\n${fila.resumen}` : "",
@@ -348,6 +497,7 @@ export async function registrarLeadWhatsAppAction(input: {
 
     if (fila.expediente_id) revalidatePath(`/expedientes/${fila.expediente_id}`);
     if (fila.prospecto_id) revalidatePath(`/prospectos/${fila.prospecto_id}`);
+    revalidatePath("/conversaciones");
 
     return { ok: true, avisos, envio: guardado ? aEnvio(guardado) : undefined };
   } catch (err: any) {
