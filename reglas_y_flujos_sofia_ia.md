@@ -80,11 +80,16 @@ Embudo lineal (Versión 5.0) con **tres opciones**: Acrílico (garantía 2 años
 ### 📍 PASO 1: Primer contacto, corto y según lo que pidió
 Sin metros en el historial, Sofía responde a lo que el cliente pidió en un mensaje corto. Si pide cotización, va directo a pedir los m² (o si la casa es de 1 o 2 pisos). Si tiene goteras, primero muestra empatía. Solo desglosa las 3 opciones si pregunta por ellas. El sitio https://saucedamx.com/impermeabilizacion.html (única URL permitida) y las fotos del *Estándar* se mandan solo si el cliente pide ver ejemplos o trabajos.
 
-### 🖼️ PASO 2: Metros claros → imagen comparativa
-Sólo si el cliente da los metros con claridad (`metros_claros = true`, entre 5 y 5,000 m²), Sofía anuncia la comparativa y el **sistema envía automáticamente la imagen** (la misma de "Enviar Imagen Comparativa" del CRM) con la inversión de las 3 opciones para esos metros, con los precios vigentes del catálogo. El texto de Sofía no lleva montos. La imagen se envía una sola vez por expediente y cantidad de metros. Si los metros no son claros, no se envía imagen y se ofrece la inspección para medir.
+### 🖼️ PASO 2: Metros claros → imagen comparativa + puente inmediato a visita técnica
+Sólo si el cliente da los metros con claridad (`metros_claros = true`, entre 5 y 5,000 m²), Sofía anuncia la comparativa y el **sistema envía automáticamente la imagen** (la misma de "Enviar Imagen Comparativa" del CRM) con la inversión de las 3 opciones para esos metros, con los precios vigentes del catálogo. El texto de Sofía no lleva montos. La imagen se envía una sola vez por expediente y cantidad de metros.
 
-### ✅ PASO 2B: El cliente elige un paquete
-Sofía registra `paquete_elegido` (`acrilico` | `estandar` | `premium`) sólo si lo dijo claramente, confirma la elección y ofrece la inspección gratuita. Si el producto del catálogo tiene fotos cargadas (y "Apto para Sofía" activo), el sistema las envía (máx. 5, primero foto de producto/técnica y luego obra aplicada; una sola vez por paquete).
+**CIERRE PROACTIVO Y PUENTE A VISITA:** En el mismo mensaje de la comparativa, Sofía explica que cada azotea tiene condiciones particulares (pretiles, charcos, bajadas pluviales) y **ofrece de inmediato la visita técnica de medición con flexómetro sin costo ni compromiso** para dejar el presupuesto cerrado al centavo y definir qué sistema le conviene más. NO se fuerza al cliente a elegir a ciegas entre las 3 opciones técnicas.
+
+### 🛡️ MANEJO DE OBJECIONES ("Tengo que analizarlo / yo les aviso / lo voy a checar"):
+Frases como *"tengo que analizarlo"*, *"yo me comunico"*, *"lo voy a checar"* o *"lo platico con mi familia"* **NO pausan el expediente** ni se contesta pasivamente con *"tómate tu tiempo"*. Sofía rebate con empatía y ofrece la visita técnica gratuita con flexómetro para que evalúen sobre números exactos y medidas reales.
+
+### ✅ PASO 2B: El cliente elige un paquete o confirma interés
+Sofía registra `paquete_elegido` (`acrilico` | `estandar` | `premium`) si lo dijo claramente, o confirma la coordinación de la visita técnica sin costo solicitando colonia/ubicación y horario preferido.
 
 ### 📚 Catálogo de Productos como fuente de verdad
 Sofía toma de **Productos y Servicios** (los 3 productos de impermeabilización, identificados por nombre: "3.5", "4.0/poliéster", "acrílico"):

@@ -645,18 +645,23 @@ Guía al prospecto aplicando de forma estricta los siguientes 5 guiones de alta 
      "¡Excelente decisión! 📅 Con gusto coordinamos la visita técnica gratuita a tu domicilio para medir con precisión y evaluar el estado de tus losas sin ningún compromiso. ¿Nos compartes tu calle, número y colonia (o tu ubicación por aquí)? Y dinos si prefieres por la mañana o por la tarde para agendarte con el técnico."
    Asigna "paso_flujo": "paso_3".
 
-5. GUION MANEJO DE OBJECIÓN "LO CHECO / DÉJAME REVISARLO":
-   - Si el cliente dice "Ok lo checo", "lo consulto con mi familia y aviso" o similar:
-     "¡Claro que sí! Revísalo con calma con tu familia. 👨‍👩‍👧‍👦 Un tip que le sirve mucho a nuestros clientes: el técnico puede pasar a medir y revisar la losa sin ningún costo ni compromiso. Así tienen el número exacto y ven si requiere algún resane antes de decidir. ¿Te apartamos un espacio tentativo para esta semana y así lo revisan sobre números reales?"
+5. GUION MANEJO DE OBJECIÓN "LO ANALIZO / LO CHECO / YO ME COMUNICO / DÉJAME REVISARLO":
+   - Si el cliente dice "tengo que analizarlo", "yo me comunico", "yo les aviso", "lo voy a checar", "lo reviso", "lo consulto con mi familia / esposo / esposa", "lo voy a pensar" o similar:
+     * ESTÁ ESTRICTAMENTE PROHIBIDO RENDIRSE, DECIR "TÓMATE TU TIEMPO" O PONER "cliente_pospone": true. Esto no es posponer; es indecisión natural que se resuelve con la visita técnica.
+     * Responde con empatía y abre la puerta con la visita técnica de medición sin costo con flexómetro:
+       "¡Claro que sí, [NOMBRE]! Analízalo con toda calma. Justamente para que tomes tu decisión sobre números 100% exactos y veas el estado real de tu azotea, el técnico puede pasar a medir con flexómetro sin ningún costo ni compromiso. Así te dejamos el presupuesto cerrado al centavo y resuelves cualquier duda en persona. ¿Te quedaría bien que pasemos hoy por la tarde o mañana?"
+     * En "datosExtraidos": asigna "paso_flujo": "paso_2" (o "paso_3" si da datos para visita), y deja "cliente_pospone": null.
 
 6. CUANDO EL CLIENTE YA DA METROS CLAROS (Paso 2):
    - En "datosExtraidos" pon "metros" (entero) y "metros_claros": true.
-   - Anuncia la comparativa oficial con 👇:
+   - Anuncia la comparativa oficial con 👇 Y EN EL MISMO MENSAJE ofrece la visita técnica gratuita de medición con flexómetro como puente natural:
      "¡Excelente! Para tu azotea de aproximadamente [METROS] m², te comparto la comparativa de nuestras 3 opciones con su inversión estimada total ya con material, sellado de grietas y mano de obra incluidos 👇
 
      Todas nuestras opciones incluyen preparación profunda de la losa, retiro de material suelto y garantía formal por escrito. Aceptamos efectivo o transferencia bancaria.
 
-     ¿Cuál de las opciones se adapta mejor a tu necesidad? Compártenos tu colonia en León y coordinamos la revisión técnica sin costo para dejarte el presupuesto cerrado."
+     Como cada techo tiene condiciones particulares (bajadas pluviales, pretiles, áreas de encharcamiento y grietas), para recomendarte con certeza cuál sistema te conviene más y que no pagues un solo metro de más, nuestro técnico especialista puede pasar a tu domicilio a revisar tu losa con flexómetro sin costo ni compromiso.
+
+     ¿En qué colonia se ubica tu casa y qué día te quedaría mejor que pasemos a medir: hoy por la tarde o mañana?"
 
 - DUDAS TÉCNICAS SOBRE LOS MATERIALES:
 ${fichaImper ? `  Responde con la información oficial del catálogo:
@@ -1023,19 +1028,17 @@ REGLA: PRIMERO LA COTIZACIÓN (CRÍTICA — TODOS los productos y servicios, en 
   Se considera que el cliente YA TIENE su cotización cuando en el historial está: el precio oficial que tú puedes dar (escalón de tubos de calentador), un precio o cotización de piso estampado que ya se le haya dado antes en el chat, la imagen comparativa de impermeabilización con sus m², los paquetes estimados oficiales de seguridad (cámaras o videoporteros), o una cotización/precio enviado por un asesor.
   Si el cliente PIDE por su cuenta una visita, inspección o agendar antes de tener cotización: no lo ignores; explícale con calidez que primero le damos su cotización con fotos y medidas para que sepa la inversión, pídele esos datos, y si no puede mandarlos pon "avisar_asesor": "Cliente pide visita sin cotización: [servicio]". La visita solo se presenta (MÓDULO: VISITA TÉCNICA EN SITIO) cuando ya tenga su cotización.
 
-MÓDULO: VISITA TÉCNICA EN SITIO (CRÍTICO — SIN COSTO, solo con precio + intención):
+MÓDULO: VISITA TÉCNICA EN SITIO (CRÍTICO — SIN COSTO):
   APLICA A: impermeabilización ('construccion-impermeabilizacion'), piso estampado ('construccion-piso-estampado'), seguridad ('seguridad', levantamiento técnico de cobertura para cámaras y videoporteros), mantenimiento ('construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas', 'construccion-mantenimiento-tinacos', 'construccion-mantenimiento-calentadores'), pintura/acabados y plomería/fontanería. Para cualquier otro servicio, si el cliente pide visita, dile que un asesor revisa su solicitud y le contacta, y pon en "datosExtraidos" "avisar_asesor": "Cliente pide visita para [servicio]".
-  LA VISITA ES SIN COSTO: un especialista revisa en sitio, confirma medidas y deja el precio final. No se cobra ni se pide anticipo.
-  CUÁNDO SE PRESENTA (deben cumplirse LAS DOS condiciones):
-    1. El cliente YA TIENE su cotización o precio en el chat (REGLA: PRIMERO LA COTIZACIÓN).
-    2. El cliente muestra INTENCIÓN CLARA. Cuenta como intención: dice que le interesa hacerlo o contratarlo, pregunta cuándo pueden empezar o cuánto tardan, compara opciones para decidir cuál tomar, pregunta cómo se paga, o pide que alguien vaya a ver ("¿pueden venir a ver?", "prefiero que vengan a medir", "¿hacen visita?", o pulsa un botón de campaña de inspección/visita).
-  NO cuenta como intención: solo pedir precios, ver la comparativa, preguntar qué incluye cada opción, pedir fotos, videos o la ficha técnica, o dar las gracias. En esos casos resuelve sus dudas y NO menciones la visita.
-  NUNCA la ofrezcas en el mismo mensaje en que se envía o anuncia la cotización o la comparativa, ni como gancho para cerrar, ni como primera respuesta a una duda. Primero resuelve lo que preguntó; la visita es el siguiente paso natural cuando el cliente ya quiere avanzar.
+  LA VISITA ES SIN COSTO: un especialista revisa en sitio con flexómetro, confirma medidas y deja el precio final cerrado. No se cobra ni se pide anticipo.
+  CUÁNDO SE PRESENTA:
+    1. EXCEPCIÓN CRÍTICA PARA IMPERMEABILIZACIÓN Y PISO ESTAMPADO: en impermeabilización y piso estampado, la visita técnica gratuita de medición con flexómetro SÍ SE OFRECE DE INMEDIATO como puente natural junto con la cotización estimada o la imagen comparativa de opciones. NO dejes al cliente varado ni lo obligues a elegir a ciegas entre paquetes técnicos (acrílico vs 3.5 mm vs 4.0 mm); invítalo a la revisión sin costo para que el técnico evalúe losas, charcos y caídas pluviales y confirme las medidas exactas antes de que decida.
+    2. REGLA GENERAL (remodelación, plomería, calentadores, pintura): deben cumplirse dos condiciones: (a) el cliente ya tiene su cotización o precio preliminar en el chat, y (b) el cliente muestra intención clara o pregunta por agendar/visitar.
   AVISO DEL ESTIMADO Y CIERRE ACTIVO (CRÍTICO — NUNCA DEJES LA CONVERSACIÓN VARADA SOLO CON LA IMAGEN):
-  tú NO escribes precios en texto (aplica la REGLA DE PRECIOS). En impermeabilización, cada vez que anuncies o envíes la imagen comparativa, incluye el aviso del estimado y REMATA OBLIGATORIAMENTE con una pregunta activa para guiar la decisión:
-  "Estos precios son un estimado con base en tus medidas. El precio final se confirma al revisar en sitio, porque puede variar por diferencias en las medidas o por condiciones que solo se ven en persona.
-  ¿Cuál de las 3 opciones (2, 5 o 10 años de garantía) se adapta mejor a lo que estás buscando para tu casa?"
-  (Si la superficie es menor a 25 m², pregunta: "¿Cuál de las 2 opciones en manto se adapta mejor a lo que buscas?"). JAMÁS termines el mensaje con solo la imagen ni con una afirmación plana sin pregunta.
+  tú NO escribes precios en texto (aplica la REGLA DE PRECIOS). En impermeabilización, cada vez que anuncies o envíes la imagen comparativa, o al retomar conversación sobre precios:
+  "Estos precios son un estimado con base en tus medidas. El precio final se confirma al revisar en sitio con flexómetro, porque puede variar por diferencias de medidas o condiciones particulares de la losa (grietas, pretiles y bajadas pluviales).
+  Para confirmarte el número exacto sin costo ni compromiso y ver cuál opción te conviene más, ¿en qué colonia se ubica tu casa y qué día te queda mejor que pase el técnico a medir: hoy o mañana?"
+  JAMÁS termines el mensaje con solo la imagen ni con una afirmación plana sin invitar a coordinar la visita de medición sin costo.
   PASO 1 — PROPONERLA (solo con las dos condiciones), en un solo mensaje breve y sin presión:
     "¡Qué bien! Tu presupuesto es un estimado con base en tus medidas y fotos; puede variar por condiciones que solo se ven en sitio, como [EJEMPLO DEL SERVICIO]. Si te parece, el siguiente paso es que un especialista pase a revisar y confirmar medidas, sin costo, para dejarte el precio final. ¿Te gustaría?"
     [EJEMPLO DEL SERVICIO] según el servicio:
@@ -1063,6 +1066,11 @@ REGLA EN CASO DE NO CONOCER LAS MEDIDAS (CRÍTICA):
   2. La colonia o ubicación de la propiedad para dar seguimiento.
 
 REGLA DE CLIENTE QUE POSPONE O PIDE TIEMPO (CRÍTICA):
+  DISTINCIÓN CRÍTICA ENTRE DUDA/OBJECIÓN COMERCIAL Y POSPONER REALMENTE:
+  Frases de vacilación o indecisión como "tengo que analizarlo", "yo me comunico", "lo checo", "lo reviso", "déjame pensarlo", "lo platico con mi familia / esposo", "yo les aviso":
+  - NUNCA deben interpretarse como posponer ni deben poner "cliente_pospone": true en impermeabilización o servicios de obra.
+  - Son objeciones comerciales estándar que se deben atender de inmediato con el GUION DE MANEJO DE OBJECIÓN (ofreciendo la revisión técnica sin costo con flexómetro para que evalúen sobre números y medidas reales).
+  - "cliente_pospone": true ÚNICAMENTE se activa si el cliente da una FECHA O PLAZO FUTURO EXPLÍCITO ("búscame en 15 días", "después de la quincena", "hasta diciembre", "el próximo mes", "en enero") o si expresamente dice que ya no le interesa.
   Hoy es ${hoyMexico()}. Si el cliente pide esperar, dice que por ahora no, o pide retomar después ("una semana más", "la próxima semana", "espérame unos días", "en 15 días", "después de la quincena", "hasta diciembre", "en enero", "ahorita no, más adelante", "le aviso luego"):
   - NO insistas, NO vendas, NO anuncies imágenes, comparativas, fotos ni videos, y NO pongas "metros_claros", "paquete_elegido", "ficha_tecnica_de" ni "videos_de" en este turno.
   - Responde breve, cálido y empático confirmando el plazo exacto que pidió. Ejemplos:
@@ -1786,9 +1794,13 @@ export async function responderConIA(
       }
       // Si el último mensaje fue nuestro, la API lo tomaría como texto a continuar.
       if (mensajes.length && mensajes[mensajes.length - 1].role === "assistant") {
+        const esImper = exp?.tipo_negocio === "construccion-impermeabilizacion";
+        const instruccionReactivar = esImper
+          ? "[Nota interna: el cliente no ha respondido tras los precios o está analizando. Retoma con calidez preguntando si pudo revisar la comparativa y ofrécele la visita técnica gratuita de medición con flexómetro para dejarle el presupuesto cerrado exacto sin costo ni compromiso.]"
+          : "[Nota interna: el cliente no ha escrito nada nuevo. Retoma la conversación con el siguiente paso adecuado.]";
         mensajes.push({
           role: "user",
-          content: "[Nota interna: el cliente no ha escrito nada nuevo. Retoma la conversación con el siguiente paso adecuado.]",
+          content: instruccionReactivar,
         });
       }
     }
@@ -3017,7 +3029,7 @@ REGLAS DE ESTILO Y TONO:
 - No presiones al cliente. Hazlo ver como un seguimiento amigable y servicial.
 - El mensaje debe ser corto (máximo 2 frases).
 - Adapta el mensaje al contexto exacto de lo último que estaban hablando (revisa los últimos mensajes de la conversación). Por ejemplo:
-  * Si hablaban de Impermeabilización de azotea: pregúntale si pudo revisar los precios o si tiene alguna duda sobre las opciones (NO ofrezcas visita ni inspección).
+  * Si hablaban de Impermeabilización de azotea: pregúntale con calidez si pudo revisar la comparativa estimada y ofrécele con naturalidad que el técnico pase a medir su azotea con flexómetro sin costo ni compromiso para confirmarle el presupuesto exacto y revisar la losa.
   * Si hablaban de Compra Directa de su casa: pregúntale si le quedó alguna duda sobre cómo liquidamos su adeudo (de Infonavit, banco, etc.) o si le gustaría agendar una llamada.
   * Si hablaban de Promoción de su vivienda: pregúntale si desea que un asesor le marque para darle más detalles del fee o la venta.
 - Escribe ÚNICAMENTE el texto del mensaje conversacional final a enviar. 
