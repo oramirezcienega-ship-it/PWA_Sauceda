@@ -118,27 +118,7 @@ export async function enviarWhatsAppProveedor(
     }
   }
 
-  // 1. Prioridad Proveedores: Evolution API (Línea Móvil Secundaria sin restricción de 24 h de Meta)
-  try {
-    const { enviarMensajeTextoEvolution } = await import("@/lib/evolution-api");
-    const evoRes = await enviarMensajeTextoEvolution(prov.telefono, texto);
-    if (evoRes.ok) {
-      await sb.from("mensajes_whatsapp").insert({
-        telefono: prov.telefono,
-        texto,
-        direccion: "out",
-        proveedor_id: prov.id,
-        estado: "enviado",
-        agente,
-        wa_message_id: evoRes.messageId || null,
-      });
-      return { ok: true, via: "texto" };
-    }
-  } catch (err) {
-    console.warn("[WhatsApp proveedores] Falló envío por Evolution API, intentando línea Meta:", err);
-  }
-
-  // 2. Si la ventana de 24h está abierta en la línea oficial de Meta
+  // 1. Prioridad Línea Oficial Meta: si la ventana de 24 h está abierta, enviar texto directo
   if (await ventanaAbiertaProveedor(sb, prov.id)) {
     const r = await enviarWhatsAppTexto(prov.telefono, texto);
     if (r.ok) {
@@ -155,33 +135,55 @@ export async function enviarWhatsAppProveedor(
     }
   }
 
-  // 3. Fallback: aviso por plantilla aprobada Meta y el mensaje completo queda en espera
+  // 2. Línea Oficial Meta: ventana de 24 h cerrada -> enviar plantilla oficial registrada (aviso_proveedor)
+  // y dejar el mensaje completo en espera (pendiente_ventana) para liberarse automáticamente cuando el proveedor responda.
   const nombre = (prov.contactoNombre || prov.nombre).split(/\s+/)[0];
   const resumen = d.resumen.replace(/\s+/g, " ").trim().slice(0, 900) || "tienes un aviso nuevo";
   const r = await enviarWhatsAppPlantilla(prov.telefono, PLANTILLA_AVISO, IDIOMA_PLANTILLA, [nombre, resumen]);
-  if (!r.ok) {
-    return { ok: false, error: `No se pudo mandar el mensaje al proveedor por Evolution ni por plantilla Meta: ${r.errorDetail || r.error || "error"}` };
+  if (r.ok) {
+    await sb.from("mensajes_whatsapp").insert([
+      {
+        telefono: prov.telefono,
+        texto: `[Plantilla: ${PLANTILLA_AVISO}] Hola ${nombre}, ${resumen}`,
+        direccion: "out",
+        proveedor_id: prov.id,
+        estado: "enviado",
+        agente,
+        wa_message_id: r.messageId || null,
+      },
+      {
+        telefono: prov.telefono,
+        texto,
+        direccion: "out",
+        proveedor_id: prov.id,
+        estado: ESTADO_PENDIENTE_VENTANA,
+        agente,
+      },
+    ]);
+    return { ok: true, via: "plantilla" };
   }
-  await sb.from("mensajes_whatsapp").insert([
-    {
-      telefono: prov.telefono,
-      texto: `[Plantilla: ${PLANTILLA_AVISO}] Hola ${nombre}, ${resumen}`,
-      direccion: "out",
-      proveedor_id: prov.id,
-      estado: "enviado",
-      agente,
-      wa_message_id: r.messageId || null,
-    },
-    {
-      telefono: prov.telefono,
-      texto,
-      direccion: "out",
-      proveedor_id: prov.id,
-      estado: ESTADO_PENDIENTE_VENTANA,
-      agente,
-    },
-  ]);
-  return { ok: true, via: "plantilla" };
+
+  // 3. Fallback: si la línea oficial de Meta falló, intentar por Evolution API (línea de rescate)
+  try {
+    const { enviarMensajeTextoEvolution } = await import("@/lib/evolution-api");
+    const evoRes = await enviarMensajeTextoEvolution(prov.telefono, texto);
+    if (evoRes.ok) {
+      await sb.from("mensajes_whatsapp").insert({
+        telefono: prov.telefono,
+        texto,
+        direccion: "out",
+        proveedor_id: prov.id,
+        estado: "enviado",
+        agente,
+        wa_message_id: evoRes.messageId || null,
+      });
+      return { ok: true, via: "texto" };
+    }
+  } catch (err) {
+    console.warn("[WhatsApp proveedores] Falló fallback Evolution API:", err);
+  }
+
+  return { ok: false, error: `No se pudo mandar el mensaje al proveedor por Meta ni Evolution: ${r.errorDetail || r.error || "error"}` };
 }
 
 /**
