@@ -13,7 +13,7 @@ import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { formatearTelefonoLegible, normalizarTelefono } from "@/lib/telefono";
 import { registrarActividad } from "@/lib/actividades";
 import { costosProveedoresDe, loCotizadoAlCliente, proveedoresDelProducto } from "@/lib/costo-servicio";
-import { MARCA_FOLIO_OT, fechaDeTexto, horasDeTexto, mensajeServicioCliente, mensajeServicioProveedor } from "@/lib/mensajes-servicio";
+import { MARCA_FOLIO_OT, fechaDeTexto, horasDeTexto, mensajeServicioCliente, mensajeServicioProveedor, horaLegible } from "@/lib/mensajes-servicio";
 import { linkMapsDeDireccion, extraerDireccionDeTexto } from "@/lib/direccion";
 
 export interface ProveedorProgramable {
@@ -402,7 +402,30 @@ export async function programarServicioSolicitud(input: {
     if (input.avisarCliente) {
       const texto = conFolio(input.mensajeCliente?.trim() || mensajeServicioCliente(datosMensaje));
       const { responderConversacion } = await import("@/app/actions/conversaciones");
-      const r = await responderConversacion(input.telefono, texto);
+      let r = await responderConversacion(input.telefono, texto);
+
+      // Si falla porque la ventana de 24 h está cerrada, enviar mediante la plantilla oficial registrada en Meta
+      if (!r.ok && (/24\s*h|window|re-engagement|131047|fuera de la ventana/i.test(r.error || ""))) {
+        const { enviarWhatsAppPlantilla } = await import("@/lib/whatsapp");
+        const precioFmt = precioCliente && precioCliente > 0 ? `${precioCliente.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : "Por confirmar";
+        const params = [
+          exp?.cliente || "Cliente",
+          trabajo,
+          fechaLeg,
+          `${horaLegible(input.horaInicio)}${horaFin ? ` a ${horaLegible(horaFin)}` : ""}`,
+          direccion || exp?.fraccionamiento || "Tu domicilio",
+          precioFmt,
+          otFolio || "Por asignar",
+        ];
+        let resPl = await enviarWhatsAppPlantilla(normalizarTelefono(input.telefono), "confirmacion_servicio_cliente", "es_MX", params);
+        if (!resPl.ok) {
+          resPl = await enviarWhatsAppPlantilla(normalizarTelefono(input.telefono), "confirmacion_servicio_cliente", "es", params);
+        }
+        if (resPl.ok) {
+          r = { ok: true };
+        }
+      }
+
       resultado.cliente = r.ok ? { enviado: true } : { enviado: false, error: r.error || "No se pudo enviar." };
     }
     if (input.avisarProveedor && sol.proveedor_asignado_id) {
