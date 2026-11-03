@@ -24,6 +24,7 @@ interface BalanceProveedorTabProps {
 
 export function BalanceProveedorTab({ proveedor }: BalanceProveedorTabProps) {
   const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [resumen, setResumen] = useState<BalanceProveedorResumen | null>(null);
   const [movimientos, setMovimientos] = useState<MovimientoBalanceProveedor[]>([]);
   const [ordenes, setOrdenes] = useState<OrdenTrabajoBalanceProveedor[]>([]);
@@ -47,10 +48,13 @@ export function BalanceProveedorTab({ proveedor }: BalanceProveedorTabProps) {
     setCargando(false);
 
     if (res.ok) {
+      setErrorCarga(null);
       setResumen(res.resumen || null);
       setMovimientos(res.movimientos || []);
       setOrdenes(res.ordenes || []);
       setDocumentos(res.documentos || []);
+    } else {
+      setErrorCarga(res.error || "Error al consultar balance.");
     }
   }
 
@@ -96,6 +100,26 @@ export function BalanceProveedorTab({ proveedor }: BalanceProveedorTabProps) {
 
   const otsPendientesCount = useMemo(() => ordenes.filter((o) => !o.estaLiquidada).length, [ordenes]);
   const pagosConDisponibleCount = useMemo(() => movimientos.filter((m) => m.montoDisponible > 0).length, [movimientos]);
+
+  if (errorCarga) {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-6 space-y-3 font-cuerpo">
+        <div className="flex items-center gap-2 text-sm font-bold text-amber-900">
+          <span>⚠️</span> {errorCarga}
+        </div>
+        <p className="text-xs text-amber-800/80 leading-relaxed">
+          Para activar el módulo de Balance de Proveedores, ejecuta la migración <strong>0186_balance_proveedores_cuenta_corriente.sql</strong> en el SQL Editor de tu consola de Supabase.
+        </p>
+        <button
+          type="button"
+          onClick={cargarDatos}
+          className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-800 text-white hover:bg-amber-900 transition shadow-xs"
+        >
+          Reintentar consulta
+        </button>
+      </div>
+    );
+  }
 
   if (cargando && !resumen) {
     return (

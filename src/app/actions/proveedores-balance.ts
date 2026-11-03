@@ -62,6 +62,12 @@ export async function obtenerBalanceProveedor(proveedorId: string): Promise<Resp
       .order("created_at", { ascending: false });
 
     if (errMovs) {
+      if (errMovs.message.includes("schema cache") || errMovs.message.includes("does not exist") || (errMovs as any).code === "42P01") {
+        return {
+          ok: false,
+          error: "Falta ejecutar la migración 0186 en Supabase (las tablas de balance y cuenta corriente aún no existen en la base de datos).",
+        };
+      }
       return { ok: false, error: `Error al consultar movimientos: ${errMovs.message}` };
     }
 
