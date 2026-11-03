@@ -86,7 +86,7 @@ const OBJECIONES_PISO: Objecion[] = [
   {
     cuando: "\"Está caro\" / \"prefiero vitropiso\" / \"se sale de mi presupuesto\"",
     respuesta:
-      "Valida sin discutir. Pregunta para qué área es y comenta que el estampado es concreto colado en sitio, pensado para exteriores como cocheras y patios. Si el área es grande, ofrece que el asesor revise una propuesta por volumen. Menciona que se puede pagar con tarjeta a meses (con intereses).",
+      "Valida sin discutir. Pregunta para qué área es y comenta que el estampado es concreto colado en sitio, pensado para exteriores como cocheras y patios. Si el área es grande, ofrece que el asesor revise una propuesta por volumen. Pregunta con qué lo está comparando.",
   },
   {
     cuando: "\"Estoy pidiendo presupuestos\" / \"estoy comparando\"",

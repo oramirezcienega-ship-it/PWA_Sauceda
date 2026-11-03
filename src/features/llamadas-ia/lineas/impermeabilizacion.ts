@@ -98,7 +98,7 @@ export const OBJECIONES_IMPER: Objecion[] = [
   {
     cuando: "\"Está caro\" / \"se sale de mi presupuesto\" / \"no me alcanza\"",
     respuesta:
-      "Valida sin discutir. Menciona que la acrílica es la más económica, que se puede hacer solo en la parte que más lo necesita y que se puede pagar con tarjeta a meses (con intereses). Pregunta con qué lo está comparando.",
+      "Valida sin discutir. Menciona que la acrílica es la más económica y que se puede hacer solo en la parte que más lo necesita o revisar con el asesor una alternativa ajustada. Pregunta con qué lo está comparando.",
   },
   {
     cuando: "\"Lo voy a platicar con mi esposo/esposa\" / \"tengo que pedir autorización\"",

@@ -77,6 +77,6 @@ export const PREGUNTAS_GENERALES: PreguntaFrecuente[] = [
   {
     pregunta: "¿Aceptan tarjeta? / ¿Hay meses sin intereses?",
     respuesta:
-      "Sí aceptamos tarjeta, además de efectivo y transferencia. No manejamos meses sin intereses; con Mercado Pago se puede pagar a meses con intereses.",
+      "Sí aceptamos tarjeta en una sola exhibición, además de efectivo y transferencia. No manejamos meses sin intereses ni pagos a plazos.",
   },
 ];

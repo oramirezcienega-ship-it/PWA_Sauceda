@@ -42,7 +42,7 @@
     "components": [
       {
         "type": "BODY",
-        "text": "Hola {{1}}, te saluda Sofía de SAUCEDA Herrería y Estructuras. 🛠️\n\nNos quedamos al pendiente de tu proyecto de herrería (portón, protecciones o estructura). Para brindarte un presupuesto exacto y opciones de diseño a la medida, tenemos disponibilidad para que un técnico pase a tomar medidas sin costo ni compromiso.\n\nAdemás, contamos con pago con tarjeta de crédito y opción a meses. ¿Te gustaría coordinar la toma de medidas esta semana?",
+        "text": "Hola {{1}}, te saluda Sofía de SAUCEDA Herrería y Estructuras. 🛠️\n\nNos quedamos al pendiente de tu proyecto de herrería (portón, protecciones o estructura). Para brindarte un presupuesto exacto y opciones de diseño a la medida, tenemos disponibilidad para que un técnico pase a tomar medidas sin costo ni compromiso.\n\nAdemás, contamos con pago con tarjeta de crédito. ¿Te gustaría coordinar la toma de medidas esta semana?",
         "example": {
           "body_text": [
             [
