@@ -10,6 +10,7 @@ import {
   listarCandidatosSolicitud,
   listarSolicitudesCotizacion,
   prepararSolicitudDesdeCotizacion,
+  registrarPropuestaProveedorManual,
   subirFotoSolicitud,
   type CandidatoSolicitud,
   type EstadoEnvio,
