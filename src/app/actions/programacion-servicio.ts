@@ -14,7 +14,7 @@ import { formatearTelefonoLegible, normalizarTelefono } from "@/lib/telefono";
 import { registrarActividad } from "@/lib/actividades";
 import { costosProveedoresDe, loCotizadoAlCliente, proveedoresDelProducto } from "@/lib/costo-servicio";
 import { MARCA_FOLIO_OT, fechaDeTexto, horasDeTexto, mensajeServicioCliente, mensajeServicioProveedor } from "@/lib/mensajes-servicio";
-import { linkMapsDeDireccion } from "@/lib/direccion";
+import { linkMapsDeDireccion, extraerDireccionDeTexto } from "@/lib/direccion";
 
 export interface ProveedorProgramable {
   id: string;
@@ -99,7 +99,32 @@ export async function prepararProgramacionServicio(
       if (await abrirOrdenTrabajoSolicitud(sb, solicitudId)) c = (await cargar(sb, solicitudId))!;
     }
     const { sol, exp, prospectoDireccion, trabajo } = c;
-    const direccionCargada = exp?.direccion_propiedad || prospectoDireccion || exp?.fraccionamiento || "";
+    let direccionCargada = exp?.direccion_propiedad || prospectoDireccion || "";
+    if (!direccionCargada || !/\d+/.test(direccionCargada)) {
+      const textoNotas = `${exp?.notas || ""} ${c.sol.descripcion || ""}`;
+      const extraidaNotas = extraerDireccionDeTexto(textoNotas);
+      if (extraidaNotas) {
+        direccionCargada = extraidaNotas;
+      } else if (sol.expediente_id) {
+        const { data: actCoord } = await sb
+          .from("actividades")
+          .select("detalle")
+          .eq("expediente_id", sol.expediente_id)
+          .eq("tipo", "coordinacion_proveedor")
+          .order("created_at", { ascending: false })
+          .limit(1);
+        const m = String(actCoord?.[0]?.detalle || "").match(/📍\s*\*?([^*\n\r]+)\*?/);
+        if (m && m[1].trim() && /\d+/.test(m[1])) {
+          direccionCargada = m[1].trim();
+        }
+      }
+      if (!direccionCargada) {
+        direccionCargada = exp?.fraccionamiento || "";
+      } else if (sol.expediente_id && direccionCargada !== exp?.direccion_propiedad) {
+        const link = exp?.link_google_maps || linkMapsDeDireccion(direccionCargada);
+        void sb.from("expedientes").update({ direccion_propiedad: direccionCargada, link_google_maps: link }).eq("id", sol.expediente_id);
+      }
+    }
     const linkMapsCargado = exp?.link_google_maps || (direccionCargada ? linkMapsDeDireccion(direccionCargada) : "");
 
     // Si la opción vino de Telegram (código día + franja) se conoce la fecha y el horario.

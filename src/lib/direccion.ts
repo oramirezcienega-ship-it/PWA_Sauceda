@@ -126,5 +126,14 @@ export function extraerDireccionDeTexto(texto: string): string | null {
     }
   }
 
+  // 4. Patrón por líneas sueltas (ej. listas con viñetas: "*Azoicas 105 col. Pedregales de echeveste")
+  const lineas = t.split(/\r?\n+/);
+  for (const rawLinea of lineas) {
+    const limpia = limpiarColetillasDireccion(rawLinea.replace(/^[\s*•#>-]+/, "").trim());
+    if (limpia && limpia !== t && pareceDireccionValida(limpia)) {
+      return limpia;
+    }
+  }
+
   return null;
 }
