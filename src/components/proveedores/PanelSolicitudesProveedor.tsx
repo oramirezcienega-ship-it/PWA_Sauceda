@@ -318,11 +318,71 @@ export function ModalPropuestaProveedor({
       ? String(primerEnvio.costoReferencia)
       : ""
   );
-  const [opciones, setOpciones] = useState<string[]>(
-    aceptado?.fechasPropuestas && aceptado.fechasPropuestas.length > 0
-      ? [...aceptado.fechasPropuestas]
-      : [""]
-  );
+
+  function parseOpcion(texto: string): { texto: string; fecha: string; hora: string } {
+    let fecha = "";
+    let hora = "";
+    if (!texto) return { texto: "", fecha: "", hora: "" };
+
+    const mHora = texto.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+    if (mHora) {
+      let hh = Number(mHora[1]);
+      const mm = mHora[2];
+      const ampm = mHora[3]?.toLowerCase();
+      if (ampm === "pm" && hh < 12) hh += 12;
+      if (ampm === "am" && hh === 12) hh = 0;
+      hora = `${String(hh).padStart(2, "0")}:${mm}`;
+    }
+
+    const meses = [
+      "enero", "febrero", "marzo", "abril", "mayo", "junio",
+      "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+    ];
+    const mFecha = texto.match(/(\d{1,2})\s+de\s+([a-záéíóúñ]+)/i);
+    if (mFecha) {
+      const dia = Number(mFecha[1]);
+      const mesIdx = meses.findIndex((m) => m.startsWith(mFecha[2].toLowerCase().slice(0, 3)));
+      if (mesIdx !== -1) {
+        const anio = new Date().getFullYear();
+        fecha = `${anio}-${String(mesIdx + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+      }
+    }
+
+    return { texto, fecha, hora };
+  }
+
+  function formatearTextoOpcion(fechaISO: string, horaStr: string): string {
+    if (!fechaISO && !horaStr) return "";
+    let fechaParte = "";
+    if (fechaISO) {
+      const [y, m, d] = fechaISO.split("-").map(Number);
+      const dt = new Date(y, m - 1, d, 12, 0, 0);
+      const dias = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+      const meses = [
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+      ];
+      fechaParte = `${dias[dt.getDay()]}, ${d} de ${meses[dt.getMonth()]}`;
+    }
+    let horaParte = "";
+    if (horaStr) {
+      const [hh, mm] = horaStr.split(":").map(Number);
+      const sufijo = hh >= 12 ? "pm" : "am";
+      const h12 = hh % 12 === 0 ? 12 : hh % 12;
+      horaParte = `${h12}:${String(mm).padStart(2, "0")} ${sufijo}`;
+    }
+    if (fechaParte && horaParte) return `${fechaParte} - ${horaParte}`;
+    if (fechaParte) return fechaParte;
+    return horaParte;
+  }
+
+  const [items, setItems] = useState<{ texto: string; fecha: string; hora: string }[]>(() => {
+    if (aceptado?.fechasPropuestas && aceptado.fechasPropuestas.length > 0) {
+      return aceptado.fechasPropuestas.map(parseOpcion);
+    }
+    return [{ texto: "", fecha: "", hora: "" }];
+  });
+
   const [comentario, setComentario] = useState<string>(aceptado?.comentario || "");
   const [notificarCliente, setNotificarCliente] = useState<boolean>(true);
   const [guardando, setGuardando] = useState(false);
@@ -332,45 +392,44 @@ export function ModalPropuestaProveedor({
     setMontado(true);
   }, []);
 
-  function actualizarOpcion(idx: number, valor: string) {
-    setOpciones((prev) => {
+  function actualizarTexto(idx: number, valor: string) {
+    setItems((prev) => {
       const arr = [...prev];
-      arr[idx] = valor;
+      arr[idx] = { ...arr[idx], texto: valor };
       return arr;
     });
   }
 
-  function agregarOpcion() {
-    setOpciones((prev) => [...prev, ""]);
+  function actualizarFecha(idx: number, nuevaFecha: string) {
+    setItems((prev) => {
+      const arr = [...prev];
+      const actual = arr[idx] || { texto: "", fecha: "", hora: "" };
+      const nuevoTexto = formatearTextoOpcion(nuevaFecha, actual.hora);
+      arr[idx] = { ...actual, fecha: nuevaFecha, texto: nuevoTexto };
+      return arr;
+    });
   }
 
-  function eliminarOpcion(idx: number) {
-    setOpciones((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : [""]));
+  function actualizarHora(idx: number, nuevaHora: string) {
+    setItems((prev) => {
+      const arr = [...prev];
+      const actual = arr[idx] || { texto: "", fecha: "", hora: "" };
+      const nuevoTexto = formatearTextoOpcion(actual.fecha, nuevaHora);
+      arr[idx] = { ...actual, hora: nuevaHora, texto: nuevoTexto };
+      return arr;
+    });
   }
 
-  function aplicarFechaHoraAOpcion(idx: number, fechaISO: string, horaStr: string) {
-    if (!fechaISO) return;
-    const [y, m, d] = fechaISO.split("-").map(Number);
-    const dt = new Date(y, m - 1, d);
-    const dias = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
-    const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
-    const diaSemana = dias[dt.getDay()];
-    const diaMes = dt.getDate();
-    const mesNombre = meses[dt.getMonth()];
+  function agregarItem() {
+    setItems((prev) => [...prev, { texto: "", fecha: "", hora: "" }]);
+  }
 
-    let horaFmt = horaStr;
-    if (horaStr) {
-      const [hh, mm] = horaStr.split(":").map(Number);
-      const sufijo = hh >= 12 ? "pm" : "am";
-      const h12 = hh % 12 === 0 ? 12 : hh % 12;
-      horaFmt = `${h12}:${String(mm).padStart(2, "0")} ${sufijo}`;
-    }
-    const textoGenerado = horaFmt ? `${diaSemana}, ${diaMes} de ${mesNombre} - ${horaFmt}` : `${diaSemana}, ${diaMes} de ${mesNombre}`;
-    actualizarOpcion(idx, textoGenerado);
+  function eliminarItem(idx: number) {
+    setItems((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : [{ texto: "", fecha: "", hora: "" }]));
   }
 
   async function guardar() {
-    const validas = opciones.map((o) => o.trim()).filter(Boolean);
+    const validas = items.map((o) => o.texto.trim()).filter(Boolean);
     if (validas.length === 0) {
       setError("Ingresa al menos una fecha y horario propuesto.");
       return;
@@ -465,11 +524,11 @@ export function ModalPropuestaProveedor({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-[11px] font-bold text-carbon/70">
-                Opciones de fecha y horario que propuso ({opciones.length})
+                Opciones de fecha y horario que propuso ({items.length})
               </label>
               <button
                 type="button"
-                onClick={agregarOpcion}
+                onClick={agregarItem}
                 className="text-[11px] font-bold text-sauce hover:underline"
               >
                 + Agregar otra opción
@@ -477,14 +536,14 @@ export function ModalPropuestaProveedor({
             </div>
 
             <div className="space-y-2.5">
-              {opciones.map((opc, idx) => (
+              {items.map((item, idx) => (
                 <div key={idx} className="rounded-xl border border-carbon/15 bg-slate-50/70 p-2.5 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-bold text-[11px] text-carbon/60">Opción {idx + 1}</span>
-                    {opciones.length > 1 && (
+                    {items.length > 1 && (
                       <button
                         type="button"
-                        onClick={() => eliminarOpcion(idx)}
+                        onClick={() => eliminarItem(idx)}
                         className="text-carbon/40 hover:text-rojo text-[11px]"
                         title="Eliminar esta opción"
                       >
@@ -495,9 +554,9 @@ export function ModalPropuestaProveedor({
 
                   <input
                     type="text"
-                    value={opc}
-                    onChange={(e) => actualizarOpcion(idx, e.target.value)}
-                    placeholder="Ej: sábado, 7 de noviembre - 11:00 am"
+                    value={item.texto}
+                    onChange={(e) => actualizarTexto(idx, e.target.value)}
+                    placeholder="Ej: jueves, 5 de noviembre - 5:30 pm"
                     className="w-full rounded-lg border border-carbon/20 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-sauce font-medium"
                   />
 
@@ -505,20 +564,14 @@ export function ModalPropuestaProveedor({
                     <span className="shrink-0 text-carbon/45">📅 Asistente rápido:</span>
                     <input
                       type="date"
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val) aplicarFechaHoraAOpcion(idx, val, "");
-                      }}
+                      value={item.fecha}
+                      onChange={(e) => actualizarFecha(idx, e.target.value)}
                       className="rounded border border-carbon/20 bg-white px-1.5 py-0.5 text-[10.5px]"
                     />
                     <input
                       type="time"
-                      onChange={(e) => {
-                        const hora = e.target.value;
-                        const mIso = opc.match(/(\d{4}-\d{2}-\d{2})/);
-                        const fIso = mIso ? mIso[1] : new Date().toISOString().slice(0, 10);
-                        aplicarFechaHoraAOpcion(idx, fIso, hora);
-                      }}
+                      value={item.hora}
+                      onChange={(e) => actualizarHora(idx, e.target.value)}
                       className="rounded border border-carbon/20 bg-white px-1.5 py-0.5 text-[10.5px]"
                     />
                   </div>
