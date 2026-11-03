@@ -1677,6 +1677,102 @@ export interface MetricaProductoProveedor {
   }>;
 }
 
+
+export type TipoMovimientoProveedor =
+  | "anticipo_a_proveedor"
+  | "pago_a_proveedor"
+  | "pago_recibido_proveedor"
+  | "cargo_orden_trabajo"
+  | "comision_por_cobrar"
+  | "ajuste_saldo";
+
+export type SentidoBalanceProveedor = "a_favor_sauceda" | "a_favor_proveedor";
+
+export interface MovimientoBalanceProveedor {
+  id: string;
+  proveedorId: string;
+  tipo: TipoMovimientoProveedor;
+  sentido: SentidoBalanceProveedor;
+  monto: number;
+  montoAplicado: number;
+  montoDisponible: number;
+  fecha: string;
+  metodoPago: "transferencia" | "efectivo" | "cheque" | "compensacion" | "otro";
+  referencia: string | null;
+  concepto: string;
+  comprobanteUrl: string | null;
+  comprobanteNombre: string | null;
+  notas: string | null;
+  creadoPor: string | null;
+  createdAt: string;
+  updatedAt: string;
+  aplicaciones?: AplicacionPagoProveedor[];
+}
+
+export type TipoDestinoAplicacion =
+  | "orden_trabajo"
+  | "factura_proveedor"
+  | "remision_proveedor"
+  | "servicio_otro";
+
+export interface AplicacionPagoProveedor {
+  id: string;
+  movimientoId: string;
+  proveedorId: string;
+  ordenTrabajoId: string | null;
+  documentoProveedorId: string | null;
+  tipoDestino: TipoDestinoAplicacion;
+  folioDestino: string | null;
+  descripcionDestino: string;
+  montoAplicado: number;
+  notas: string | null;
+  creadoPor: string | null;
+  createdAt: string;
+}
+
+export interface OrdenTrabajoBalanceProveedor {
+  id: string;
+  folio: string;
+  titulo: string;
+  expedienteId: string | null;
+  costoProveedor: number;
+  estatus: string;
+  fechaProgramada: string | null;
+  anticipoPagado: boolean;
+  liquidacionPagada: boolean;
+  montoAplicado: number;
+  saldoPendiente: number;
+  estaLiquidada: boolean;
+  aplicaciones: AplicacionPagoProveedor[];
+}
+
+export interface DocumentoBalanceProveedor {
+  id: string;
+  folio: string;
+  tipo: TipoDocumentoProveedor;
+  concepto: string;
+  fecha: string;
+  monto: number;
+  ordenTrabajoId: string | null;
+  montoAplicado: number;
+  saldoPendiente: number;
+  estaLiquidado: boolean;
+  aplicaciones: AplicacionPagoProveedor[];
+}
+
+export interface BalanceProveedorResumen {
+  proveedorId: string;
+  totalCostosOT: number;
+  totalAnticiposPagados: number;
+  totalPagosEntregados: number;
+  totalComisionesPorCobrar: number;
+  totalPagosRecibidos: number;
+  saldoAFavorSauceda: number;
+  saldoAFavorProveedor: number;
+  saldoNeto: number;
+  estadoNeto: "a_favor_sauceda" | "a_favor_proveedor" | "al_dia";
+}
+
 export const CATEGORIAS_PROVEEDOR = [
   "Materiales de construcción",
   "Herrería / Metalmecánica",

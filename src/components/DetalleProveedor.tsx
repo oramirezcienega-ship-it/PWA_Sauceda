@@ -10,13 +10,14 @@ import { ModalRegistrarDocumentoProveedor } from "./ModalRegistrarDocumentoProve
 import { OfertasProveedorProducto } from "./proveedores/OfertasProveedorProducto";
 import { CondicionesComercialesProveedor } from "./proveedores/CondicionesComercialesProveedor";
 import { ModalReporteVentasProveedor } from "./proveedores/ModalReporteVentasProveedor";
+import { BalanceProveedorTab } from "./proveedores/BalanceProveedorTab";
 
 interface DetalleProveedorProps {
   proveedorInicial: Proveedor;
   documentosIniciales: DocumentoProveedor[];
 }
 
-type TabProveedor = "oferta" | "documentos" | "catalogo_precios" | "evolucion_costos";
+type TabProveedor = "balance" | "oferta" | "documentos" | "catalogo_precios" | "evolucion_costos";
 
 export function DetalleProveedor({ proveedorInicial, documentosIniciales }: DetalleProveedorProps) {
   const router = useRouter();
@@ -461,6 +462,9 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
         </div>
 
         <div className="p-6">
+          {/* TAB BALANCE Y CUENTA CORRIENTE */}
+          {tabActual === "balance" && <BalanceProveedorTab proveedor={proveedor} />}
+
           {/* TAB 0: OFERTA DE PRODUCTOS DEL PROVEEDOR */}
           {tabActual === "oferta" && <OfertasProveedorProducto modo="proveedor" id={proveedor.id} />}
 
