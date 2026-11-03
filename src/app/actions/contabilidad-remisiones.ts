@@ -811,7 +811,21 @@ export async function previsualizarCostosRemisionOT(
 
     const docs = await documentosProveedorDeObra(sb, ot.id, ot.cotizacion_id);
     const costoProveedorDocumentos = r2(docs.reduce((acc, d) => acc + Number(d.monto || 0), 0));
-    const costoProveedorPactado = Number(ot.costo_proveedor || 0);
+    let costoProveedorPactado = Number(ot.costo_proveedor || 0);
+
+    if (costoProveedorDocumentos <= 0 && costoProveedorPactado <= 0 && ot.cotizacion_id) {
+      const { data: concs } = await sb
+        .from("cotizacion_conceptos")
+        .select("cantidad, costo_unitario")
+        .eq("cotizacion_id", ot.cotizacion_id);
+      const sumaConc = (concs || []).reduce(
+        (acc: number, c: any) => acc + (Number(c.cantidad) || 0) * (Number(c.costo_unitario) || 0),
+        0
+      );
+      if (sumaConc > 0) {
+        costoProveedorPactado = r2(sumaConc);
+      }
+    }
 
     const comisionBancariaPct = Number(ot.comision_bancaria_pct || 0);
 

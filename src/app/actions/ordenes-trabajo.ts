@@ -2220,7 +2220,7 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
         : Math.round(montoBase * (comisionBancariaPctOt / 100) * 100) / 100;
 
     // Costo real de proveedor: lo validado en pantalla; si no, lo que suman los
-    // documentos del proveedor de esta obra; si no hay, lo pactado en la OT.
+    // documentos del proveedor de esta obra; si no hay, lo pactado en la OT; si no, el costo de la cotización.
     let costoProveedorDefinitivo = Number(ot.costo_proveedor || 0);
     if (datos.costoProveedor !== undefined) {
       costoProveedorDefinitivo = Math.max(0, Math.round(Number(datos.costoProveedor) * 100) / 100);
@@ -2232,7 +2232,21 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
         .select("monto")
         .or(filtrosDocs.join(","));
       const sumaDocs = (docsProv || []).reduce((acc, d: any) => acc + Number(d.monto || 0), 0);
-      if (sumaDocs > 0) costoProveedorDefinitivo = Math.round(sumaDocs * 100) / 100;
+      if (sumaDocs > 0) {
+        costoProveedorDefinitivo = Math.round(sumaDocs * 100) / 100;
+      } else if (costoProveedorDefinitivo <= 0 && ot.cotizacion_id) {
+        const { data: concs } = await sb
+          .from("cotizacion_conceptos")
+          .select("cantidad, costo_unitario")
+          .eq("cotizacion_id", ot.cotizacion_id);
+        const sumaConc = (concs || []).reduce(
+          (acc: number, c: any) => acc + (Number(c.cantidad) || 0) * (Number(c.costo_unitario) || 0),
+          0
+        );
+        if (sumaConc > 0) {
+          costoProveedorDefinitivo = Math.round(sumaConc * 100) / 100;
+        }
+      }
     }
 
     const { data: nuevaRem, error: insErr } = await sb
@@ -2523,6 +2537,100 @@ async function generarDocumentosAutomaticosOT(
 }
 
 /**
+ * Deduce automáticamente el proveedor preferido y costo pactado a partir de los
+ * conceptos o tipo de servicio de una cotización.
+ */
+export async function inferirProveedorYCostoParaCotizacion(
+  sb: any,
+  cotizacionId: string,
+  servicioTipo?: string | null,
+  costoEstimadoCotizacion?: number | null
+): Promise<{
+  proveedorId: string | null;
+  costoProveedor: number | null;
+  proveedorConcepto: string | null;
+}> {
+  try {
+    const { data: conceptos } = await sb
+      .from("cotizacion_conceptos")
+      .select("id, descripcion, cantidad, unidad, costo_unitario, producto_servicio_id")
+      .eq("cotizacion_id", cotizacionId);
+
+    let sumaCostos = (conceptos || []).reduce(
+      (acc: number, c: any) => acc + (Number(c.cantidad) || 0) * (Number(c.costo_unitario) || 0),
+      0
+    );
+    if (sumaCostos <= 0 && Number(costoEstimadoCotizacion || 0) > 0) {
+      sumaCostos = Number(costoEstimadoCotizacion);
+    }
+    const costoProveedor = sumaCostos > 0 ? Math.round(sumaCostos * 100) / 100 : null;
+
+    const proveedorConcepto =
+      (conceptos || [])
+        .map((c: any) => `${c.cantidad || 1} ${c.unidad || "pz"} ${c.descripcion || ""}`.trim())
+        .filter(Boolean)
+        .join(", ") || null;
+
+    let proveedorId: string | null = null;
+    const productoIds = (conceptos || [])
+      .map((c: any) => c.producto_servicio_id)
+      .filter((id: any): id is string => Boolean(id));
+
+    if (productoIds.length > 0) {
+      const { data: ofertas } = await sb
+        .from("proveedor_productos")
+        .select("proveedor_id, preferido, costo_unitario")
+        .in("producto_id", productoIds)
+        .eq("activo", true)
+        .order("preferido", { ascending: false });
+      if (ofertas && ofertas.length > 0 && ofertas[0].proveedor_id) {
+        proveedorId = ofertas[0].proveedor_id;
+      }
+    }
+
+    if (!proveedorId) {
+      const st = (servicioTipo || "").toLowerCase();
+      const desc = (proveedorConcepto || "").toLowerCase();
+      let matchPattern = "";
+      if (
+        st.includes("impermeabiliz") ||
+        desc.includes("impermeabiliz") ||
+        st.includes("estampado") ||
+        desc.includes("estampado") ||
+        st.includes("concreto")
+      ) {
+        matchPattern = "%coba%";
+      } else if (
+        st.includes("calentador") ||
+        desc.includes("calentador") ||
+        st.includes("plomer") ||
+        desc.includes("plomer") ||
+        st.includes("boiler")
+      ) {
+        matchPattern = "%clemente%";
+      }
+
+      if (matchPattern) {
+        const { data: provs } = await sb
+          .from("proveedores")
+          .select("id")
+          .ilike("nombre", matchPattern)
+          .eq("activo", true)
+          .limit(1);
+        if (provs && provs.length > 0) {
+          proveedorId = provs[0].id;
+        }
+      }
+    }
+
+    return { proveedorId, costoProveedor, proveedorConcepto };
+  } catch (err) {
+    console.warn("Aviso al inferir proveedor y costo para cotización:", err);
+    return { proveedorId: null, costoProveedor: null, proveedorConcepto: null };
+  }
+}
+
+/**
  * 12. Asegurar Orden de Trabajo para una cotización aceptada.
  * Se ejecuta automáticamente al aceptar una cotización (ya sea por el cliente en portal web o por el asesor).
  * Es idempotente: si ya existe una orden ligada a la cotización, devuelve la existente.
@@ -2539,23 +2647,40 @@ export async function asegurarOrdenTrabajoParaCotizacion(cotizacionId: string): 
     // 1. Verificar si ya existe
     const { data: existente } = await sb
       .from("ordenes_trabajo")
-      .select("id, folio")
+      .select("id, folio, proveedor_id, costo_proveedor")
       .eq("cotizacion_id", cotizacionId)
       .maybeSingle();
-
-    if (existente) {
-      return { ok: true, ordenId: existente.id, folio: existente.folio };
-    }
 
     // 2. Obtener datos de la cotización
     const { data: cot, error: errCot } = await sb
       .from("cotizaciones")
-      .select("id, prospecto_id, expediente_id, servicio_tipo, precio_final, prospectos(nombre, primer_apellido, segundo_apellido)")
+      .select("id, prospecto_id, expediente_id, servicio_tipo, precio_final, costo_estimado, prospectos(nombre, primer_apellido, segundo_apellido)")
       .eq("id", cotizacionId)
       .maybeSingle();
 
     if (errCot || !cot) {
       return { ok: false, error: "Cotización no encontrada para generar orden de trabajo." };
+    }
+
+    const infProv = await inferirProveedorYCostoParaCotizacion(
+      sb,
+      cotizacionId,
+      cot.servicio_tipo,
+      cot.costo_estimado
+    );
+
+    if (existente) {
+      if (!existente.proveedor_id || !existente.costo_proveedor) {
+        const cambios: any = {};
+        if (!existente.proveedor_id && infProv.proveedorId) cambios.proveedor_id = infProv.proveedorId;
+        if (!existente.costo_proveedor && infProv.costoProveedor) cambios.costo_proveedor = infProv.costoProveedor;
+        if (infProv.proveedorConcepto) cambios.proveedor_concepto = infProv.proveedorConcepto;
+        if (Object.keys(cambios).length > 0) {
+          cambios.updated_at = new Date().toISOString();
+          await sb.from("ordenes_trabajo").update(cambios).eq("id", existente.id);
+        }
+      }
+      return { ok: true, ordenId: existente.id, folio: existente.folio };
     }
 
     const folio = await generarFolioOT(sb);
@@ -2575,6 +2700,9 @@ export async function asegurarOrdenTrabajoParaCotizacion(cotizacionId: string): 
         titulo: `Ejecución de Obra / Servicio · ${clienteNombre}`,
         descripcion: `Orden generada automáticamente por aceptación de cotización ${cot.id}.`,
         fotos_evidencia: [],
+        proveedor_id: infProv.proveedorId || null,
+        costo_proveedor: infProv.costoProveedor || null,
+        proveedor_concepto: infProv.proveedorConcepto || null,
       })
       .select()
       .single();

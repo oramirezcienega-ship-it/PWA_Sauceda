@@ -621,7 +621,33 @@ export async function generarDocumentoProveedorAutomatico(
   if (errOt || !ot) return { ok: false, error: "No se encontró la orden de trabajo." };
   if (!ot.proveedor_id) {
     if (existente) return { ok: true, documento: aDocumentoProveedor(existente as FilaDocumentoProveedor) };
-    return { ok: false, error: "La orden de trabajo no tiene un proveedor asignado." };
+
+    if (ot.cotizacion_id) {
+      try {
+        const { inferirProveedorYCostoParaCotizacion } = await import("@/app/actions/ordenes-trabajo");
+        const inf = await inferirProveedorYCostoParaCotizacion(sb, ot.cotizacion_id);
+        if (inf.proveedorId) {
+          ot.proveedor_id = inf.proveedorId;
+          if (!ot.costo_proveedor && inf.costoProveedor) ot.costo_proveedor = inf.costoProveedor;
+          if (!ot.proveedor_concepto && inf.proveedorConcepto) ot.proveedor_concepto = inf.proveedorConcepto;
+          await sb
+            .from("ordenes_trabajo")
+            .update({
+              proveedor_id: inf.proveedorId,
+              costo_proveedor: ot.costo_proveedor,
+              proveedor_concepto: ot.proveedor_concepto,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", ot.id);
+        }
+      } catch (errInf) {
+        console.warn("Aviso al auto-inferir proveedor en generarDocumentoProveedorAutomatico:", errInf);
+      }
+    }
+
+    if (!ot.proveedor_id) {
+      return { ok: false, error: "La orden de trabajo no tiene un proveedor asignado." };
+    }
   }
 
   const conceptos: any[] = [];
