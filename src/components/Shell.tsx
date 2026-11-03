@@ -80,7 +80,8 @@ function esRutaPublica(path: string): boolean {
     path.startsWith("/orden-trabajo/remision/") ||
     path.startsWith("/asesor/") ||
     path.startsWith("/aliados/carga/") ||
-    path.startsWith("/precios-proveedor/")
+    path.startsWith("/precios-proveedor/") ||
+    path.startsWith("/servicio-proveedor/")
   );
 }
 

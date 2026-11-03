@@ -16,8 +16,12 @@ import { generarFolioOT } from "@/lib/folio-ot";
 export const ESTADOS_ENVIO_ACTIVOS = ["enviada", "vista"] as const;
 
 const SITE_URL = () => (process.env.SITE_URL || "https://crm.saucedamx.com").replace(/\/$/, "");
+
+export const linkSolicitudProveedor = (token: string, solicitudFolio?: string | null) =>
+  `${SITE_URL()}/servicio-proveedor/${token}${solicitudFolio ? `?solicitud=${encodeURIComponent(solicitudFolio)}` : ""}`;
+
 export const linkPortalProveedor = (token: string, solicitudFolio?: string | null) =>
-  `${SITE_URL()}/precios-proveedor/${token}${solicitudFolio ? `?solicitud=${encodeURIComponent(solicitudFolio)}` : ""}`;
+  solicitudFolio ? linkSolicitudProveedor(token, solicitudFolio) : `${SITE_URL()}/precios-proveedor/${token}`;
 
 /** Costo de referencia del proveedor para esta cantidad según su oferta (por escalón, por volumen o unitario). */
 export function costoReferenciaOferta(

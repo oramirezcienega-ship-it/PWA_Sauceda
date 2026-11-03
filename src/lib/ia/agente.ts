@@ -3093,7 +3093,7 @@ El mensaje debe:
 - Proponer la fecha y horario que pide el cliente y preguntar si le queda o qué opción tiene.
 - Incluir la dirección completa (y el link de Google Maps si hay) para que la confirme y pueda agendar la visita.
 - Si viene el costo del proveedor, mencionarlo como el costo acordado del trabajo y pedir que lo confirme.
-- Cerrar pidiendo que confirme si lo acepta y que proponga los horarios que puede; si viene el link de respuesta, pedirle que lo haga ahí (en una línea propia, tal cual).
+- Cerrar preguntando qué días y horarios tiene disponibles para realizar el servicio y pedirle que confirme sus horarios disponibles en el enlace (en su propia línea, tal cual: Puedes confirmar tus días y horarios disponibles aquí:\n${datos.linkRespuesta}).
 
 Reglas:
 - Español de México, máximo ~8 líneas. Puedes usar *negritas* de WhatsApp para fecha y dirección.

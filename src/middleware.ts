@@ -73,7 +73,8 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/a/") ||
     path.startsWith("/asesor/") ||
     path.startsWith("/aliados/carga/") ||
-    path.startsWith("/precios-proveedor/");
+    path.startsWith("/precios-proveedor/") ||
+    path.startsWith("/servicio-proveedor/");
 
   if (!user && !esPublico) {
     const destino = request.nextUrl.clone();

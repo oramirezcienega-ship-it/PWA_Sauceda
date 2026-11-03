@@ -170,8 +170,8 @@ export async function redactarMensajeProveedorSofia(input: {
     const sb = supabaseServidor();
     const { data: prov } = await sb.from("proveedores").select("nombre, contacto_nombre").eq("id", input.proveedorId).maybeSingle();
     if (!prov) return { ok: false, error: "Selecciona el proveedor." };
-    // Link de su portal: ahí acepta y propone horarios (la solicitud se registra al mandar el mensaje).
-    const { tokenProveedor, linkPortalProveedor } = await import("@/lib/solicitudes-proveedor");
+    // Link exclusivo de la petición: ahí acepta y propone horarios directamente.
+    const { tokenProveedor, linkSolicitudProveedor } = await import("@/lib/solicitudes-proveedor");
     const token = await tokenProveedor(sb, input.proveedorId);
     const { prospecto, expediente } = await idsCliente(sb, input.telefono);
     let solFolio: string | undefined;
@@ -183,7 +183,29 @@ export async function redactarMensajeProveedorSofia(input: {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (ultSol?.folio) solFolio = ultSol.folio;
+      if (ultSol?.folio) {
+        solFolio = ultSol.folio;
+      } else {
+        // Pre-registrar la solicitud para que el mensaje ya nazca con su folio exacto
+        const que = input.tipo === "instalacion" ? "instalación" : input.tipo === "inspeccion" ? "inspección técnica" : "servicio";
+        const reg = await registrarSolicitudDirecta(sb, {
+          expedienteId: expediente.id,
+          zona: expediente.fraccionamiento || input.direccion.split(",")[0] || "",
+          ordenTrabajoId: null,
+          proveedorId: input.proveedorId,
+          descripcion: [
+            `${que[0].toUpperCase()}${que.slice(1)}${expediente.necesidad ? `: ${expediente.necesidad}` : ""}`,
+            input.direccion ? `Dirección: ${input.direccion}` : "",
+            input.linkMaps ? `Maps: ${input.linkMaps}` : "",
+            input.indicacion ? `Nota: ${input.indicacion}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          fechasSugeridas: input.fecha ? `${fechaLegible(input.fecha)}${input.horario ? ` · ${input.horario}` : ""}` : "",
+          costo: input.costo,
+        });
+        if (reg?.folio) solFolio = reg.folio;
+      }
     }
     const { generarMensajeCoordinacionProveedor } = await import("@/lib/ia/agente");
     const texto = await generarMensajeCoordinacionProveedor(sb, {
@@ -191,7 +213,7 @@ export async function redactarMensajeProveedorSofia(input: {
       proveedorNombre: prov.contacto_nombre || prov.nombre,
       fecha: fechaLegible(input.fecha),
       costo: input.costo ? pesos(input.costo) : "",
-      linkRespuesta: token ? linkPortalProveedor(token, solFolio) : "",
+      linkRespuesta: token ? linkSolicitudProveedor(token, solFolio) : "",
     });
     if (!texto) return { ok: false, error: "Sofía no generó el mensaje (¿IA sin crédito o desactivada?)." };
     return { ok: true, texto };
@@ -313,10 +335,10 @@ export async function enviarCoordinacionOficial(
     const r = await registrarCoordinacionProveedor({ ...input, mensaje: input.mensaje });
     if (!r.ok) return { ok: false, error: r.error };
 
-    // Si el mensaje tiene el link de precios y tenemos solicitudFolio, asegurar que viaje enfocado
+    // Si el mensaje tiene el link de precios/servicio y tenemos solicitudFolio, asegurar que viaje enfocado
     let mensajeFinal = input.mensaje;
-    if (r.solicitudFolio && mensajeFinal.includes("/precios-proveedor/")) {
-      mensajeFinal = mensajeFinal.replace(/(\/precios-proveedor\/[A-Za-z0-9_-]+)(?!\?solicitud=)/g, `$1?solicitud=${r.solicitudFolio}`);
+    if (r.solicitudFolio) {
+      mensajeFinal = mensajeFinal.replace(/(\/(?:precios|servicio)-proveedor\/[A-Za-z0-9_-]+)(?!\?solicitud=)/g, `$1?solicitud=${r.solicitudFolio}`);
     }
 
     const resumen = `tenemos ${input.tipo === "inspeccion" ? "una inspección técnica" : "un servicio"} para ti: ${trabajo}${lugar ? ` en ${lugar}` : ""}${input.fecha ? `, ${fechaLegible(input.fecha)}${input.horario ? ` ${input.horario}` : ""}` : ""}. ¿Lo puedes tomar?`;

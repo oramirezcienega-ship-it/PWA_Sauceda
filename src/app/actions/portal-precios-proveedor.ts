@@ -536,3 +536,78 @@ export async function responderSolicitudPortal(
   const { data: final } = await sb.from("solicitudes_proveedor_envios").select(SELECT_SOLICITUD_PORTAL).eq("id", envioId).maybeSingle();
   return { ok: true, solicitud: final ? aSolicitudPortal(final) : undefined };
 }
+
+
+/**
+ * Obtiene una solicitud de servicio específica para el portal enfocado del proveedor.
+ * Si se indica folio o id, busca esa; si no, toma la más reciente activa.
+ * Marca como vista si estaba en 'enviada'.
+ */
+export async function obtenerSolicitudUnicaPortal(
+  token: string,
+  solicitudFolioOId?: string | null
+): Promise<{
+  ok: boolean;
+  proveedor?: { id: string; nombre: string; contacto?: string };
+  solicitud?: SolicitudPortal;
+  mensaje?: string;
+}> {
+  const sb = supabaseServidor();
+  const proveedor = await proveedorPorToken(sb, token);
+  if (!proveedor) return { ok: false, mensaje: "El enlace no es válido o ha expirado." };
+
+  const { avanzarSolicitud } = await import("@/lib/solicitudes-proveedor");
+  const { data: activas } = await sb
+    .from("solicitudes_proveedor_envios")
+    .select("solicitud_id")
+    .eq("proveedor_id", proveedor.id)
+    .in("estado", ["enviada", "vista"]);
+  for (const a of activas || []) await avanzarSolicitud(sb, a.solicitud_id);
+
+  const { data: envios } = await sb
+    .from("solicitudes_proveedor_envios")
+    .select(SELECT_SOLICITUD_PORTAL)
+    .eq("proveedor_id", proveedor.id)
+    .neq("estado", "en_espera")
+    .order("created_at", { ascending: false })
+    .limit(30);
+
+  const lista = (envios || []).map((e: any) => aSolicitudPortal(e));
+
+  let seleccionada: SolicitudPortal | undefined;
+  if (solicitudFolioOId && solicitudFolioOId.trim()) {
+    const buscado = solicitudFolioOId.trim().toLowerCase();
+    seleccionada = lista.find(
+      (s) =>
+        s.folio.toLowerCase() === buscado ||
+        s.envioId.toLowerCase() === buscado
+    );
+  }
+
+  if (!seleccionada) {
+    seleccionada = lista.find((s) => s.estado === "enviada" || s.estado === "vista") || lista[0];
+  }
+
+  if (!seleccionada) {
+    return {
+      ok: false,
+      proveedor: { id: proveedor.id, nombre: proveedor.nombre, contacto: proveedor.contacto_nombre },
+      mensaje: "No hay peticiones de servicio activas asociadas a este enlace.",
+    };
+  }
+
+  if (seleccionada.estado === "enviada") {
+    await sb
+      .from("solicitudes_proveedor_envios")
+      .update({ estado: "vista", vista_at: new Date().toISOString() })
+      .eq("id", seleccionada.envioId)
+      .eq("estado", "enviada");
+    seleccionada.estado = "vista";
+  }
+
+  return {
+    ok: true,
+    proveedor: { id: proveedor.id, nombre: proveedor.nombre, contacto: proveedor.contacto_nombre },
+    solicitud: seleccionada,
+  };
+}

@@ -40,6 +40,25 @@ export default async function PaginaPreciosProveedor({
     );
   }
 
+  // Si el enlace viene enfocado en una solicitud específica de servicio,
+  // mostrar exclusivamente la vista de esa petición sin mezclar con el catálogo.
+  if (searchParams?.solicitud) {
+    const { obtenerSolicitudUnicaPortal } = await import("@/app/actions/portal-precios-proveedor");
+    const { SolicitudServicioProveedorView } = await import("@/components/proveedores/SolicitudServicioProveedorView");
+    const resSol = await obtenerSolicitudUnicaPortal(params.token, searchParams.solicitud);
+    if (resSol.ok && resSol.solicitud) {
+      return (
+        <main>
+          <SolicitudServicioProveedorView
+            token={params.token}
+            proveedorNombre={resSol.proveedor?.contacto || resSol.proveedor?.nombre || contexto.proveedorNombre || "Proveedor"}
+            solicitudInicial={resSol.solicitud}
+          />
+        </main>
+      );
+    }
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 pb-10">
       <PortalPreciosProveedorClient
