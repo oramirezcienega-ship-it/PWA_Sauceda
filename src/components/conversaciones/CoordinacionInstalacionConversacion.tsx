@@ -120,6 +120,11 @@ export function CoordinacionInstalacionConversacion({
                   onCancelar={cancelar}
                   onOfrecer={ofrecer}
                   onProgramar={(sol, opcion) => setProgramando({ solicitudId: sol.id, opcion })}
+                  telefonoCliente={telefono}
+                  onActualizar={async () => {
+                    await cargar();
+                    onEnviada();
+                  }}
                 />
               </div>
             ))

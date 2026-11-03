@@ -10,6 +10,7 @@ import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { ordenesCerradas } from "@/lib/cierre-ot";
+import { normalizarTelefono } from "@/lib/telefono";
 import {
   avanzarSolicitud,
   costoReferenciaOferta,
@@ -434,13 +435,13 @@ export async function confirmarSolicitudProveedor(
 /** Manda al cliente, por su conversación, las opciones de fecha que propuso el proveedor. */
 export async function ofrecerOpcionesSolicitudCliente(
   solicitudId: string,
-  telefono: string
+  telefono?: string
 ): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin();
   const sb = supabaseServidor();
   const { data: sol } = await sb
     .from("solicitudes_proveedor")
-    .select("id, estado, productos_servicios:producto_id ( nombre )")
+    .select("id, estado, descripcion, expediente_id, cotizacion_id, productos_servicios:producto_id ( nombre )")
     .eq("id", solicitudId)
     .maybeSingle();
   if (!sol || sol.estado !== "asignada") return { ok: false, error: "La solicitud aún no tiene un proveedor que la haya aceptado." };
@@ -453,19 +454,177 @@ export async function ofrecerOpcionesSolicitudCliente(
   const opciones: string[] = Array.isArray(aceptado?.fechas_propuestas) ? aceptado!.fechas_propuestas.map(String) : [];
   if (opciones.length === 0) return { ok: false, error: "El proveedor no propuso fechas." };
 
-  const producto = (sol as any).productos_servicios?.nombre || "tu servicio";
-  const texto =
-    `¡Listo! Ya tenemos disponibilidad para *${producto}*. Estas son las opciones:\n\n` +
-    opciones.map((o, i) => `${i + 1}. ${o}`).join("\n") +
-    `\n\n¿Cuál te acomoda? Responde con el número.`;
+  let tel = normalizarTelefono(telefono || "");
+  if (!tel && sol.expediente_id) {
+    const { data: exp } = await sb.from("expedientes").select("telefono").eq("id", sol.expediente_id).maybeSingle();
+    tel = normalizarTelefono(exp?.telefono || "");
+  }
+  if (!tel && sol.cotizacion_id) {
+    const { data: cot } = await sb.from("cotizaciones").select("telefono_contacto").eq("id", sol.cotizacion_id).maybeSingle();
+    tel = normalizarTelefono(cot?.telefono_contacto || "");
+  }
+  if (!tel) return { ok: false, error: "No se encontró el teléfono del cliente para enviarle las opciones." };
+
+  const mDesc = String(sol.descripcion || "").match(/^(?:Servicio|Instalación):\s*([^;\n]+)/i);
+  const producto = (sol as any).productos_servicios?.nombre || (mDesc ? mDesc[1].trim() : "") || "tu servicio";
+
+  let texto = "";
+  if (opciones.length === 1) {
+    texto =
+      `¡Hola! Ya tenemos disponibilidad de nuestro técnico para tu servicio de *${producto}*:\n\n` +
+      `📅 *${opciones[0]}*\n\n` +
+      `¿Te queda bien ese día y horario para agendarte?`;
+  } else {
+    texto =
+      `¡Listo! Ya tenemos disponibilidad para *${producto}*. Estas son las opciones:\n\n` +
+      opciones.map((o, i) => `${i + 1}. ${o}`).join("\n") +
+      `\n\n¿Cuál te acomoda mejor?`;
+  }
+
   const { responderConversacion } = await import("@/app/actions/conversaciones");
-  const r = await responderConversacion(telefono, texto);
+  const r = await responderConversacion(tel, texto);
   if (!r.ok) return { ok: false, error: r.error || "No se pudo enviar al cliente." };
   await sb
     .from("solicitudes_proveedor")
     .update({ opciones_ofrecidas_at: new Date().toISOString() })
     .eq("id", solicitudId);
+
+  // Registrar actividad
+  const { registrarActividad } = await import("@/lib/actividades");
+  await registrarActividad(sb, {
+    expedienteId: sol.expediente_id,
+    tipo: "coordinacion_proveedor",
+    titulo: "📲 Opciones de servicio ofrecidas al cliente",
+    detalle: `Se ofrecieron por WhatsApp las siguientes opciones:\n${opciones.map((o, i) => `${i + 1}. ${o}`).join("\n")}`,
+  });
+
   return { ok: true };
+}
+
+/**
+ * Registra o edita manualmente las opciones de fecha/horario que dio un proveedor (por llamada,
+ * WhatsApp personal o mensaje externo). Pasa la solicitud a 'asignada' y opcionalmente
+ * se las envía al cliente de inmediato por WhatsApp.
+ */
+export async function registrarPropuestaProveedorManual(datos: {
+  solicitudId: string;
+  proveedorId?: string;
+  fechasPropuestas: string[];
+  costoAcordado?: number | null;
+  comentario?: string;
+  notificarCliente?: boolean;
+  telefonoCliente?: string;
+}): Promise<{ ok: boolean; error?: string; ofrecidasAlCliente?: boolean }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const ahora = new Date().toISOString();
+
+  const { data: sol } = await sb
+    .from("solicitudes_proveedor")
+    .select("id, folio, estado, costo_acordado, expediente_id, cotizacion_id, proveedor_asignado_id, solicitudes_proveedor_envios(*)")
+    .eq("id", datos.solicitudId)
+    .maybeSingle();
+
+  if (!sol) return { ok: false, error: "Solicitud no encontrada." };
+  if (sol.estado === "cancelada" || sol.estado === "confirmada") {
+    return { ok: false, error: `La solicitud ya está en estado ${sol.estado}.` };
+  }
+
+  const fechas = datos.fechasPropuestas.map((f) => f.trim()).filter(Boolean);
+  if (fechas.length === 0) {
+    return { ok: false, error: "Debes ingresar al menos una opción de fecha y horario." };
+  }
+
+  const envios: any[] = sol.solicitudes_proveedor_envios || [];
+  let provId = datos.proveedorId || sol.proveedor_asignado_id;
+  if (!provId && envios.length > 0) {
+    provId = envios[0].proveedor_id;
+  }
+  if (!provId) {
+    return { ok: false, error: "No se especificó qué proveedor propuso las fechas." };
+  }
+
+  const envioExistente = envios.find((e) => e.proveedor_id === provId);
+  const costoFinal =
+    datos.costoAcordado !== undefined && datos.costoAcordado !== null
+      ? datos.costoAcordado
+      : envioExistente?.costo_referencia || sol.costo_acordado || null;
+
+  if (envioExistente) {
+    await sb
+      .from("solicitudes_proveedor_envios")
+      .update({
+        estado: "aceptada",
+        respondida_at: ahora,
+        fechas_propuestas: fechas,
+        comentario: datos.comentario?.trim() || "Registrada manualmente (llamada/WhatsApp)",
+        costo_referencia: costoFinal,
+        updated_at: ahora,
+      })
+      .eq("id", envioExistente.id);
+  } else {
+    await sb.from("solicitudes_proveedor_envios").insert({
+      solicitud_id: sol.id,
+      proveedor_id: provId,
+      estado: "aceptada",
+      respondida_at: ahora,
+      fechas_propuestas: fechas,
+      comentario: datos.comentario?.trim() || "Registrada manualmente (llamada/WhatsApp)",
+      costo_referencia: costoFinal,
+    });
+  }
+
+  // Cancelar otros envíos que estuvieran en espera
+  await sb
+    .from("solicitudes_proveedor_envios")
+    .update({ estado: "cancelada", updated_at: ahora })
+    .eq("solicitud_id", sol.id)
+    .neq("proveedor_id", provId)
+    .in("estado", ["en_espera", "enviada", "vista"]);
+
+  // Actualizar la solicitud
+  await sb
+    .from("solicitudes_proveedor")
+    .update({
+      estado: "asignada",
+      proveedor_asignado_id: provId,
+      costo_acordado: costoFinal,
+      updated_at: ahora,
+    })
+    .eq("id", sol.id);
+
+  // Asegurar orden de trabajo abierta
+  const { abrirOrdenTrabajoSolicitud } = await import("@/lib/solicitudes-proveedor");
+  await abrirOrdenTrabajoSolicitud(sb, sol.id);
+
+  // Obtener nombre del proveedor para bitácora
+  const { data: provData } = await sb.from("proveedores").select("nombre").eq("id", provId).maybeSingle();
+  const provNombre = provData?.nombre || "Proveedor";
+
+  // Registrar actividad
+  const { registrarActividad } = await import("@/lib/actividades");
+  await registrarActividad(sb, {
+    expedienteId: sol.expediente_id,
+    tipo: "coordinacion_proveedor",
+    titulo: `📞 Propuesta de ${provNombre} registrada`,
+    detalle: `Opciones propuestas:\n${fechas.map((f, i) => `${i + 1}. ${f}`).join("\n")}${costoFinal ? `\nCosto acordado: ${Number(costoFinal).toLocaleString("es-MX")}` : ""}${datos.comentario ? `\nNota: ${datos.comentario}` : ""}`,
+  });
+
+  let ofrecidas = false;
+  if (datos.notificarCliente) {
+    const resOfrecer = await ofrecerOpcionesSolicitudCliente(sol.id, datos.telefonoCliente);
+    if (resOfrecer.ok) {
+      ofrecidas = true;
+    } else {
+      console.warn("No se pudo ofrecer de inmediato al cliente:", resOfrecer.error);
+    }
+  }
+
+  revalidatePath("/conversaciones");
+  revalidatePath("/dashboard");
+  revalidatePath("/ordenes-trabajo");
+
+  return { ok: true, ofrecidasAlCliente: ofrecidas };
 }
 
 /** Cotizaciones aceptadas de la conversación (para coordinar su instalación) y sus solicitudes. */

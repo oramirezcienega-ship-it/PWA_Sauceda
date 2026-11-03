@@ -127,6 +127,8 @@ export function TarjetaSolicitud({
   onCancelar,
   onOfrecer,
   onProgramar,
+  telefonoCliente,
+  onActualizar,
 }: {
   s: SolicitudProveedor;
   onConfirmar: (s: SolicitudProveedor, fecha: string) => void;
@@ -135,9 +137,12 @@ export function TarjetaSolicitud({
   onCancelar: (s: SolicitudProveedor) => void;
   /** Si se da, aparece "Ofrecer al cliente" (manda las opciones por su conversación). */
   onOfrecer?: (s: SolicitudProveedor) => void;
+  telefonoCliente?: string;
+  onActualizar?: () => void;
 }) {
   const aceptado = s.envios.find((e) => e.estado === "aceptada");
   const [confirmando, setConfirmando] = useState<string | null>(null);
+  const [abriendoPropuesta, setAbriendoPropuesta] = useState(false);
   const etiqueta = ETIQUETA_ESTADO[s.estado];
 
   return (
@@ -186,16 +191,26 @@ export function TarjetaSolicitud({
               {s.costoAcordado !== null && <> por {formatoPesos(s.costoAcordado)}</>}
               {aceptado.porTelegram && <span className="text-carbon/50"> · respondió por Telegram</span>}. Opciones:
             </div>
-            {onOfrecer && (
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => onOfrecer(s)}
-                className="rounded-lg border border-sauce/40 bg-white px-2.5 py-1 font-semibold text-sauce hover:bg-sauce hover:text-white"
-                title="Manda estas opciones al cliente por WhatsApp para que elija"
+                onClick={() => setAbriendoPropuesta(true)}
+                className="rounded-lg border border-carbon/20 bg-white px-2 py-1 text-[11px] font-semibold text-carbon/75 hover:bg-carbon/5 flex items-center gap-1 shadow-2xs"
+                title="Modificar o agregar fechas propuestas por el proveedor"
               >
-                {s.opcionesOfrecidasAt ? "📲 Reenviar al cliente" : "📲 Ofrecer al cliente"}
+                ✏️ Editar opciones
               </button>
-            )}
+              {onOfrecer && (
+                <button
+                  type="button"
+                  onClick={() => onOfrecer(s)}
+                  className="rounded-lg border border-sauce/40 bg-white px-2.5 py-1 text-[11px] font-semibold text-sauce hover:bg-sauce hover:text-white shadow-2xs"
+                  title="Manda estas opciones al cliente por WhatsApp para que elija"
+                >
+                  {s.opcionesOfrecidasAt ? "📲 Reenviar al cliente" : "📲 Ofrecer al cliente"}
+                </button>
+              )}
+            </div>
           </div>
           {s.opcionesOfrecidasAt && (
             <p className="text-[11px] text-carbon/55">Ofrecidas al cliente el {fechaHora(s.opcionesOfrecidasAt)}. Cuando elija, confírmala:</p>
@@ -244,13 +259,324 @@ export function TarjetaSolicitud({
       )}
 
       {(s.estado === "abierta" || s.estado === "asignada" || s.estado === "sin_proveedor") && (
-        <div className="flex justify-end">
-          <button type="button" onClick={() => onCancelar(s)} className="text-rojo hover:underline">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-carbon/5">
+          {s.estado === "abierta" && (
+            <button
+              type="button"
+              onClick={() => setAbriendoPropuesta(true)}
+              className="rounded-lg border border-emerald-600/30 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 flex items-center gap-1.5 shadow-2xs"
+              title="Si el proveedor te llamó o escribió por WhatsApp personal, anota aquí su propuesta de fecha"
+            >
+              📞 Registrar opción del proveedor
+            </button>
+          )}
+          <button type="button" onClick={() => onCancelar(s)} className="text-rojo hover:underline ml-auto text-[11px]">
             Cancelar solicitud
           </button>
         </div>
       )}
+
+      {abriendoPropuesta && (
+        <ModalPropuestaProveedor
+          solicitud={s}
+          telefonoCliente={telefonoCliente}
+          onCerrar={() => setAbriendoPropuesta(false)}
+          onGuardado={(_ofrecidas) => {
+            setAbriendoPropuesta(false);
+            if (onActualizar) onActualizar();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+export function ModalPropuestaProveedor({
+  solicitud,
+  telefonoCliente,
+  onCerrar,
+  onGuardado,
+}: {
+  solicitud: SolicitudProveedor;
+  telefonoCliente?: string;
+  onCerrar: () => void;
+  onGuardado: (ofrecidas: boolean) => void;
+}) {
+  const [montado, setMontado] = useState(false);
+  const aceptado = solicitud.envios.find((e) => e.estado === "aceptada");
+  const primerEnvio = solicitud.envios[0];
+  const [proveedorId, setProveedorId] = useState<string>(
+    solicitud.proveedorAsignadoId || aceptado?.proveedorId || primerEnvio?.proveedorId || ""
+  );
+  const [costo, setCosto] = useState<string>(
+    solicitud.costoAcordado !== null && solicitud.costoAcordado !== undefined
+      ? String(solicitud.costoAcordado)
+      : aceptado?.costoReferencia !== null && aceptado?.costoReferencia !== undefined
+      ? String(aceptado.costoReferencia)
+      : primerEnvio?.costoReferencia !== null && primerEnvio?.costoReferencia !== undefined
+      ? String(primerEnvio.costoReferencia)
+      : ""
+  );
+  const [opciones, setOpciones] = useState<string[]>(
+    aceptado?.fechasPropuestas && aceptado.fechasPropuestas.length > 0
+      ? [...aceptado.fechasPropuestas]
+      : [""]
+  );
+  const [comentario, setComentario] = useState<string>(aceptado?.comentario || "");
+  const [notificarCliente, setNotificarCliente] = useState<boolean>(true);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMontado(true);
+  }, []);
+
+  function actualizarOpcion(idx: number, valor: string) {
+    setOpciones((prev) => {
+      const arr = [...prev];
+      arr[idx] = valor;
+      return arr;
+    });
+  }
+
+  function agregarOpcion() {
+    setOpciones((prev) => [...prev, ""]);
+  }
+
+  function eliminarOpcion(idx: number) {
+    setOpciones((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : [""]));
+  }
+
+  function aplicarFechaHoraAOpcion(idx: number, fechaISO: string, horaStr: string) {
+    if (!fechaISO) return;
+    const [y, m, d] = fechaISO.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    const dias = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+    const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+    const diaSemana = dias[dt.getDay()];
+    const diaMes = dt.getDate();
+    const mesNombre = meses[dt.getMonth()];
+
+    let horaFmt = horaStr;
+    if (horaStr) {
+      const [hh, mm] = horaStr.split(":").map(Number);
+      const sufijo = hh >= 12 ? "pm" : "am";
+      const h12 = hh % 12 === 0 ? 12 : hh % 12;
+      horaFmt = `${h12}:${String(mm).padStart(2, "0")} ${sufijo}`;
+    }
+    const textoGenerado = horaFmt ? `${diaSemana}, ${diaMes} de ${mesNombre} - ${horaFmt}` : `${diaSemana}, ${diaMes} de ${mesNombre}`;
+    actualizarOpcion(idx, textoGenerado);
+  }
+
+  async function guardar() {
+    const validas = opciones.map((o) => o.trim()).filter(Boolean);
+    if (validas.length === 0) {
+      setError("Ingresa al menos una fecha y horario propuesto.");
+      return;
+    }
+    setGuardando(true);
+    setError(null);
+    try {
+      const res = await registrarPropuestaProveedorManual({
+        solicitudId: solicitud.id,
+        proveedorId: proveedorId || undefined,
+        fechasPropuestas: validas,
+        costoAcordado: costo ? Number(costo) : null,
+        comentario,
+        notificarCliente,
+        telefonoCliente,
+      });
+      if (!res.ok) {
+        setError(res.error || "No se pudo guardar la propuesta.");
+        return;
+      }
+      onGuardado(!!res.ofrecidasAlCliente);
+    } catch (e: any) {
+      setError(e?.message || "Error al procesar la propuesta.");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (!montado) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 font-cuerpo text-xs backdrop-blur-2xs">
+      <div className="flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-carbon/10 bg-slate-50 px-5 py-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-bold text-sauce">{solicitud.folio}</span>
+              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                {solicitud.estado === "asignada" ? "Editar propuesta" : "Registrar propuesta"}
+              </span>
+            </div>
+            <h3 className="font-titular text-sm sm:text-base font-bold text-verde-profundo mt-0.5">
+              {solicitud.estado === "asignada" ? "Editar fechas propuestas" : "Propuesta recibida del proveedor"}
+            </h3>
+            <p className="text-[11px] text-carbon/60">
+              Registra la fecha y horario que te dio el proveedor por llamada o WhatsApp para planteárselas al cliente.
+            </p>
+          </div>
+          <button type="button" onClick={onCerrar} className="text-carbon/40 hover:text-carbon text-lg px-2">
+            ✕
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {error && <div className="rounded-lg bg-rojo/10 p-2.5 text-rojo font-medium">{error}</div>}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-carbon/70 mb-1">Proveedor que lo toma</label>
+              {solicitud.envios.length > 1 ? (
+                <select
+                  value={proveedorId}
+                  onChange={(e) => setProveedorId(e.target.value)}
+                  className="w-full rounded-lg border border-carbon/20 bg-white px-2.5 py-1.5 outline-none focus:border-sauce"
+                >
+                  {solicitud.envios.map((env) => (
+                    <option key={env.proveedorId} value={env.proveedorId}>
+                      {env.proveedorNombre}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="rounded-lg border border-carbon/15 bg-slate-50 px-3 py-1.5 font-semibold text-carbon">
+                  {primerEnvio?.proveedorNombre || "Proveedor"}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-carbon/70 mb-1">Costo acordado ($)</label>
+              <input
+                type="number"
+                value={costo}
+                onChange={(e) => setCosto(e.target.value)}
+                placeholder="1050"
+                className="w-full rounded-lg border border-carbon/20 bg-white px-2.5 py-1.5 outline-none focus:border-sauce"
+              />
+              <span className="text-[10px] text-carbon/45">Pago neto acordado para el proveedor</span>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold text-carbon/70">
+                Opciones de fecha y horario que propuso ({opciones.length})
+              </label>
+              <button
+                type="button"
+                onClick={agregarOpcion}
+                className="text-[11px] font-bold text-sauce hover:underline"
+              >
+                + Agregar otra opción
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              {opciones.map((opc, idx) => (
+                <div key={idx} className="rounded-xl border border-carbon/15 bg-slate-50/70 p-2.5 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-[11px] text-carbon/60">Opción {idx + 1}</span>
+                    {opciones.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => eliminarOpcion(idx)}
+                        className="text-carbon/40 hover:text-rojo text-[11px]"
+                        title="Eliminar esta opción"
+                      >
+                        Eliminar
+                      </button>
+                    )}
+                  </div>
+
+                  <input
+                    type="text"
+                    value={opc}
+                    onChange={(e) => actualizarOpcion(idx, e.target.value)}
+                    placeholder="Ej: sábado, 7 de noviembre - 11:00 am"
+                    className="w-full rounded-lg border border-carbon/20 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-sauce font-medium"
+                  />
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-carbon/10 text-[10.5px] text-carbon/60">
+                    <span className="shrink-0 text-carbon/45">📅 Asistente rápido:</span>
+                    <input
+                      type="date"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val) aplicarFechaHoraAOpcion(idx, val, "");
+                      }}
+                      className="rounded border border-carbon/20 bg-white px-1.5 py-0.5 text-[10.5px]"
+                    />
+                    <input
+                      type="time"
+                      onChange={(e) => {
+                        const hora = e.target.value;
+                        const mIso = opc.match(/(\d{4}-\d{2}-\d{2})/);
+                        const fIso = mIso ? mIso[1] : new Date().toISOString().slice(0, 10);
+                        aplicarFechaHoraAOpcion(idx, fIso, hora);
+                      }}
+                      className="rounded border border-carbon/20 bg-white px-1.5 py-0.5 text-[10.5px]"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-carbon/70 mb-1">Notas / Bitácora (opcional)</label>
+            <input
+              type="text"
+              value={comentario}
+              onChange={(e) => setComentario(e.target.value)}
+              placeholder="Ej: Acordado por llamada telefónica con Clemente."
+              className="w-full rounded-lg border border-carbon/20 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-sauce"
+            />
+          </div>
+
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 flex items-start gap-2.5">
+            <input
+              type="checkbox"
+              id="chk-notificar-cliente"
+              checked={notificarCliente}
+              onChange={(e) => setNotificarCliente(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-carbon/30 text-emerald-600 focus:ring-emerald-500"
+            />
+            <label htmlFor="chk-notificar-cliente" className="cursor-pointer">
+              <span className="block font-bold text-emerald-900 text-xs">
+                Preguntar de inmediato al cliente por WhatsApp
+              </span>
+              <span className="block text-[11px] text-emerald-800/80 mt-0.5">
+                Sofía o el sistema enviará por la conversación las opciones al cliente para que elija la que mejor le acomode.
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-carbon/10 bg-slate-50 px-5 py-3">
+          <button
+            type="button"
+            onClick={onCerrar}
+            disabled={guardando}
+            className="rounded-lg border border-carbon/20 bg-white px-3 py-1.5 font-semibold text-carbon/70 hover:bg-carbon/5"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={guardar}
+            disabled={guardando}
+            className="rounded-lg bg-verde-profundo px-4 py-1.5 font-bold text-white hover:bg-emerald-800 disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+          >
+            {guardando ? "Guardando…" : notificarCliente ? "Guardar y preguntar al cliente" : "Guardar propuesta"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
