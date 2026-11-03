@@ -11,9 +11,12 @@ interface PaginaDetalleProveedorProps {
   params: {
     id: string;
   };
+  searchParams?: {
+    tab?: string;
+  };
 }
 
-export default async function PaginaDetalleProveedor({ params }: PaginaDetalleProveedorProps) {
+export default async function PaginaDetalleProveedor({ params, searchParams }: PaginaDetalleProveedorProps) {
   const usuario = await obtenerUsuarioActual();
   if (!usuario) {
     redirect("/login");
@@ -46,7 +49,7 @@ export default async function PaginaDetalleProveedor({ params }: PaginaDetallePr
           </Link>
         </div>
 
-        <DetalleProveedor proveedorInicial={datos.proveedor} documentosIniciales={datos.documentos} />
+        <DetalleProveedor proveedorInicial={datos.proveedor} documentosIniciales={datos.documentos} tabInicial={searchParams?.tab} />
       </div>
     </main>
   );

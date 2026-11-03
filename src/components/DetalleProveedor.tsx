@@ -15,11 +15,16 @@ import { BalanceProveedorTab } from "./proveedores/BalanceProveedorTab";
 interface DetalleProveedorProps {
   proveedorInicial: Proveedor;
   documentosIniciales: DocumentoProveedor[];
+  tabInicial?: string;
 }
 
 type TabProveedor = "balance" | "oferta" | "documentos" | "catalogo_precios" | "evolucion_costos";
 
-export function DetalleProveedor({ proveedorInicial, documentosIniciales }: DetalleProveedorProps) {
+export function DetalleProveedor({
+  proveedorInicial,
+  documentosIniciales,
+  tabInicial,
+}: DetalleProveedorProps) {
   const router = useRouter();
   const [proveedor, setProveedor] = useState<Proveedor>(proveedorInicial);
   const [documentos, setDocumentos] = useState<DocumentoProveedor[]>(documentosIniciales);
@@ -27,9 +32,12 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
   const [documentoEnEdicion, setDocumentoEnEdicion] = useState<DocumentoProveedor | null>(null);
   const [actualizando, setActualizando] = useState(false);
   const [reporteAbierto, setReporteAbierto] = useState(false);
-  const [tabActual, setTabActual] = useState<TabProveedor>(
-    documentosIniciales.length > 0 ? "documentos" : "oferta"
-  );
+  const [tabActual, setTabActual] = useState<TabProveedor>(() => {
+    if (tabInicial && ["balance", "oferta", "documentos", "catalogo_precios", "evolucion_costos"].includes(tabInicial)) {
+      return tabInicial as TabProveedor;
+    }
+    return documentosIniciales.length > 0 ? "documentos" : "oferta";
+  });
 
   // Filtros de tabla
   const [busqueda, setBusqueda] = useState("");
@@ -345,13 +353,21 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
           >
             {proveedor.activo ? "Marcar Inactivo" : "Marcar Activo"}
           </button>
-          <div className="bg-white/10 px-4 py-3 rounded-xl border border-white/10 text-right">
-            <div className="text-[10.5px] text-crema/70 uppercase font-bold tracking-wider">Total Acumulado Pagado</div>
+          <button
+            type="button"
+            onClick={() => setTabActual("balance")}
+            className="bg-white/10 hover:bg-white/15 px-4 py-3 rounded-xl border border-white/10 text-right transition cursor-pointer group"
+            title="Ver Balance y Cuenta Corriente de este proveedor"
+          >
+            <div className="text-[10.5px] text-crema/70 uppercase font-bold tracking-wider flex items-center justify-end gap-1.5">
+              <span>Total Acumulado Pagado</span>
+              <span className="text-xs group-hover:scale-110 transition">⚖️</span>
+            </div>
             <div className="font-mono text-2xl font-bold text-dorado">{formatoPesos(montoTotal)}</div>
             <div className="text-[10px] text-crema/70 mt-0.5 uppercase font-medium">
-              {documentos.length} documento(s) registrados
+              {documentos.length} documento(s) · Ver cuenta corriente →
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -408,14 +424,14 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
         <div className="flex border-b border-carbon/10 bg-slate-50/70 px-4 pt-3 gap-2 overflow-x-auto">
           <button
             type="button"
-            onClick={() => setTabActual("oferta")}
+            onClick={() => setTabActual("balance")}
             className={`pb-3 px-3 text-xs font-bold transition border-b-2 flex items-center gap-1.5 whitespace-nowrap ${
-              tabActual === "oferta"
+              tabActual === "balance"
                 ? "border-sauce text-verde-profundo bg-white rounded-t-lg shadow-2xs"
                 : "border-transparent text-carbon/60 hover:text-carbon"
             }`}
           >
-            <span>🛒</span> Productos que Ofrece
+            <span>⚖️</span> Balance y Cuenta Corriente
           </button>
 
           <button
@@ -431,6 +447,18 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
             <span className="ml-1 rounded-full bg-carbon/10 px-1.5 py-0.2 text-[10px] font-mono">
               {documentos.length}
             </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTabActual("oferta")}
+            className={`pb-3 px-3 text-xs font-bold transition border-b-2 flex items-center gap-1.5 whitespace-nowrap ${
+              tabActual === "oferta"
+                ? "border-sauce text-verde-profundo bg-white rounded-t-lg shadow-2xs"
+                : "border-transparent text-carbon/60 hover:text-carbon"
+            }`}
+          >
+            <span>🛒</span> Productos que Ofrece
           </button>
 
           <button
