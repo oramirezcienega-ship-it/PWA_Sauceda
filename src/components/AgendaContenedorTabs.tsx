@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { RutaSemanalDashboard } from "./RutaSemanalDashboard";
 import { AgendaDashboard } from "./AgendaDashboard";
+import { CoordinacionesSlaDashboard } from "./CoordinacionesSlaDashboard";
 
 interface AgendaContenedorTabsProps {
   usuarioActual: {
@@ -22,12 +23,12 @@ export function AgendaContenedorTabs({
   asesoresActivos,
   siteUrl,
 }: AgendaContenedorTabsProps) {
-  const [tabActiva, setTabActiva] = useState<"ruta" | "calendario">("ruta");
+  const [tabActiva, setTabActiva] = useState<"ruta" | "coordinaciones" | "calendario">("ruta");
 
   return (
     <div className="space-y-6">
       {/* Conmutador de Pestañas Superior */}
-      <div className="flex items-center gap-2 border-b border-carbon/10 pb-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-carbon/10 pb-3">
         <button
           type="button"
           onClick={() => setTabActiva("ruta")}
@@ -38,6 +39,18 @@ export function AgendaContenedorTabs({
           }`}
         >
           <span>🗺️</span> Ruta Semanal de Inspecciones
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTabActiva("coordinaciones")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+            tabActiva === "coordinaciones"
+              ? "bg-verde-profundo text-white shadow-sm"
+              : "bg-white border border-carbon/15 text-carbon hover:bg-carbon/5"
+          }`}
+        >
+          <span>⚡</span> Coordinaciones & SLA Proveedores
         </button>
 
         <button
@@ -56,6 +69,8 @@ export function AgendaContenedorTabs({
       {/* Renderizado de la pestaña activa */}
       {tabActiva === "ruta" ? (
         <RutaSemanalDashboard />
+      ) : tabActiva === "coordinaciones" ? (
+        <CoordinacionesSlaDashboard />
       ) : (
         <AgendaDashboard
           usuarioActual={usuarioActual}
