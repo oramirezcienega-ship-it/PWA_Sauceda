@@ -82,6 +82,8 @@ export function ModalProgramarServicio({
     // El costo pasa al del catálogo del nuevo proveedor (si lo tiene).
     const sugerido = datos?.costosSugeridos[id];
     setCosto(sugerido ? String(sugerido) : "");
+    setTextoCliente(null);
+    setTextoProveedor(null);
   }
   const linkFinal = linkMaps.trim() || (direccion.trim() ? linkMapsDeDireccion(direccion) : "");
   const datosMensaje = useMemo(
@@ -371,11 +373,32 @@ export function ModalProgramarServicio({
               </label>
               <label className="block">
                 <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Precio del servicio al cliente (va en su mensaje y en la OT)</span>
-                <input type="text" inputMode="decimal" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="$" className={campo} />
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={precio}
+                  onChange={(e) => {
+                    setPrecio(e.target.value);
+                    setTextoCliente(null);
+                    setTextoProveedor(null);
+                  }}
+                  placeholder="$"
+                  className={campo}
+                />
               </label>
               <label className="block">
                 <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Costo acordado con el proveedor (solo lo ve el proveedor)</span>
-                <input type="text" inputMode="decimal" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="$" className={campo} />
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={costo}
+                  onChange={(e) => {
+                    setCosto(e.target.value);
+                    setTextoProveedor(null);
+                  }}
+                  placeholder="$"
+                  className={campo}
+                />
                 {datos.origenCosto && (
                   <span className="mt-0.5 block text-[10.5px] text-carbon/50">Del catálogo del proveedor, según {datos.origenCosto}</span>
                 )}

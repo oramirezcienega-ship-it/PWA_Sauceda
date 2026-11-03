@@ -20,9 +20,17 @@ export interface CotizadoCliente {
   origen: string;
 }
 
+export interface OpcionesCotizadoCliente {
+  expedienteId: string | null;
+  prospectoId: string | null;
+  productoId?: string | null;
+  cantidad?: number | null;
+  textoReferencia?: string | null;
+}
+
 export async function loCotizadoAlCliente(
   sb: SupabaseClient,
-  ids: { expedienteId: string | null; prospectoId: string | null }
+  ids: OpcionesCotizadoCliente
 ): Promise<CotizadoCliente | null> {
   if (!ids.expedienteId && !ids.prospectoId) return null;
 
@@ -76,25 +84,98 @@ export async function loCotizadoAlCliente(
     }
   }
 
-  // 3. Línea de negocio del expediente + cantidad que dijo el cliente
+  // 3. Si se pasó productoId explícito
+  if (ids.productoId) {
+    const { data: p } = await sb
+      .from("productos_servicios")
+      .select("id, nombre, precio_unitario, tarifas_capacidad, cantidad_minima")
+      .eq("id", ids.productoId)
+      .maybeSingle();
+    if (p) {
+      let cant = ids.cantidad ?? null;
+      if (!cant && (ids.textoReferencia || ids.expedienteId)) {
+        const txt = `${ids.textoReferencia || ""}`;
+        const m = txt.match(/(\d+(?:[.,]\d+)?)\s*(tubos?|litros?|lts?\b|l\b|m2|m²|metros)/i);
+        if (m) cant = Number(m[1].replace(",", "."));
+      }
+      return {
+        productoId: p.id,
+        productoNombre: p.nombre,
+        cantidad: cant,
+        precio: await precioCatalogo(sb, p.id, cant),
+        origen: `Producto asignado · ${p.nombre}${cant ? ` · ${cant}` : ""}`,
+      };
+    }
+  }
+
+  // 4. Línea de negocio del expediente + necesidad del cliente
   if (!ids.expedienteId) return null;
   const { data: exp } = await sb.from("expedientes").select("tipo_negocio, necesidad").eq("id", ids.expedienteId).maybeSingle();
   if (!exp?.tipo_negocio) return null;
+
   const { data: prods } = await sb
     .from("productos_servicios")
-    .select("id, nombre")
+    .select("id, nombre, descripcion, precio_unitario, tarifas_capacidad, cantidad_minima")
     .eq("tipo_negocio", exp.tipo_negocio)
-    .eq("activo", true)
-    .limit(2);
-  if (!prods || prods.length !== 1) return null;
-  const m = String(exp.necesidad || "").match(/(\d+(?:[.,]\d+)?)\s*(tubos?|litros?|lts?\b|l\b|m2|m²|metros)/i);
-  const cantidad = m ? Number(m[1].replace(",", ".")) : null;
+    .eq("activo", true);
+  if (!prods || prods.length === 0) return null;
+
+  const textoBusqueda = `${ids.textoReferencia || ""} ${exp.necesidad || ""}`.toLowerCase();
+  const m = textoBusqueda.match(/(\d+(?:[.,]\d+)?)\s*(tubos?|litros?|lts?\b|l\b|m2|m²|metros)/i);
+  const cantidad = ids.cantidad ?? (m ? Number(m[1].replace(",", ".")) : null);
+
+  let mejorProd = prods[0];
+  if (prods.length > 1) {
+    let mejorPuntaje = -1;
+    for (const p of prods) {
+      let score = 0;
+      const nombre = (p.nombre || "").toLowerCase();
+      const desc = (p.descripcion || "").toLowerCase();
+      const palabras = nombre.split(/[\s,.-]+/).filter((w) => w.length > 3);
+      for (const w of palabras) {
+        if (textoBusqueda.includes(w)) score += 3;
+      }
+      if (textoBusqueda.includes("mantenimiento") && nombre.includes("mantenimiento")) score += 10;
+      if (textoBusqueda.includes("instalaci") && nombre.includes("instalaci")) score += 10;
+      if (textoBusqueda.includes("reparaci") && nombre.includes("reparaci")) score += 10;
+      if (textoBusqueda.includes("lavado") && (nombre.includes("lavado") || desc.includes("lavado"))) score += 5;
+      if (score > mejorPuntaje) {
+        mejorPuntaje = score;
+        mejorProd = p;
+      }
+    }
+  }
+
+  let precio = await precioCatalogo(sb, mejorProd.id, cantidad);
+
+  // Si el catálogo no arrojó precio pero en las actividades de Sofía quedó asentado un precio acordado
+  if (!precio && ids.expedienteId) {
+    const { data: acts } = await sb
+      .from("actividades")
+      .select("detalle")
+      .eq("expediente_id", ids.expedienteId)
+      .order("created_at", { ascending: false })
+      .limit(6);
+    for (const a of acts || []) {
+      const pm =
+        String(a.detalle || "").match(/precio(?:\s+oficial)?(?:\s+de)?\s*\$([0-9,]+)/i) ||
+        String(a.detalle || "").match(/\$([0-9,]+(?:\.\d{2})?)\s*(?:MXN|todo incluido)/i);
+      if (pm) {
+        const val = Number(pm[1].replace(/,/g, "")) || null;
+        if (val && val > 0) {
+          precio = val;
+          break;
+        }
+      }
+    }
+  }
+
   return {
-    productoId: prods[0].id,
-    productoNombre: prods[0].nombre,
+    productoId: mejorProd.id,
+    productoNombre: mejorProd.nombre,
     cantidad,
-    precio: await precioCatalogo(sb, prods[0].id, cantidad),
-    origen: `Lo que pidió el cliente · ${prods[0].nombre}${m ? ` · ${m[0]}` : ""}`,
+    precio,
+    origen: `Lo que pidió el cliente · ${mejorProd.nombre}${m ? ` · ${m[0]}` : cantidad ? ` · ${cantidad}` : ""}`,
   };
 }
 

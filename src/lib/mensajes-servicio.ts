@@ -65,6 +65,9 @@ export function mensajeServicioCliente(d: DatosMensajeServicio): string {
       (d.precioCliente && d.precioCliente > 0
         ? `💰 *Costo de la visita:* ${pesosMx(d.precioCliente)}\n`
         : `💰 *Costo de la visita:* Sin costo (diagnóstico técnico en sitio)\n`) +
+      (d.precioCliente && d.precioCliente > 0
+        ? `💳 *Forma de pago:* ¿Nos confirmas por favor si liquidas en *efectivo* o por *transferencia* al finalizar la visita?\n`
+        : "") +
       `🧾 *Folio:* ${d.ordenFolio || MARCA_FOLIO_OT}\n` +
       (d.notas.trim() ? `📌 ${d.notas.trim()}\n` : "") +
       `\nNuestro técnico especialista acudirá a revisar físicamente las condiciones del equipo para diagnosticar la falla y entregarte la cotización exacta de reparación. Por favor ten libre el acceso al área. Si necesitas cambiar algo, respóndenos por aquí. 💚`
@@ -76,7 +79,8 @@ export function mensajeServicioCliente(d: DatosMensajeServicio): string {
     `📅 *Fecha:* ${fechaServicioLegible(d.fecha)}\n` +
     `⏰ *Horario:* ${horario(d)}\n` +
     (d.direccion ? `📍 *Dirección:* ${d.direccion}\n` : "") +
-    (d.precioCliente ? `💰 *Costo del servicio:* ${pesosMx(d.precioCliente)}\n` : "") +
+    (d.precioCliente ? `💰 *Precio del servicio:* ${pesosMx(d.precioCliente)}\n` : "") +
+    (d.precioCliente ? `💳 *Forma de pago:* Por favor indícanos si realizas tu pago en *efectivo* o por *transferencia* al finalizar el servicio.\n` : "") +
     `🧾 *Orden de trabajo:* ${d.ordenFolio || MARCA_FOLIO_OT}\n` +
     (d.notas.trim() ? `📌 ${d.notas.trim()}\n` : "") +
     `\nNuestro técnico llegará en ese horario; por favor ten libre el acceso al área de trabajo. Si necesitas cambiar algo, respóndenos por aquí. 💚`
@@ -96,7 +100,12 @@ export function mensajeServicioProveedor(d: DatosMensajeServicio): string {
     (d.clienteTelefono ? `📱 WhatsApp del cliente: https://wa.me/${d.clienteTelefono}\n` : "") +
     (d.direccion ? `📍 ${d.direccion}\n` : "") +
     (d.linkMaps ? `🗺 ${d.linkMaps}\n` : "") +
-    (d.costo && d.costo > 0 ? `💲 Costo acordado: ${pesosMx(d.costo)}\n` : "") +
+    (d.costo && d.costo > 0 ? `💲 *Costo acordado (tu pago):* ${pesosMx(d.costo)}\n` : "") +
+    (d.precioCliente && d.precioCliente > 0
+      ? `💵 *Cobro al cliente:* ${pesosMx(d.precioCliente)}\n`
+      : d.precioCliente === 0 || esInspeccion
+      ? `💵 *Cobro al cliente:* $0 (visita sin costo)\n`
+      : "") +
     (d.notas.trim() ? `📌 ${d.notas.trim()}\n` : "") +
     (esInspeccion
       ? `\n📌 *Objetivo de la visita:* Revisar en sitio el equipo/instalación, diagnosticar la falla o fugas y definir lo necesario para cotizar la reparación definitiva.\n\nPor favor confírmanos de recibido. ¡Gracias!`

@@ -124,13 +124,20 @@ export async function prepararProgramacionServicio(
     }
 
     // Sin costo acordado: el del proveedor según lo que se le cotizó al cliente.
-    const cotizado = await loCotizadoAlCliente(sb, { expedienteId: sol.expediente_id, prospectoId: exp?.prospecto_id || null });
+    const cotizado = await loCotizadoAlCliente(sb, {
+      expedienteId: sol.expediente_id,
+      prospectoId: exp?.prospecto_id || null,
+      productoId: sol.producto_id || (sol.ordenes_trabajo as any)?.producto_id || null,
+      cantidad: sol.cantidad || (sol.ordenes_trabajo as any)?.cantidad_servicio || null,
+      textoReferencia: `${sol.descripcion || ""} ${trabajo || ""} ${exp?.necesidad || ""}`.trim(),
+    });
     const costosSugeridos = cotizado ? await costosProveedoresDe(sb, cotizado) : {};
     const relacionadosIds = cotizado ? await proveedoresDelProducto(sb, cotizado) : [];
     let costo = sol.costo_acordado === null ? null : Number(sol.costo_acordado);
     let origenCosto = "";
-    if (!costo && sol.proveedor_asignado_id && costosSugeridos[sol.proveedor_asignado_id]) {
-      costo = costosSugeridos[sol.proveedor_asignado_id];
+    const provIdActivo = sol.proveedor_asignado_id || relacionadosIds[0] || null;
+    if (!costo && provIdActivo && costosSugeridos[provIdActivo]) {
+      costo = costosSugeridos[provIdActivo];
       origenCosto = cotizado!.origen;
     }
 
@@ -161,7 +168,9 @@ export async function prepararProgramacionServicio(
         origenCosto,
         ordenFolio: sol.ordenes_trabajo?.folio || null,
         precioCliente:
-          sol.ordenes_trabajo?.precio_cliente !== null && sol.ordenes_trabajo?.precio_cliente !== undefined
+          sol.ordenes_trabajo?.precio_cliente !== null &&
+          sol.ordenes_trabajo?.precio_cliente !== undefined &&
+          Number(sol.ordenes_trabajo.precio_cliente) > 0
             ? Number(sol.ordenes_trabajo.precio_cliente)
             : cotizado?.precio ?? null,
         clienteTelefono: normalizarTelefono(exp?.telefono || ""),
