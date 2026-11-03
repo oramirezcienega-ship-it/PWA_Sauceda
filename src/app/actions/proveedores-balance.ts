@@ -85,7 +85,7 @@ export async function obtenerBalanceProveedor(proveedorId: string): Promise<Resp
     // 3. Consultar órdenes de trabajo asignadas a este proveedor
     const { data: otsData, error: errOTs } = await sb
       .from("ordenes_trabajo")
-      .select("id, folio, titulo, expediente_id, costo_proveedor, estatus, fecha_programada, anticipo_pagado, liquidacion_pagada")
+      .select("id, folio, titulo, expediente_id, costo_proveedor, estatus, fecha_programada")
       .eq("proveedor_id", proveedorId)
       .order("created_at", { ascending: false });
 
@@ -171,7 +171,8 @@ export async function obtenerBalanceProveedor(proveedorId: string): Promise<Resp
       const apps = aplicacionesPorOT[ot.id] || [];
       const montoAplicado = apps.reduce((acc, a) => acc + a.montoAplicado, 0);
       const saldoPendiente = Math.max(0, costo - montoAplicado);
-      const estaLiquidada = Boolean(ot.liquidacion_pagada) || (costo > 0 && saldoPendiente <= 0);
+      const estaLiquidada = costo > 0 ? saldoPendiente <= 0 : false;
+      const anticipoPagado = montoAplicado > 0;
 
       return {
         id: ot.id,
@@ -181,8 +182,8 @@ export async function obtenerBalanceProveedor(proveedorId: string): Promise<Resp
         costoProveedor: costo,
         estatus: ot.estatus,
         fechaProgramada: ot.fecha_programada,
-        anticipoPagado: Boolean(ot.anticipo_pagado),
-        liquidacionPagada: Boolean(ot.liquidacion_pagada),
+        anticipoPagado,
+        liquidacionPagada: estaLiquidada,
         montoAplicado,
         saldoPendiente,
         estaLiquidada,
