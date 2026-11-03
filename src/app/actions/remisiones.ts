@@ -241,8 +241,18 @@ export async function listarRemisionesFacturas(
       if (r.tipo === "factura" && r.datos_documento?.razonSocial) {
         nombreCliente = r.datos_documento.razonSocial;
       } else if (r.tipo !== "factura" && r.datos_documento?.nombreCliente) {
-        // Remisión a nombre de un titular distinto del contacto
         nombreCliente = r.datos_documento.nombreCliente;
+        if (prosp) {
+          const fullPros = [prosp.nombre, prosp.primer_apellido, prosp.segundo_apellido].filter(Boolean).join(" ");
+          if (fullPros && fullPros.toLowerCase().startsWith(nombreCliente.toLowerCase()) && fullPros.split(/\s+/).length > nombreCliente.split(/\s+/).length) {
+            nombreCliente = fullPros;
+          }
+        } else if (exp) {
+          const fullExp = [exp.cliente, exp.primer_apellido, exp.segundo_apellido].filter(Boolean).join(" ");
+          if (fullExp && fullExp.toLowerCase().startsWith(nombreCliente.toLowerCase()) && fullExp.split(/\s+/).length > nombreCliente.split(/\s+/).length) {
+            nombreCliente = fullExp;
+          }
+        }
       } else if (r.datos_documento?.personaRecibe) {
         nombreCliente = r.datos_documento.personaRecibe;
       } else if (ot?.cliente_nombre) {
@@ -250,8 +260,9 @@ export async function listarRemisionesFacturas(
       } else if (prosp) {
         const parts = [prosp.nombre, prosp.primer_apellido, prosp.segundo_apellido].filter(Boolean);
         nombreCliente = parts.join(" ") || "Cliente General";
-      } else if (exp?.cliente) {
-        nombreCliente = exp.cliente;
+      } else if (exp) {
+        const parts = [exp.cliente, exp.primer_apellido, exp.segundo_apellido].filter(Boolean);
+        nombreCliente = parts.join(" ") || "Cliente General";
       }
 
       // Teléfono y Correo

@@ -2342,13 +2342,21 @@ export async function obtenerGarantiaPorToken(
 
   if (errGar || !gar) return null;
 
+  const nombrePros = nombreCompletoDe(cot.prospectos);
+  const expObj = (cot as any).expedientes;
+  const nombreExp = expObj
+    ? [expObj.cliente, expObj.primer_apellido, expObj.segundo_apellido].filter(Boolean).join(" ")
+    : "";
+  const prospectoNombreFinal = cot.cliente_nombre_personalizado?.trim() || nombrePros || nombreExp || "";
+  const prospectoTelefonoFinal = cot.prospectos?.telefono || expObj?.telefono || "";
+
   return {
     cotizacion: {
       id: cot.id,
       prospectoId: cot.prospecto_id,
       expedienteId: cot.expediente_id,
-      prospectoNombre: nombreCompletoDe(cot.prospectos) || "",
-      prospectoTelefono: cot.prospectos?.telefono || "",
+      prospectoNombre: prospectoNombreFinal,
+      prospectoTelefono: prospectoTelefonoFinal,
       servicioTipo: cot.servicio_tipo,
       estatus: cot.estatus,
       requiereVisita: cot.requiere_visita,
@@ -2390,6 +2398,10 @@ export async function obtenerRemisionPorToken(
       *,
       prospectos (
         nombre, primer_apellido, segundo_apellido,
+        telefono
+      ),
+      expedientes (
+        cliente, primer_apellido, segundo_apellido,
         telefono
       )
     `)

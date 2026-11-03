@@ -46,11 +46,20 @@ export function ModalGenerarRemisionOT({
   );
 
   // Datos Remisión. "A nombre de" puede ser distinto del contacto que compró.
-  const [nombreCliente, setNombreCliente] = useState<string>(dd.nombreCliente || clienteNombre || "");
+  const nombreInicial =
+    dd.nombreCliente && clienteNombre && clienteNombre.toLowerCase().startsWith(dd.nombreCliente.toLowerCase()) && clienteNombre.split(/\s+/).length > dd.nombreCliente.split(/\s+/).length
+      ? clienteNombre
+      : (dd.nombreCliente || clienteNombre || "");
+  const recibeInicial =
+    dd.personaRecibe && clienteNombre && clienteNombre.toLowerCase().startsWith(dd.personaRecibe.toLowerCase()) && clienteNombre.split(/\s+/).length > dd.personaRecibe.split(/\s+/).length
+      ? clienteNombre
+      : (dd.personaRecibe || clienteNombre || "");
+
+  const [nombreCliente, setNombreCliente] = useState<string>(nombreInicial);
   const [direccionEntrega, setDireccionEntrega] = useState<string>(
     dd.direccionEntrega || clienteDireccion || "León, Guanajuato"
   );
-  const [personaRecibe, setPersonaRecibe] = useState<string>(dd.personaRecibe || clienteNombre || "");
+  const [personaRecibe, setPersonaRecibe] = useState<string>(recibeInicial);
 
   // Datos Factura
   const [rfc, setRfc] = useState<string>(dd.rfc || "");

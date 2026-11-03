@@ -2126,7 +2126,8 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
         comision_bancaria_pct,
         precio_cliente,
         prospectos(nombre, primer_apellido, segundo_apellido, telefono, direccion),
-        cotizaciones(id, precio_final, token, expediente_id)
+        expedientes(cliente, primer_apellido, segundo_apellido, telefono, direccion),
+        cotizaciones(id, precio_final, token, expediente_id, cliente_nombre_personalizado)
       `)
       .eq("id", datos.ordenTrabajoId)
       .single();
@@ -2169,19 +2170,39 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
 
     const montoBase = Number(ot.cotizaciones?.precio_final || (ot as any).precio_cliente || 0);
 
+    const nombrePros = nombreCompletoDe(ot.prospectos as any);
+    const expObj = (ot as any).expedientes;
+    const nombreExp = expObj
+      ? [expObj.cliente, expObj.primer_apellido, expObj.segundo_apellido].filter(Boolean).join(" ")
+      : "";
+    const nombreCompletoContacto = (ot.cotizaciones as any)?.cliente_nombre_personalizado || nombrePros || nombreExp || "";
+
+    const resolverNombreRemision = (capturado?: string) => {
+      const c = (capturado || "").trim();
+      if (!c) return nombreCompletoContacto;
+      if (
+        nombreCompletoContacto &&
+        nombreCompletoContacto.toLowerCase().startsWith(c.toLowerCase()) &&
+        nombreCompletoContacto.split(/\s+/).length > c.split(/\s+/).length
+      ) {
+        return nombreCompletoContacto;
+      }
+      return c;
+    };
+
     const datosDoc: Record<string, any> =
       datos.tipo === "factura"
         ? {
             rfc: datos.rfc?.trim().toUpperCase() || "XAXX010101000",
-            razonSocial: datos.razonSocial?.trim() || nombreCompletoDe(ot.prospectos as any) || "Público en General",
+            razonSocial: datos.razonSocial?.trim() || nombreCompletoContacto || "Público en General",
             regimenFiscal: datos.regimenFiscal || "601",
             usoCfdi: datos.usoCfdi || "G03",
           }
         : {
             direccionEntrega:
-              datos.direccionEntrega?.trim() || ot.prospectos?.direccion || "León, Guanajuato",
-            nombreCliente: datos.nombreCliente?.trim() || nombreCompletoDe(ot.prospectos as any) || "",
-            personaRecibe: datos.personaRecibe?.trim() || nombreCompletoDe(ot.prospectos as any) || "",
+              datos.direccionEntrega?.trim() || ot.prospectos?.direccion || (expObj as any)?.direccion || "León, Guanajuato",
+            nombreCliente: resolverNombreRemision(datos.nombreCliente),
+            personaRecibe: resolverNombreRemision(datos.personaRecibe),
             fechaInstalacion:
               datos.fecha ||
               ot.fecha_conclusion ||
@@ -2768,7 +2789,7 @@ export async function obtenerRemisionOrdenTrabajoPorToken(token: string): Promis
 
     const { data: ot, error } = await sb
       .from("ordenes_trabajo")
-      .select("id, folio, titulo, prospectos(nombre, primer_apellido, segundo_apellido, telefono)")
+      .select("id, folio, titulo, prospectos(nombre, primer_apellido, segundo_apellido, telefono), expedientes(cliente, primer_apellido, segundo_apellido, telefono)")
       .eq("token", token)
       .maybeSingle();
 
@@ -2788,13 +2809,21 @@ export async function obtenerRemisionOrdenTrabajoPorToken(token: string): Promis
       return { ok: false, error: "Aún no se ha generado una remisión/factura para esta orden de trabajo." };
     }
 
+    const nombreProsOT = nombreCompletoDe(ot.prospectos as any);
+    const expObjOT = (ot as any).expedientes;
+    const nombreExpOT = expObjOT
+      ? [expObjOT.cliente, expObjOT.primer_apellido, expObjOT.segundo_apellido].filter(Boolean).join(" ")
+      : "";
+    const clienteNombreOT = nombreProsOT || nombreExpOT || "Cliente General";
+    const clienteTelefonoOT = (ot.prospectos as any)?.telefono || expObjOT?.telefono || "";
+
     return {
       ok: true,
       orden: {
         folio: ot.folio,
         titulo: ot.titulo,
-        clienteNombre: nombreCompletoDe(ot.prospectos as any) || "Cliente General",
-        clienteTelefono: (ot.prospectos as any)?.telefono || "",
+        clienteNombre: clienteNombreOT,
+        clienteTelefono: clienteTelefonoOT,
       },
       remision: {
         id: rem.id,

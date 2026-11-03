@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { MembreteMarca } from "@/components/marca/Logo";
-import { nombreTitularRemision } from "@/lib/remision-titular";
+import { nombreTitularRemision, personaRecibeRemision } from "@/lib/remision-titular";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -75,8 +75,8 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
           <div className="space-y-1.5">
             <h4 className="font-bold text-carbon/50 uppercase text-[10px] tracking-wider">Detalles de Entrega</h4>
             <div className="text-carbon/80 font-medium">Ubicación: {remision.datosDocumento.direccionEntrega || "Domicilio en Obra"}</div>
-            {remision.datosDocumento.personaRecibe && (
-              <div className="text-carbon/70">Recibe: {remision.datosDocumento.personaRecibe}</div>
+            {personaRecibeRemision(remision.datosDocumento.personaRecibe, cotizacion.prospectoNombre) && (
+              <div className="text-carbon/70">Recibe: {personaRecibeRemision(remision.datosDocumento.personaRecibe, cotizacion.prospectoNombre)}</div>
             )}
             {remision.datosDocumento.fechaInstalacion && (
               <div className="text-carbon/70">Fecha programada: {formatFecha(remision.datosDocumento.fechaInstalacion)}</div>

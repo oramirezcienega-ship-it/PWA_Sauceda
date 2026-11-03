@@ -140,7 +140,7 @@ export function DetalleCotizacionAdmin({
   const [regimenFiscalDoc, setRegimenFiscalDoc] = useState("");
   const [usoCfdiDoc, setUsoCfdiDoc] = useState("G03");
   const [direccionEntregaDoc, setDireccionEntregaDoc] = useState("");
-  const [personaRecibeDoc, setPersonaRecibeDoc] = useState("");
+  const [personaRecibeDoc, setPersonaRecibeDoc] = useState(cotizacionInicial.prospectoNombre || "");
   const [fechaInstalacionDoc, setFechaInstalacionDoc] = useState("");
   const [procesandoRemision, setProcesandoRemision] = useState(false);
   const [mensajeRemisionForm, setMensajeRemisionForm] = useState({ tipo: "", texto: "" });
@@ -1062,8 +1062,10 @@ export function DetalleCotizacionAdmin({
         datosDoc.regimenFiscal = regimenFiscalDoc.trim();
         datosDoc.usoCfdi = usoCfdiDoc.trim();
       } else {
+        const nombreSugerido = personaRecibeDoc.trim() || cotizacion.prospectoNombre || "";
+        datosDoc.nombreCliente = nombreSugerido;
+        datosDoc.personaRecibe = nombreSugerido;
         datosDoc.direccionEntrega = direccionEntregaDoc.trim();
-        datosDoc.personaRecibe = personaRecibeDoc.trim();
         datosDoc.fechaInstalacion = fechaInstalacionDoc;
       }
 
