@@ -890,8 +890,30 @@ export async function actualizarEstatusOrdenTrabajo(
 
     if (error) return { ok: false, error: error.message };
 
-    // Al concluir la orden, generar en automático la remisión de costo del proveedor asignado
+    // Al concluir la orden, sincronizar citas vinculadas en agenda_citas a 'completada'
     if (nuevoEstatus === "completada") {
+      try {
+        const { data: otData } = await sb
+          .from("ordenes_trabajo")
+          .select("cotizacion_id, expediente_id")
+          .eq("id", ordenId)
+          .maybeSingle();
+        if (otData) {
+          const filtros = [];
+          if (otData.cotizacion_id) filtros.push(`cotizacion_id.eq.${otData.cotizacion_id}`);
+          if (otData.expediente_id) filtros.push(`expediente_id.eq.${otData.expediente_id}`);
+          if (filtros.length > 0) {
+            await sb
+              .from("agenda_citas")
+              .update({ estado: "completada" })
+              .or(filtros.join(","))
+              .neq("estado", "cancelada");
+          }
+        }
+      } catch (errSyncCitas) {
+        console.warn("Aviso al sincronizar cita completada en agenda_citas:", errSyncCitas);
+      }
+
       const resDoc = await generarDocumentoProveedorAutomatico(ordenId);
       if (!resDoc.ok) {
         console.warn("No se generó el documento de proveedor automático:", resDoc.error);
@@ -932,6 +954,8 @@ export async function actualizarEstatusOrdenTrabajo(
     }
 
     revalidatePath("/ordenes-trabajo");
+    revalidatePath("/agenda");
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al actualizar estatus." };

@@ -162,8 +162,15 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
       console.error("Error al consultar agenda_citas para actividades de la semana:", errCitas);
     }
 
-    // 3. Consultar ordenes_trabajo en el rango de la semana (excluyendo sólo
-    // canceladas, por la misma razón que en agenda_citas arriba).
+    // 3. Consultar ordenes_trabajo: programadas en la semana o vinculadas a las
+    // citas encontradas (para reflejar su estatus y orden de trabajo real).
+    const cotIdsCitas = (citasRaw || []).map((c: any) => c.cotizacion_id).filter(Boolean);
+    const expIdsCitas = (citasRaw || []).map((c: any) => c.expediente_id).filter(Boolean);
+
+    const filtrosOT = [`and(fecha_programada.gte.${fechaInicio},fecha_programada.lte.${fechaFin})`];
+    if (cotIdsCitas.length > 0) filtrosOT.push(`cotizacion_id.in.(${cotIdsCitas.join(",")})`);
+    if (expIdsCitas.length > 0) filtrosOT.push(`expediente_id.in.(${expIdsCitas.join(",")})`);
+
     const { data: otsRaw, error: errOTs } = await sb
       .from("ordenes_trabajo")
       .select(`
@@ -179,9 +186,8 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
         asesor_ejecutor_id,
         asesor_responsable_id
       `)
-      .gte("fecha_programada", fechaInicio)
-      .lte("fecha_programada", fechaFin)
       .neq("estatus", "cancelada")
+      .or(filtrosOT.join(","))
       .order("fecha_programada", { ascending: true });
 
     if (errOTs) {
@@ -306,11 +312,16 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
 
       // Buscar si tiene OT vinculada
       const otMatch = (otsRaw || []).find((ot: any) =>
-        (c.expediente_id && ot.expediente_id === c.expediente_id && ot.fecha_programada === c.fecha) ||
-        (c.cotizacion_id && ot.cotizacion_id === c.cotizacion_id)
+        (c.cotizacion_id && ot.cotizacion_id === c.cotizacion_id) ||
+        (c.expediente_id && ot.expediente_id === c.expediente_id && (ot.fecha_programada === c.fecha || !ot.fecha_programada))
       );
 
-      const st = mapearEstado(c.estado);
+      let st = mapearEstado(c.estado);
+      if (otMatch?.estatus === "completada") {
+        st = { estado: "completada", label: "Completada" };
+      } else if (otMatch?.estatus === "cancelada") {
+        st = { estado: "cancelada", label: "Cancelada" };
+      }
       // Inspección creada por la coordinación cuyo equipo aún no confirma:
       // se distingue de las inspecciones ya programadas.
       if (
