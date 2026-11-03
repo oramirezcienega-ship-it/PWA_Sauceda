@@ -13,9 +13,9 @@ import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { BotonLlamar } from "./BotonLlamar";
 import { AsesorSelector } from "./AsesorSelector";
 import { OperadorSelector } from "./OperadorSelector";
-import { labelTipoNegocio, type Cotizacion, type CalificacionProspecto, type EtapaId } from "@/lib/types";
+import { labelTipoNegocio, type Cotizacion, type CalificacionProspecto, type EtapaId, type Expediente } from "@/lib/types";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
-import { cambiarCalificacionExpediente, actualizarDireccionExpediente } from "@/app/actions/expedientes";
+import { cambiarCalificacionExpediente, actualizarDireccionExpediente, obtenerExpedientePorId } from "@/app/actions/expedientes";
 import { ConversacionHistorica } from "./ConversacionHistorica";
 import { LlamadasHistoricas } from "./LlamadasHistoricas";
 import { TimelineSecuencia } from "./TimelineSecuencia";
@@ -46,7 +46,29 @@ export function DetalleExpediente({ id }: { id: string }) {
   const router = useRouter();
   const { obtenerExpediente, moverEtapa, eliminarExpediente, cargado, recargar } =
     useExpedientes();
-  const expediente = obtenerExpediente(id);
+  const expedienteEnContexto = obtenerExpediente(id);
+  const [expedienteDirecto, setExpedienteDirecto] = useState<Expediente | null>(null);
+  const [cargandoDirecto, setCargandoDirecto] = useState(false);
+  const [busquedaDirectaTerminada, setBusquedaDirectaTerminada] = useState(false);
+
+  useEffect(() => {
+    if (!expedienteEnContexto && !expedienteDirecto && !cargandoDirecto && !busquedaDirectaTerminada) {
+      setCargandoDirecto(true);
+      obtenerExpedientePorId(id)
+        .then((exp) => {
+          if (exp) {
+            setExpedienteDirecto(exp);
+          }
+        })
+        .catch(console.error)
+        .finally(() => {
+          setCargandoDirecto(false);
+          setBusquedaDirectaTerminada(true);
+        });
+    }
+  }, [expedienteEnContexto, expedienteDirecto, cargandoDirecto, busquedaDirectaTerminada, id]);
+
+  const expediente = expedienteEnContexto || expedienteDirecto;
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const [mostrarControlesTraspaso, setMostrarControlesTraspaso] = useState(false);
   const [secuencias, setSecuencias] = useState<any[]>([]);
@@ -159,15 +181,16 @@ export function DetalleExpediente({ id }: { id: string }) {
     }
   }
 
-  // Expediente inexistente. Mientras carga el estado persistido evitamos
-  // mostrar el mensaje de "no encontrado" (podría ser un id válido aún no leído).
+  // Expediente inexistente. Mientras carga el estado persistido o la búsqueda directa,
+  // evitamos mostrar el mensaje de "no encontrado" prematuramente.
   if (!expediente) {
+    const estaCargando = !cargado || cargandoDirecto || !busquedaDirectaTerminada;
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
         <p className="font-titular text-2xl text-verde-profundo">
-          {cargado ? "Expediente no encontrado" : "Cargando…"}
+          {estaCargando ? "Cargando…" : "Expediente no encontrado"}
         </p>
-        {cargado && (
+        {!estaCargando && (
           <>
             <p className="mt-2 text-sm text-carbon/60">
               El expediente <span className="font-mono">{id}</span> no existe.

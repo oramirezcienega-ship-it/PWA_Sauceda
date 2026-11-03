@@ -59,10 +59,20 @@ export async function listarExpedientes(): Promise<Expediente[]> {
     query = query.eq("operador_id", usuario.id);
   }
 
-  const { data, error } = await query.order("id", { ascending: true });
-  if (error) throw new Error(error.message);
-
-  const expedientesFilas = (data as FilaExpediente[]) ?? [];
+  // Paginación por lotes para superar el límite estricto de 1000 registros de PostgREST
+  let expedientesFilas: FilaExpediente[] = [];
+  let desde = 0;
+  const TAMANO_PAGINA = 1000;
+  while (true) {
+    const { data, error } = await query
+      .order("id", { ascending: true })
+      .range(desde, desde + TAMANO_PAGINA - 1);
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    expedientesFilas = expedientesFilas.concat(data as FilaExpediente[]);
+    if (data.length < TAMANO_PAGINA) break;
+    desde += TAMANO_PAGINA;
+  }
   const expIds = expedientesFilas.map((e) => e.id);
   const prospectoIds = expedientesFilas.map((e) => e.prospecto_id).filter(Boolean) as string[];
 
@@ -162,6 +172,81 @@ export async function cargarExpedientes(): Promise<
       mensaje: err instanceof Error ? err.message : "Error desconocido",
     };
   }
+}
+
+/**
+ * Obtiene un expediente específico por su ID directo (ej. EXP-992).
+ * Permite acceso y renderizado directo aunque no esté aún en el estado global.
+ */
+export async function obtenerExpedientePorId(id: string): Promise<Expediente | null> {
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
+
+  const sb = supabaseServidor();
+  let query = sb
+    .from("expedientes")
+    .select("*, prospectos(origen, campaign_name, adset_name, ad_name, correo, direccion), asesor:asesor_id(nombre), operador:operador_id(nombre)")
+    .eq("id", id);
+
+  if (rol === "asesor") {
+    query = query.eq("asesor_id", usuario.id);
+  } else if (rol === "operaciones") {
+    query = query.eq("operador_id", usuario.id);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  const e = data as FilaExpediente;
+  const mapped = aExpediente(e);
+
+  let empresaNombre = mapped.empresaNombre || null;
+  if (e.empresa_id) {
+    try {
+      const { data: emp } = await sb.from("empresas").select("name").eq("id", e.empresa_id).maybeSingle();
+      if (emp?.name) empresaNombre = emp.name;
+    } catch {}
+  }
+
+  let secuenciaNombre: string | null = null;
+  try {
+    const { data: en } = await sb
+      .from("sequence_enrollments")
+      .select("automation_sequences(nombre)")
+      .or(`expediente_id.eq.${id}${e.prospecto_id ? `,prospecto_id.eq.${e.prospecto_id}` : ""}`)
+      .eq("status", "activo")
+      .limit(1)
+      .maybeSingle();
+    if (en?.automation_sequences && (en.automation_sequences as any).nombre) {
+      secuenciaNombre = (en.automation_sequences as any).nombre;
+    }
+  } catch {}
+
+  let ultimaActividadTitulo: string | null = null;
+  let ultimaActividadFecha: string | null = null;
+  try {
+    const { data: act } = await sb
+      .from("actividades")
+      .select("titulo, created_at")
+      .eq("expediente_id", id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (act) {
+      ultimaActividadTitulo = act.titulo;
+      ultimaActividadFecha = act.created_at;
+    }
+  } catch {}
+
+  return {
+    ...mapped,
+    empresaNombre,
+    secuenciaNombre,
+    ultimaActividadTitulo,
+    ultimaActividadFecha,
+  };
 }
 
 /** Obtiene un expediente por su token público (portal del cliente). */
