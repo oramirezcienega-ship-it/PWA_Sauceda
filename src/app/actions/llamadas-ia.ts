@@ -59,14 +59,14 @@ export async function probarLlamadaIA(datos: {
   servicio?: string;
   colonia?: string;
   segmento?: SegmentoLlamada;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; llamadaId?: string; vapiCallId?: string; listenUrl?: string }> {
   await requireAdmin();
   const user = await usuarioActual();
   const creada = await crearLlamadaPrueba({ ...datos, creadoPor: user?.id ?? null });
   if (!creada.ok || !creada.id) return { ok: false, error: creada.error };
   const r = await despacharLlamada(creada.id);
   revalidatePath(RUTA);
-  return r;
+  return { ...r, llamadaId: creada.id };
 }
 
 /** Aprueba sugerencias: cada una queda programada a su hora sugerida (si ya pasó, en cuanto haya horario). */
@@ -178,7 +178,7 @@ export async function cancelarLlamadaIA(id: string): Promise<{ ok: boolean; erro
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
-export async function llamarAhoraIA(id: string): Promise<{ ok: boolean; error?: string }> {
+export async function llamarAhoraIA(id: string): Promise<{ ok: boolean; error?: string; vapiCallId?: string; listenUrl?: string }> {
   await requireAdmin();
   const r = await despacharLlamada(id);
   revalidatePath(RUTA);

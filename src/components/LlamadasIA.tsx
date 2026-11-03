@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { CabinaLlamadaSombra } from "@/components/CabinaLlamadaSombra";
 import {
   analizarSugerenciasIA,
   aprobarLlamadasIA,
@@ -127,6 +128,13 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
   const [filtroSeg, setFiltroSeg] = useState<FiltroSegmento>("todos");
   const [tipoProspecto, setTipoProspecto] = useState("");
   const [analizando, setAnalizando] = useState(false);
+  const [llamadaActivaSombra, setLlamadaActivaSombra] = useState<{
+    id: string;
+    nombre: string;
+    telefono: string;
+    vapiCallId?: string | null;
+    listenUrl?: string | null;
+  } | null>(null);
   const [prueba, setPrueba] = useState<{ telefono: string; nombre: string; servicio: string; colonia: string; segmento: SegmentoLlamada }>({
     telefono: "",
     nombre: "",
@@ -174,6 +182,59 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
     });
   };
 
+  const llamadaEnCurso = inicial.find((l) => l.estado === "en_curso");
+  useEffect(() => {
+    if (llamadaEnCurso && !llamadaActivaSombra) {
+      setLlamadaActivaSombra({
+        id: llamadaEnCurso.id,
+        nombre: llamadaEnCurso.nombre || "Cliente",
+        telefono: llamadaEnCurso.telefono,
+        vapiCallId: llamadaEnCurso.vapi_call_id,
+        listenUrl: (llamadaEnCurso.datos as Record<string, any> | undefined)?.monitor?.listenUrl || null,
+      });
+    }
+  }, [llamadaEnCurso, llamadaActivaSombra]);
+
+  const iniciarSombra = (ll: LlamadaIA) => {
+    setLlamadaActivaSombra({
+      id: ll.id,
+      nombre: ll.nombre || "Cliente",
+      telefono: ll.telefono,
+      vapiCallId: ll.vapi_call_id,
+      listenUrl: (ll.datos as Record<string, any> | undefined)?.monitor?.listenUrl || null,
+    });
+    if (ll.estado === "pendiente") {
+      ejecutar(async () => {
+        await aprobarLlamadasIA([ll.id]);
+        const res = await llamarAhoraIA(ll.id);
+        if (res.ok && res.vapiCallId) {
+          setLlamadaActivaSombra({
+            id: ll.id,
+            nombre: ll.nombre || "Cliente",
+            telefono: ll.telefono,
+            vapiCallId: res.vapiCallId,
+            listenUrl: res.listenUrl || null,
+          });
+        }
+        return res;
+      }, "Llamada aprobada e iniciada en modo sombra (AirPods).");
+    } else if (ll.estado === "aprobada") {
+      ejecutar(async () => {
+        const res = await llamarAhoraIA(ll.id);
+        if (res.ok && res.vapiCallId) {
+          setLlamadaActivaSombra({
+            id: ll.id,
+            nombre: ll.nombre || "Cliente",
+            telefono: ll.telefono,
+            vapiCallId: res.vapiCallId,
+            listenUrl: res.listenUrl || null,
+          });
+        }
+        return res;
+      }, "Marcando llamada en modo sombra (AirPods)...");
+    }
+  };
+
   const reales = inicial.filter((l) => !l.es_prueba);
   const contestadas = reales.filter((l) => l.resultado && !["no_contesta", "buzon", "error"].includes(l.resultado)).length;
   const visitas = reales.filter((l) => l.resultado === "visita_agendada").length;
@@ -205,6 +266,17 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
         >
           {mensaje.texto}
         </p>
+      )}
+
+      {llamadaActivaSombra && (
+        <CabinaLlamadaSombra
+          llamadaId={llamadaActivaSombra.id}
+          vapiCallId={llamadaActivaSombra.vapiCallId}
+          clienteNombre={llamadaActivaSombra.nombre}
+          clienteTelefono={llamadaActivaSombra.telefono}
+          listenUrl={llamadaActivaSombra.listenUrl}
+          onCerrar={() => setLlamadaActivaSombra(null)}
+        />
       )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -382,7 +454,9 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
                 seleccionada={seleccion.includes(ll.id)}
                 onSeleccionar={(v) => setSeleccion(v ? [...seleccion, ll.id] : seleccion.filter((x) => x !== ll.id))}
                 ocupado={pendiente}
+                configurado={configurado}
                 ejecutar={ejecutar}
+                onIniciarSombra={iniciarSombra}
               />
             ))
           )}
@@ -408,7 +482,7 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
           {agenda.length === 0 ? (
             <p className="px-6 py-8 text-center text-sm text-carbon/50">No hay llamadas programadas.</p>
           ) : (
-            agenda.map((ll) => <FilaAgenda key={ll.id} ll={ll} ocupado={pendiente} configurado={configurado} ejecutar={ejecutar} />)
+            agenda.map((ll) => <FilaAgenda key={ll.id} ll={ll} ocupado={pendiente} configurado={configurado} ejecutar={ejecutar} onIniciarSombra={iniciarSombra} />)
           )}
         </div>
       </section>
@@ -456,7 +530,19 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            ejecutar(() => probarLlamadaIA(prueba), "Llamada de prueba en marcha: contesta tu teléfono.");
+            ejecutar(async () => {
+              const res = await probarLlamadaIA(prueba);
+              if (res.ok && res.llamadaId) {
+                setLlamadaActivaSombra({
+                  id: res.llamadaId,
+                  nombre: prueba.nombre || "Llamada de Prueba",
+                  telefono: prueba.telefono,
+                  vapiCallId: res.vapiCallId || null,
+                  listenUrl: res.listenUrl || null,
+                });
+              }
+              return res;
+            }, "Llamada de prueba en marcha con modo sombra para AirPods. ¡Contesta tu teléfono!");
           }}
           className="border-t border-carbon/10 p-4"
         >
@@ -486,7 +572,7 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
               disabled={pendiente || !configurado}
               className="rounded-lg bg-verde-profundo px-4 py-1.5 text-sm font-semibold text-crema shadow-sm transition hover:bg-sauce disabled:opacity-40"
             >
-              {pendiente ? "Marcando…" : "📞 Llamarme"}
+              {pendiente ? "Marcando…" : "🎧 Probar con AirPods (Modo Sombra)"}
             </button>
             <span className="text-xs text-carbon/50">
               Queda marcada como prueba: no toca cotizaciones ni prospectos. Puede marcar fuera de horario.
@@ -522,13 +608,17 @@ function TarjetaSugerida({
   seleccionada,
   onSeleccionar,
   ocupado,
+  configurado,
   ejecutar,
+  onIniciarSombra,
 }: {
   ll: LlamadaIA;
   seleccionada: boolean;
   onSeleccionar: (v: boolean) => void;
   ocupado: boolean;
+  configurado: boolean;
   ejecutar: Ejecutar;
+  onIniciarSombra: (ll: LlamadaIA) => void;
 }) {
   const [editando, setEditando] = useState(false);
   const [hora, setHora] = useState(aInputLocal(ll.hora_sugerida));
@@ -623,6 +713,14 @@ function TarjetaSugerida({
         )}
       </div>
       <div className="flex shrink-0 flex-col gap-1">
+        <button
+          type="button"
+          className="rounded-md border border-emerald-600/30 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-40"
+          disabled={ocupado || !configurado}
+          onClick={() => onIniciarSombra(ll)}
+        >
+          🎧 Llamar en Sombra
+        </button>
         <button type="button" className={BTN} disabled={ocupado} onClick={() => ejecutar(() => aprobarLlamadasIA([ll.id]), "Pasó a la agenda.")}>
           Aprobar
         </button>
@@ -655,7 +753,19 @@ function TarjetaSugerida({
   );
 }
 
-function FilaAgenda({ ll, ocupado, configurado, ejecutar }: { ll: LlamadaIA; ocupado: boolean; configurado: boolean; ejecutar: Ejecutar }) {
+function FilaAgenda({
+  ll,
+  ocupado,
+  configurado,
+  ejecutar,
+  onIniciarSombra,
+}: {
+  ll: LlamadaIA;
+  ocupado: boolean;
+  configurado: boolean;
+  ejecutar: Ejecutar;
+  onIniciarSombra: (ll: LlamadaIA) => void;
+}) {
   const [editando, setEditando] = useState(false);
   const [hora, setHora] = useState(aInputLocal(ll.proximo_intento));
   const est = ESTADOS[ll.estado];
@@ -710,6 +820,14 @@ function FilaAgenda({ ll, ocupado, configurado, ejecutar }: { ll: LlamadaIA; ocu
           <>
             <button
               type="button"
+              className="rounded-md border border-emerald-600/40 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-40"
+              disabled={ocupado || !configurado}
+              onClick={() => onIniciarSombra(ll)}
+            >
+              🎧 Llamar en Sombra (AirPods)
+            </button>
+            <button
+              type="button"
               className={BTN}
               disabled={ocupado || !configurado}
               onClick={() => ejecutar(() => llamarAhoraIA(ll.id), "Marcando…")}
@@ -725,14 +843,23 @@ function FilaAgenda({ ll, ocupado, configurado, ejecutar }: { ll: LlamadaIA; ocu
           </>
         )}
         {ll.estado === "en_curso" && (
-          <button
-            type="button"
-            className={BTN}
-            disabled={ocupado}
-            onClick={() => ejecutar(() => sincronizarLlamadaIA(ll.id), "Sincronizada con Vapi.")}
-          >
-            Consultar Vapi
-          </button>
+          <>
+            <button
+              type="button"
+              className="rounded-md border border-emerald-600/40 bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-200"
+              onClick={() => onIniciarSombra(ll)}
+            >
+              🎧 Escuchar en AirPods (Sombra)
+            </button>
+            <button
+              type="button"
+              className={BTN}
+              disabled={ocupado}
+              onClick={() => ejecutar(() => sincronizarLlamadaIA(ll.id), "Sincronizada con Vapi.")}
+            >
+              Consultar Vapi
+            </button>
+          </>
         )}
       </div>
     </div>

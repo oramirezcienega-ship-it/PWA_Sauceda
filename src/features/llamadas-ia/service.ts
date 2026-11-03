@@ -89,6 +89,7 @@ export interface LlamadaIA {
   analizada_at: string | null;
   created_at: string;
   updated_at: string;
+  datos?: Record<string, unknown> | null;
 }
 
 const VAPI_URL = "https://api.vapi.ai";
@@ -445,7 +446,7 @@ export async function despacharLlamada(id: string): Promise<{ ok: boolean; error
   // Se reserva el intento antes de marcar para que el cron no la tome dos veces.
   await actualizar(id, { estado: "en_curso", intentos: ll.intentos + 1, error: null });
   try {
-    const call = await vapi<{ id: string }>("/call", {
+    const call = await vapi<{ id: string; monitor?: { listenUrl?: string; controlUrl?: string } }>("/call", {
       method: "POST",
       body: JSON.stringify({
         phoneNumberId,
@@ -453,8 +454,14 @@ export async function despacharLlamada(id: string): Promise<{ ok: boolean; error
         assistant: asistenteLlamada(ll, linea, datosLinea, espacios, asesorTel),
       }),
     });
-    await actualizar(id, { vapi_call_id: call.id });
-    return { ok: true };
+    await actualizar(id, {
+      vapi_call_id: call.id,
+      datos: {
+        ...(typeof ll.datos === "object" && ll.datos !== null ? (ll.datos as Record<string, unknown>) : {}),
+        monitor: call.monitor || null,
+      },
+    });
+    return { ok: true, vapiCallId: call.id, listenUrl: call.monitor?.listenUrl };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error al llamar a Vapi.";
     console.error(`[llamadas-ia] Falló el despacho de ${id}:`, msg);
