@@ -3,6 +3,7 @@
 import { claveContratoPdf } from "@/lib/contrato-firma";
 import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { obtenerConfiguracionTelegram, enviarMensajeTelegram } from "@/lib/telegram";
 import { enviarDocumentoTelegram } from "@/lib/telegram-envios";
@@ -146,8 +147,9 @@ async function armarPaqueteOT(ordenId: string) {
           anosGarantia: garantia.anosGarantia,
           fechaInicio: garantia.fechaInicio,
           fechaVencimiento: garantia.fechaVencimiento,
-          responsable: garantia.entregadoPorNombre || orden.asesorEjecutorNombre || "Sauceda Construye",
+          responsable: garantia.entregadoPorNombre || orden.asesorEjecutorNombre || obtenerMarcaServicio({ tipoNegocio: orden.tipoNegocio, texto: `${orden.titulo || ""} ${orden.descripcion || ""}` }).nombre,
           token: garantia.token,
+          tipoNegocio: orden.tipoNegocio,
         });
         return {
           buffer: Buffer.from(doc.output("arraybuffer")),
@@ -179,6 +181,7 @@ async function armarPaqueteOT(ordenId: string) {
           recibidoPorNombre: r.recibidoPorNombre,
           folioOT: orden.folio,
           notas: r.notas,
+          tipoNegocio: orden.tipoNegocio,
         });
         return {
           buffer: Buffer.from(doc.output("arraybuffer")),
@@ -235,6 +238,7 @@ async function armarPaqueteOT(ordenId: string) {
             subtotal: Number(rem.monto_subtotal || 0),
             serviciosExtra: Number(rem.servicios_extra || 0),
             total: Number(rem.monto_total || 0),
+            tipoNegocio: orden.tipoNegocio,
           });
           return { buffer: Buffer.from(doc.output("arraybuffer")), nombreArchivo };
         },

@@ -6,6 +6,7 @@ import { formatoPesos } from "@/lib/formato";
 import type { Cotizacion, CotizacionModularData, OpcionesSeleccionadasModular } from "@/lib/types";
 
 import { Logo } from "@/components/marca/Logo";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 interface VisualizadorCotizacionModularProps {
   cotizacion: Omit<Cotizacion, "notasInternas" | "costoEstimado">;
 }
@@ -55,6 +56,7 @@ export function VisualizadorCotizacionModular({
   const mostrarFoto1 = !etiquetas || Boolean(datosModulares.fotos?.renderUrl);
   const mostrarFoto2 = !etiquetas || Boolean(datosModulares.fotos?.estructuralUrl);
 
+  const marca = obtenerMarcaServicio(cotizacion);
   const [estatus, setEstatus] = useState(cotizacion.estatus);
   const [nombreFirma, setNombreFirma] = useState("");
   const [firmaVacia, setFirmaVacia] = useState(true);
@@ -160,7 +162,7 @@ export function VisualizadorCotizacionModular({
       cotizacion.prospectoNombre ||
       "";
     const saludo = nombreCliente ? `¡Hola! Te comparto la propuesta de ${nombreCliente}` : "¡Hola! Te comparto la propuesta";
-    const textoMensaje = `${saludo} con SAUCEDA (${datosModulares.titulo}):\n\n${urlCotizacion}\n\nPuedes revisar la visualización 3D fotorrealista, el plano estructural y personalizar los acabados en tiempo real.`;
+    const textoMensaje = `${saludo} con ${marca.nombre} (${datosModulares.titulo}):\n\n${urlCotizacion}\n\nPuedes revisar la visualización 3D fotorrealista, el plano estructural y personalizar los acabados en tiempo real.`;
     const urlWa = `https://api.whatsapp.com/send?text=${encodeURIComponent(textoMensaje)}`;
     window.open(urlWa, "_blank");
   };
@@ -317,7 +319,7 @@ export function VisualizadorCotizacionModular({
               </h3>
               <p className="text-sm text-emerald-800">
                 Tu configuración ha sido registrada y guardada formalmente. Nuestro equipo de
-                operaciones de SAUCEDA se pondrá en contacto contigo para coordinar el inicio de los
+                operaciones de {marca.nombre} se pondrá en contacto contigo para coordinar el inicio de los
                 trabajos y adquisición de materiales.
               </p>
             </div>
@@ -1053,7 +1055,7 @@ export function VisualizadorCotizacionModular({
 
         {/* Pie de página con datos fiscales */}
         <div className="border-t border-slate-100 bg-slate-50/60 p-6 text-center text-xs text-slate-400">
-          Sauceda Construye · Blvd. Paseo de los Insurgentes, León, Gto. · Portal seguro de
+          {marca.nombre} · Blvd. Paseo de los Insurgentes, León, Gto. · Portal seguro de
           autorizaciones técnicas y comerciales.
         </div>
       </div>

@@ -4,6 +4,7 @@ import { obtenerReciboPorToken } from "@/app/actions/ordenes-trabajo";
 import { BotonImprimirGarantia } from "@/components/BotonImprimirGarantia";
 
 import { MembreteMarca } from "@/components/marca/Logo";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -34,6 +35,10 @@ export default async function PaginaReciboPublico({ params }: ReciboPageProps) {
     return notFound();
   }
 
+  const marca = obtenerMarcaServicio({
+    texto: `${recibo.concepto || ""} ${recibo.notas || ""}`,
+  });
+
   const formatMoneda = (val: number) => {
     return new Intl.NumberFormat("es-MX", {
       style: "currency",
@@ -55,7 +60,7 @@ export default async function PaginaReciboPublico({ params }: ReciboPageProps) {
       <div className="w-full max-w-3xl bg-white border border-carbon/10 p-10 sm:p-14 rounded-2xl shadow-xl print:shadow-none print:border-none print:p-0 print:max-w-none text-carbon font-cuerpo">
         {/* Encabezado */}
         <div className="border-b-2 border-sauce pb-6 mb-8 flex justify-between items-end">
-          <MembreteMarca />
+          <MembreteMarca linea={marca.descriptor} />
           <div className="text-right">
             <h2 className="font-titular text-lg font-bold text-verde-profundo uppercase tracking-wider">
               RECIBO DE PAGO
@@ -179,10 +184,10 @@ export default async function PaginaReciboPublico({ params }: ReciboPageProps) {
           <div>
             <div className="border-b border-carbon/30 pb-2 mb-2 h-16 flex items-end justify-center">
               <span className="font-mono text-xs text-carbon/60">
-                {recibo.recibidoPorNombre || "Sauceda Construye"}
+                {recibo.recibidoPorNombre || marca.nombre}
               </span>
             </div>
-            <p className="font-semibold text-carbon">Por Sauceda Construye</p>
+            <p className="font-semibold text-carbon">Por {marca.nombre}</p>
             <p className="text-[10px] text-carbon/50">Cobranza y Administración</p>
           </div>
 

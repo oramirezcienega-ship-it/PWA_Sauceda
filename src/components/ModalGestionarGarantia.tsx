@@ -8,6 +8,8 @@ import {
   type CartaGarantiaOT,
 } from "@/app/actions/ordenes-trabajo";
 import { normalizarTelefono } from "@/lib/telefono";
+import { obtenerMarcaServicio, esServicioSeguridad } from "@/lib/marca-servicio";
+import { generarTextoGarantiaSeguridad } from "@/lib/garantia-producto";
 
 interface ModalGestionarGarantiaProps {
   abierto: boolean;
@@ -42,6 +44,9 @@ export function ModalGestionarGarantia({
     garantiaActual?.fechaInicio || new Date().toISOString().split("T")[0];
 
   const generarTextoPorDefecto = (anos: number) => {
+    if (esServicioSeguridad(tipoNegocio)) {
+      return generarTextoGarantiaSeguridad(ordenFolio, clienteNombre, anos);
+    }
     return `PÓLIZA DE GARANTÍA POR SERVICIO TÉCNICO
 
 Folio de Orden de Trabajo: ${ordenFolio}
@@ -186,7 +191,7 @@ Sauceda Construye · León, Guanajuato`;
 
   const mensajeWhatsApp = garantiaGuardada?.token
     ? encodeURIComponent(
-        `¡Hola ${clienteNombre}! 🛡️ Le hacemos entrega formal de su *Póliza de Garantía por Servicio* respaldada por Sauceda Construye, correspondiente a la orden de trabajo *${ordenFolio}* (${anosGarantia} año(s) de cobertura).\n\nPuede consultar y descargar su documento oficial aquí:\n${urlGarantiaPublica}\n\n¡Gracias por confiar en Sauceda!`
+        `¡Hola ${clienteNombre}! 🛡️ Le hacemos entrega formal de su *Póliza de Garantía por Servicio* respaldada por ${obtenerMarcaServicio({ tipoNegocio }).nombre}, correspondiente a la orden de trabajo *${ordenFolio}* (${anosGarantia} año(s) de cobertura).\n\nPuede consultar y descargar su documento oficial aquí:\n${urlGarantiaPublica}\n\n¡Gracias por confiar en ${obtenerMarcaServicio({ tipoNegocio }).nombre}!`
       )
     : "";
 

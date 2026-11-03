@@ -5,6 +5,7 @@ import { VisualizadorCotizacionApu } from "@/components/VisualizadorCotizacionAp
 import { AutoImprimirAlCargar } from "@/components/AutoImprimirAlCargar";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -32,8 +33,9 @@ export async function generateMetadata({ params }: PaginaPropuestaProps): Promis
                        cotizacion.servicioTipo === "pintura" ? "Pintura" :
                        cotizacion.servicioTipo === "losa" ? "Construcción de Losa" :
                        cotizacion.servicioTipo === "remodelacion" ? "Remodelación" : "Servicio";
+      const marca = obtenerMarcaServicio(cotizacion);
       return {
-        title: `SAUCEDA · Propuesta Comercial (Folio ${cotizacion.id})`,
+        title: `${marca.nombreMayus} · Propuesta Comercial (Folio ${cotizacion.id})`,
         description: `Propuesta de ${servicio} para ${cotizacion.prospectoNombre?.split(" ")[0]}. Revisa, descarga el PDF y autoriza en línea.`,
       };
     }
@@ -62,7 +64,7 @@ export default async function PaginaPropuestaCliente({ params, searchParams }: P
             {err instanceof Error ? err.message : "La propuesta no existe o aún no cuenta con las autorizaciones necesarias para ser mostrada."}
           </p>
           <div className="pt-2">
-            <p className="text-xs text-carbon/40">Por favor, comunícate con tu asesor comercial de SAUCEDA.</p>
+            <p className="text-xs text-carbon/40">Por favor, comunícate con tu asesor comercial de Sauceda.</p>
           </div>
         </div>
       </main>

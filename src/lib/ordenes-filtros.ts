@@ -1,7 +1,7 @@
 export interface OpcionFiltro {
   value: string;
   label: string;
-  grupo?: "Sauceda Construye" | "Bienes Raíces" | "Otro";
+  grupo?: "Sauceda Construye" | "Sauceda Protege" | "Bienes Raíces" | "Otro";
   icono?: string;
 }
 
@@ -22,7 +22,7 @@ export const OPCIONES_LINEAS_NEGOCIO: OpcionFiltro[] = [
   { value: "construccion-mantenimiento-calentadores", label: "Calentadores Solares", grupo: "Sauceda Construye", icono: "☀️" },
   { value: "construccion-mantenimiento-tinacos", label: "Mantenimiento Tinacos", grupo: "Sauceda Construye", icono: "🚰" },
   { value: "construccion-herreria", label: "Herrería", grupo: "Sauceda Construye", icono: "⚙️" },
-  { value: "seguridad", label: "Seguridad / CCTV", grupo: "Sauceda Construye", icono: "🛡️" },
+  { value: "seguridad", label: "Seguridad / CCTV", grupo: "Sauceda Protege", icono: "🛡️" },
   { value: "construccion-mantenimiento-postventa", label: "Mantenimiento Postventa", grupo: "Sauceda Construye", icono: "🔧" },
 
   // Bienes Raíces

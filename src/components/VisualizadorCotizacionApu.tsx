@@ -734,7 +734,7 @@ export function VisualizadorCotizacionApu({
                   Propuesta Formalmente Autorizada
                 </div>
                 <p className="text-xs text-emerald-800 max-w-md mx-auto">
-                  Este documento tiene validez contractual. Tu asesor comercial de Sauceda Construye te entregará la programación oficial de obra.
+                  Este documento tiene validez contractual. Tu asesor comercial de {marca.nombre} te entregará la programación oficial de obra.
                 </p>
               </div>
             ) : (

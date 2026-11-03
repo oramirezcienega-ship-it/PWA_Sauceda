@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { listarProductosServicios } from "@/app/actions/productos";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 import { registrarCotizacionExpress } from "@/app/actions/coordinacion-servicio-proveedor";
 import type { ProductoServicio, TarifaCapacidad } from "@/lib/types";
 import { MEDIDAS_TARIFA, formatoEscalon, medidaTarifa } from "@/lib/tarifas-capacidad";
@@ -173,7 +174,7 @@ export function ModalCotizacionExpress({
       : "";
     return `${saludo} Te compartimos tu cotización express:
 
-🧾 *${producto.nombre.toUpperCase()} — SAUCEDA CONSTRUYE*
+🧾 *${producto.nombre.toUpperCase()} — ${obtenerMarcaServicio({ tipoNegocio: producto.tipoNegocio, texto: `${producto.nombre} ${producto.categoria || ""}` }).nombreMayus}*
 ${detallePrecioTexto ? `${detallePrecioTexto}\n` : ""}
 💰 *Inversión: ${formatearDinero(total)} MXN*${aplicaMinimo ? `\n• Mínimo de cobro: ${minimo} ${unidad}` : ""}
 ${meses}${renglones.length ? `\n📋 *¿Qué incluye el servicio?*\n${renglones.map((r) => `✓ ${r}`).join("\n")}\n` : ""}${
@@ -274,7 +275,8 @@ ${meses}${renglones.length ? `\n📋 *¿Qué incluye el servicio?*\n${renglones.
     ctx.textBaseline = "top";
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "bold 32px sans-serif";
-    ctx.fillText("SAUCEDA CONSTRUYE", pad, 36);
+    const marcaExp = obtenerMarcaServicio({ tipoNegocio: producto.tipoNegocio, texto: `${producto.nombre} ${producto.categoria || ""}` });
+    ctx.fillText(marcaExp.nombreMayus, pad, 36);
     ctx.fillStyle = "#C9A961";
     ctx.font = "bold 17px sans-serif";
     ctx.fillText("COTIZACIÓN EXPRESS", pad, 80);
@@ -406,7 +408,8 @@ ${meses}${renglones.length ? `\n📋 *¿Qué incluye el servicio?*\n${renglones.
     ctx.fillText("Precios en MXN. Sujeto a revisión del equipo en sitio.", width / 2, cardY + cardH + 26);
     ctx.fillStyle = "#2D4A2B";
     ctx.font = "bold 15px sans-serif";
-    ctx.fillText("SAUCEDA CONSTRUYE  ·  Calidad y garantía por escrito", width / 2, cardY + cardH + 52);
+    const marcaPie = obtenerMarcaServicio({ tipoNegocio: producto.tipoNegocio, texto: `${producto.nombre} ${producto.categoria || ""}` });
+    ctx.fillText(`${marcaPie.nombreMayus}  ·  Calidad y garantía por escrito`, width / 2, cardY + cardH + 52);
 
     return canvas;
   }
@@ -443,7 +446,8 @@ ${meses}${renglones.length ? `\n📋 *¿Qué incluye el servicio?*\n${renglones.
       const blob = await new Promise<Blob | null>((r) => canvas.toBlob((b) => r(b), "image/png", 0.95));
       if (!blob) throw new Error("No se pudo crear la imagen");
       const file = new File([blob], nombreArchivo(), { type: "image/png" });
-      const ok = await onEnviarImagenDirecta(file, `Cotización express: ${producto?.nombre} — SAUCEDA Construye`);
+      const marcaEnv = obtenerMarcaServicio({ tipoNegocio: producto?.tipoNegocio, texto: `${producto?.nombre || ""} ${producto?.categoria || ""}` });
+      const ok = await onEnviarImagenDirecta(file, `Cotización express: ${producto?.nombre} — ${marcaEnv.nombre}`);
       if (ok !== false) {
         avisar("¡Cotización enviada al chat!", true);
         if (telefono && producto) {

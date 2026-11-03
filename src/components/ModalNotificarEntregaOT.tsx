@@ -13,6 +13,7 @@ import {
 } from "@/lib/meta-plantillas";
 import type { RemisionFactura } from "@/lib/types";
 import { normalizarTelefono } from "@/lib/telefono";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 
 interface ModalNotificarEntregaOTProps {
   abierto: boolean;
@@ -459,7 +460,7 @@ URL: ${PLANTILLA_ENTREGA_SERVICIO.botones[0].url}`;
                       ) : (
                         <>
                           <p className="leading-relaxed">
-                            ¡Hola <strong>{orden.clienteNombre || "Cliente"}</strong>! Gracias por elegirnos como SAUCEDA Construye.
+                            ¡Hola <strong>{orden.clienteNombre || "Cliente"}</strong>! Gracias por elegirnos como {obtenerMarcaServicio({ tipoNegocio: orden.tipoNegocio, texto: `${orden.titulo || ""} ${orden.descripcion || ""}` }).nombreMayus}.
                           </p>
                           <p className="text-[11px] text-carbon/70">
                             Te compartimos los enlaces para descargar y consultar tus documentos oficiales de la obra:

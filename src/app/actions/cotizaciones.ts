@@ -9,6 +9,7 @@ import { enviarCorreo } from "@/lib/email";
 import { MARCA } from "@/lib/marca";
 import { formatoPesos } from "@/lib/formato";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
+import { esServicioSeguridad } from "@/lib/marca-servicio";
 import { generarPdfCotizacion } from "@/lib/cotizacionPdf";
 import { aCotizacion, aVisitaReporte, aCotizacionConcepto } from "@/lib/cotizacionesMappers";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, CotizacionEstatus, RemisionFactura, GarantiaDocumento, CotizacionModalidad, CotizacionModularData, OpcionesSeleccionadasModular, CotizacionPartida, CotizacionEspacio } from "@/lib/types";
@@ -2181,8 +2182,36 @@ export async function prepararGarantiaPorDefecto(
   }
 
   if (!plantilla) {
-    // Plantilla estándar de impermeabilización
-    plantilla = `SAUCEDA CONSTRUYE
+    if (esServicioSeguridad({ ...cot, conceptos })) {
+      plantilla = `SAUCEDA PROTEGE
+CARTA DE GARANTÍA · EQUIPOS DE SEGURIDAD
+
+Por la presente garantizamos los equipos de seguridad e instalación realizados en la siguiente propiedad:
+
+Obra: [NOMBRE DE LA PROPIEDAD / CLIENTE]
+Ubicación: [DOMICILIO COMPLETO]
+Fecha de aplicación: [DÍA] de [MES] de [AÑO]
+
+Considerando que SAUCEDA Protege ha contratado para el suministro e instalación de equipos de seguridad en esta propiedad, garantizamos su correcto funcionamiento conforme a especificaciones técnicas.
+
+CONDICIONES DE GARANTÍA:
+
+Período de cobertura
+Los equipos de seguridad cuentan con 1 año de garantía en componentes y mano de obra a partir de la fecha de entrega.
+
+Cobertura de defectos
+Si se detecta cualquier defecto de fábrica o falla de instalación, SAUCEDA Protege se compromete a rectificar, reparar o sustituir los componentes sin cargo extra por servicios, mano de obra y materiales.
+
+Tramitación de reclamaciones
+SAUCEDA Protege se compromete a tramitar cualquier reclamación bajo garantía de forma rápida y justa. Contáctanos al +52 477 465 4700 o vía WhatsApp.
+
+Limitaciones de la garantía
+SAUCEDA Protege no será responsable si los equipos son manipulados por terceros no autorizados, siniestros naturales, vandalismo o descargas eléctricas extraordinarias.
+
+SAUCEDA Protege · Seguridad Electrónica y CCTV · +52 477 465 4700 · saucedamx.com`;
+    } else {
+      // Plantilla estándar de impermeabilización
+      plantilla = `SAUCEDA CONSTRUYE
 CARTA DE GARANTÍA · IMPERMEABILIZACIÓN
 
 Por la presente garantizamos los trabajos de impermeabilización que hemos instalado en la siguiente propiedad:
@@ -2222,6 +2251,7 @@ La instalación fue realizada por un aplicador previamente calificado y capacita
 Esta garantía es válida únicamente en la propiedad especificada y no es transferible.
 
 SAUCEDA Construye · Tradición con tecnología · +52 477 465 4700 · saucedamx.com`;
+    }
   }
 
   // 4. Interpolación

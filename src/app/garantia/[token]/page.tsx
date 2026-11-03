@@ -4,6 +4,7 @@ import { BotonImprimirGarantia } from "@/components/BotonImprimirGarantia";
 import { PolizaHoja } from "@/components/PolizaHoja";
 
 import { MembreteMarca } from "@/components/marca/Logo";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -22,6 +23,11 @@ export default async function PaginaGarantiaOTPublica({ params }: GarantiaOTPage
 
   const { garantia, orden } = data;
 
+  const marca = obtenerMarcaServicio({
+    tipoNegocio: orden.tipoNegocio,
+    texto: `${orden.titulo || ""} ${orden.descripcion || ""} ${garantia.titulo || ""}`,
+  });
+
   return (
     <main className="min-h-screen bg-slate-100 py-10 px-4 print:bg-white print:py-0 print:px-0 flex flex-col items-center">
       {/* Botón flotante para imprimir */}
@@ -39,7 +45,7 @@ export default async function PaginaGarantiaOTPublica({ params }: GarantiaOTPage
       >
         {/* Encabezado */}
         <div className="poliza-encabezado border-b-2 border-sauce pb-6 mb-8 flex justify-between items-end">
-          <MembreteMarca />
+          <MembreteMarca linea={marca.descriptor} />
           <div className="text-right">
             <h2 className="font-titular text-lg font-bold text-verde-profundo uppercase tracking-wider">
               {garantia.titulo}
@@ -97,10 +103,10 @@ export default async function PaginaGarantiaOTPublica({ params }: GarantiaOTPage
           <div>
             <div className="border-b border-carbon/30 pb-2 mb-2 h-16 flex items-end justify-center">
               <span className="font-mono text-xs text-carbon/60">
-                {garantia.entregadoPorNombre || orden.asesorEjecutorNombre || "Sauceda Construye"}
+                {garantia.entregadoPorNombre || orden.asesorEjecutorNombre || marca.nombre}
               </span>
             </div>
-            <p className="font-semibold text-carbon">Por Sauceda Construye</p>
+            <p className="font-semibold text-carbon">Por {marca.nombre}</p>
             <p className="text-[10px] text-carbon/50">Asesor que entrega la instalación</p>
           </div>
 
@@ -117,7 +123,7 @@ export default async function PaginaGarantiaOTPublica({ params }: GarantiaOTPage
 
         {/* Footer */}
         <div className="poliza-pie mt-12 pt-4 border-t border-dashed border-carbon/10 text-center text-[10px] text-carbon/40 font-mono">
-          Token de verificación: {garantia.token} · Póliza digital emitida por Sauceda Soluciones Inmobiliarias y Construcción.
+          Token de verificación: {garantia.token} · Póliza digital emitida por {marca.nombreRazonSocial || marca.nombre}.
         </div>
       </PolizaHoja>
     </main>

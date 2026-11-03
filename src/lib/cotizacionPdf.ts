@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import type { Cotizacion, CotizacionConcepto, VisitaReporte, ServicioConstruccionTipo } from "@/lib/types";
 
 import { dibujarLogoPdf } from "@/lib/marca-pdf";
+import { obtenerMarcaServicio, esServicioSeguridad } from "@/lib/marca-servicio";
 // Paleta de colores oficial Sauceda
 const VERDE_PROFUNDO = [45, 74, 43]; // #2D4A2B
 const SAUCE = [92, 122, 82]; // #5C7A52
@@ -21,7 +22,8 @@ function formatMoneda(val: number): string {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2 }).format(val || 0);
 }
 
-function getServicioLabel(tipo: string): string {
+function getServicioLabel(tipo: string, cotizacion?: Cotizacion): string {
+  if (cotizacion && esServicioSeguridad(cotizacion)) return "Equipos de Seguridad";
   switch (tipo) {
     case "pintura": return "Pintura";
     case "impermeabilizacion": return "Impermeabilización";
@@ -29,6 +31,7 @@ function getServicioLabel(tipo: string): string {
     case "remodelacion": return "Remodelación";
     case "herreria": return "Herrería";
     case "piso_estampado": return "Piso Estampado";
+    case "seguridad": return "Equipos de Seguridad";
     default: return "Servicios de Construcción";
   }
 }
@@ -54,7 +57,8 @@ export function generarPdfCotizacion(
   const margin = 14;
   const contentWidth = pageWidth - margin * 2; // 182 mm
   const portalUrl = `${baseUrl}/cotizacion/${cotizacion.token}`;
-  const servicioLabel = getServicioLabel(cotizacion.servicioTipo);
+  const servicioLabel = getServicioLabel(cotizacion.servicioTipo, cotizacion);
+  const marca = obtenerMarcaServicio({ ...cotizacion, conceptos });
   const nombreCliente = cotizacion.prospectoNombre || "Cliente";
 
   const fechaActual = new Date();
@@ -69,7 +73,7 @@ export function generarPdfCotizacion(
   doc.setFontSize(7);
   doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
   doc.text(fechaTopLeft, margin, 7.5);
-  doc.text(`SAUCEDA · Propuesta Comercial (Folio ${cotizacion.id})`, pageWidth / 2, 7.5, { align: "center" });
+  doc.text(`${marca.nombreMayus} · Propuesta Comercial (Folio ${cotizacion.id})`, pageWidth / 2, 7.5, { align: "center" });
 
   let y = 14;
 
@@ -485,7 +489,7 @@ export function generarPdfCotizacion(
   doc.setFontSize(7);
   doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
   doc.text(fechaTopLeft, margin, 7.5);
-  doc.text(`SAUCEDA · Propuesta Comercial (Folio ${cotizacion.id})`, pageWidth / 2, 7.5, { align: "center" });
+  doc.text(`${marca.nombreMayus} · Propuesta Comercial (Folio ${cotizacion.id})`, pageWidth / 2, 7.5, { align: "center" });
 
   // CONDICIONES COMERCIALES Y GARANTÍA
   doc.setFont("helvetica", "bold");
@@ -620,7 +624,8 @@ export function generarPdfReporteVisita(
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 14;
   const contentWidth = pageWidth - margin * 2;
-  const servicioLabel = getServicioLabel(cotizacion.servicioTipo);
+  const servicioLabel = getServicioLabel(cotizacion.servicioTipo, cotizacion);
+  const marcaVisita = obtenerMarcaServicio(cotizacion);
   const nombreCliente = cotizacion.prospectoNombre || "Cliente";
 
   const fechaActual = new Date();
@@ -631,7 +636,7 @@ export function generarPdfReporteVisita(
   doc.setFontSize(7);
   doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
   doc.text(fechaTopLeft, margin, 7.5);
-  doc.text(`SAUCEDA · Reporte de Levantamiento Técnico (Folio ${cotizacion.id})`, pageWidth / 2, 7.5, { align: "center" });
+  doc.text(`${marcaVisita.nombreMayus} · Reporte de Levantamiento Técnico (Folio ${cotizacion.id})`, pageWidth / 2, 7.5, { align: "center" });
 
   let y = 14;
 
@@ -684,7 +689,7 @@ export function generarPdfReporteVisita(
   doc.text("Técnico / Operario Visitador:", col1X, y + 11);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(CARBON[0], CARBON[1], CARBON[2]);
-  doc.text(reporteVisita.inspectorNombre || "Personal Técnico Sauceda", col1X, y + 16);
+  doc.text(reporteVisita.inspectorNombre || `Personal Técnico ${marcaVisita.nombre}`, col1X, y + 16);
 
   doc.setFont("helvetica", "normal");
   doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
@@ -766,7 +771,7 @@ export function generarPdfReporteVisita(
   const footerY = pageHeight - 7;
   doc.setFontSize(6.5);
   doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
-  doc.text(`SAUCEDA Construye · León, Gto. · Reporte emitido en portal`, margin, footerY);
+  doc.text(`${marcaVisita.nombre} · León, Gto. · Reporte emitido en portal`, margin, footerY);
   doc.text(`1/1`, pageWidth - margin, footerY, { align: "right" });
 
   return doc;

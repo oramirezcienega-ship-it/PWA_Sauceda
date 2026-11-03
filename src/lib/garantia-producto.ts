@@ -64,8 +64,34 @@ interface ConceptoCot {
   producto_servicio_id: string | null;
 }
 
+import { esServicioSeguridad } from "@/lib/marca-servicio";
+
 const norm = (s: string | null | undefined) =>
   String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+const PLANTILLA_SEGURIDAD = `SAUCEDA PROTEGE
+PÓLIZA DE GARANTÍA · EQUIPOS DE SEGURIDAD
+
+Por la presente garantizamos los equipos de seguridad e instalación realizados en la siguiente propiedad:
+
+Cliente: [NOMBRE DE LA PROPIEDAD / CLIENTE]
+Ubicación: [DOMICILIO COMPLETO]
+Fecha de inicio de garantía: [DÍA] de [MES] de [AÑO]
+
+CONDICIONES DE GARANTÍA:
+
+Cobertura de defectos
+Si se detecta cualquier defecto de fábrica en los equipos o falla en la instalación y configuración realizada, SAUCEDA Protege se compromete a rectificar, reparar o sustituir los componentes defectuosos sin cargo extra por mano de obra ni materiales durante [PLAZO DE GARANTIA] a partir de la fecha de inicio.
+
+Tramitación de reclamaciones
+SAUCEDA Protege se compromete a tramitar cualquier reclamación bajo garantía de forma rápida y justa. Para reportar una falla o soporte técnico, contáctanos al +52 477 465 4700 o a través de WhatsApp.
+
+Limitaciones de la garantía
+SAUCEDA Protege no será responsable de daños ocasionados por manipulación de personas ajenas o no autorizadas, variaciones o descargas eléctricas extraordinarias no protegidas, negligencia del cliente, vandalismo o siniestros naturales fuera de nuestro control.
+
+Esta garantía es válida únicamente en la propiedad especificada y no es transferible.
+
+SAUCEDA Protege · Seguridad Electrónica y CCTV · +52 477 465 4700 · saucedamx.com`;
 
 const PLANTILLA_GENERICA = `SAUCEDA CONSTRUYE
 PÓLIZA DE GARANTÍA POR SERVICIO
@@ -159,7 +185,16 @@ export async function armarGarantiaDesdeCotizacion(
     }
   }
   const usoPlantillaProducto = Boolean(principal);
-  let plantilla: string = usoPlantillaProducto ? String(principal.plantilla_garantia) : PLANTILLA_GENERICA;
+  const esSeg = esServicioSeguridad({ servicio_tipo: cot?.servicio_tipo, conceptos, titulo: principal?.nombre });
+  let plantilla: string = usoPlantillaProducto
+    ? String(principal.plantilla_garantia)
+    : (esSeg ? PLANTILLA_SEGURIDAD : PLANTILLA_GENERICA);
+  if (esSeg) {
+    plantilla = plantilla
+      .replace(/SAUCEDA CONSTRUYE/g, "SAUCEDA PROTEGE")
+      .replace(/SAUCEDA Construye/g, "SAUCEDA Protege")
+      .replace(/Sauceda Construye/g, "Sauceda Protege");
+  }
 
   // Plazo: producto vigente > descripción en la cotización > campo garantía de la cotización > plantilla > default
   const porDefecto = datos.anosPorDefecto ?? (String(cot?.servicio_tipo || "").includes("imperme") ? 3 : 1);
@@ -223,7 +258,7 @@ export async function armarGarantiaDesdeCotizacion(
   for (const [re, val] of reemplazos) contenido = contenido.replace(re, val);
 
   return {
-    titulo: productoNombre ? `Póliza de Garantía · ${productoNombre}` : "Póliza de Garantía por Servicio",
+    titulo: productoNombre ? `Póliza de Garantía · ${productoNombre}` : (esSeg ? "Póliza de Garantía · Equipos de Seguridad" : "Póliza de Garantía por Servicio"),
     contenido,
     anos: plazo.anos,
     plazoTexto: plazo.texto,

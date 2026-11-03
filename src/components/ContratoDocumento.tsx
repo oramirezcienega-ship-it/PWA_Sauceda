@@ -7,6 +7,7 @@ import { MARCA } from "@/lib/marca";
 import { dinero, etiquetaTipoServicio, fechaLarga, type DatosContrato } from "@/lib/contratos";
 
 import { MembreteMarca } from "@/components/marca/Logo";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 interface Props {
   datos: DatosContrato;
   estado: string;
@@ -64,6 +65,7 @@ export function ContratoDocumento({ datos: d, estado, claseTitulos = "", urlRegr
 
   const totalConLetra = numeroALetras(d.total).toLowerCase();
   const servicio = etiquetaTipoServicio(d.tipoServicio).toLowerCase();
+  const marcaDoc = obtenerMarcaServicio({ tipoServicio: d.tipoServicio, texto: `${d.descripcionServicio || ""} ${d.anexoTecnico || ""}` });
 
   const Clausula = ({ n, titulo, children }: { n: number; titulo: string; children: React.ReactNode }) => (
     <p className="clausula no-corte mb-2 text-justify hyphens-auto" lang="es">
@@ -110,7 +112,7 @@ export function ContratoDocumento({ datos: d, estado, claseTitulos = "", urlRegr
       >
         {/* Encabezado */}
         <div className="flex items-center justify-between border-b-2 border-verde-profundo pb-2 mb-3 print:pb-1.5 print:mb-2">
-          <MembreteMarca alto="h-10 print:h-8" />
+          <MembreteMarca alto="h-10 print:h-8" linea={marcaDoc.descriptor} />
           <div className="text-right text-[9pt] print:text-[7.5pt] leading-tight">
             <div className="font-bold text-verde-profundo">Folio {d.folio}</div>
             <div>Orden de Trabajo: {d.ordenFolio}</div>

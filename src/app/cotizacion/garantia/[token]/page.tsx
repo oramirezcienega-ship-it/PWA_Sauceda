@@ -5,6 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { MembreteMarca } from "@/components/marca/Logo";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -22,6 +23,7 @@ export default async function GarantiaPublicPage({ params }: GarantiaPageProps) 
   }
 
   const { cotizacion, garantia } = data;
+  const marca = obtenerMarcaServicio(cotizacion);
 
   return (
     <main className="min-h-screen bg-slate-100 py-10 px-4 print:bg-white print:py-0 print:px-0 flex flex-col items-center">
@@ -43,7 +45,7 @@ export default async function GarantiaPublicPage({ params }: GarantiaPageProps) 
       >
         {/* Encabezado Opcional/Identidad */}
         <div className="poliza-encabezado border-b-2 border-sauce pb-6 mb-8 flex justify-between items-end">
-          <MembreteMarca />
+          <MembreteMarca linea={marca.descriptor} />
           <div className="text-right text-[10px] text-carbon/50 uppercase leading-normal font-medium">
             <div>Tradición con tecnología</div>
             <div>+52 477 465 4700</div>
@@ -64,7 +66,7 @@ export default async function GarantiaPublicPage({ params }: GarantiaPageProps) 
             <div className="h-16 flex items-end justify-center">
               {/* Espacio para firma */}
             </div>
-            <div className="border-t border-carbon/20 pt-2 font-semibold text-carbon/80">SAUCEDA Construye</div>
+            <div className="border-t border-carbon/20 pt-2 font-semibold text-carbon/80">{marca.nombreMayus}</div>
             <div className="text-[10px] text-carbon/50 uppercase">Representante Autorizado</div>
           </div>
           <div className="space-y-1">

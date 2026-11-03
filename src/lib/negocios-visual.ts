@@ -9,7 +9,7 @@ export interface VisualNegocio {
   /** Nombre completo, sin recortar (p. ej. "Mantenimiento Tinacos"). */
   nombre: string;
   /** Familia: bienes raíces o construcción. */
-  linea: "Bienes Raíces" | "Sauceda Construye" | "Otro";
+  linea: "Bienes Raíces" | "Sauceda Construye" | "Sauceda Protege" | "Otro";
   /** Clases Tailwind de la insignia (fondo, texto, borde). */
   clases: string;
   /** Clase del borde izquierdo de acento. */
@@ -17,6 +17,7 @@ export interface VisualNegocio {
 }
 
 const CONSTRUYE = "Sauceda Construye" as const;
+const PROTEGE = "Sauceda Protege" as const;
 const RAICES = "Bienes Raíces" as const;
 
 const TABLA: Record<string, Omit<VisualNegocio, "nombre">> = {
@@ -33,7 +34,7 @@ const TABLA: Record<string, Omit<VisualNegocio, "nombre">> = {
   "construccion-mantenimiento-tinacos": { icono: "🚰", linea: CONSTRUYE, clases: "bg-teal-50 text-teal-900 border-teal-300", acento: "border-l-teal-500" },
   "construccion-mantenimiento-calentadores": { icono: "☀️", linea: CONSTRUYE, clases: "bg-amber-50 text-amber-900 border-amber-300", acento: "border-l-amber-500" },
   "construccion-herreria": { icono: "⚙️", linea: CONSTRUYE, clases: "bg-zinc-100 text-zinc-800 border-zinc-300", acento: "border-l-zinc-500" },
-  "seguridad": { icono: "🛡️", linea: CONSTRUYE, clases: "bg-rose-50 text-rose-900 border-rose-300", acento: "border-l-rose-500" },
+  "seguridad": { icono: "🛡️", linea: PROTEGE, clases: "bg-rose-50 text-rose-900 border-rose-300", acento: "border-l-rose-500" },
   "otro": { icono: "❔", linea: "Otro", clases: "bg-slate-100 text-slate-700 border-slate-300", acento: "border-l-slate-400" },
 };
 
@@ -47,5 +48,5 @@ const SIN_CLASIFICAR: Omit<VisualNegocio, "nombre"> = {
 export function visualNegocio(tipo?: string | null): VisualNegocio {
   if (!tipo) return { ...SIN_CLASIFICAR, nombre: "Sin clasificar" };
   const base = TABLA[tipo] ?? SIN_CLASIFICAR;
-  return { ...base, nombre: labelTipoNegocio(tipo).replace(/^Sauceda Construye \((.*)\)$/, "$1") };
+  return { ...base, nombre: labelTipoNegocio(tipo).replace(/^Sauceda (?:Construye|Protege) \((.*)\)$/, "$1") };
 }

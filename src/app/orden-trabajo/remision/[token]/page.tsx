@@ -4,6 +4,7 @@ import { obtenerRemisionOrdenTrabajoPorToken } from "@/app/actions/ordenes-traba
 import { BotonImprimirGarantia } from "@/components/BotonImprimirGarantia";
 
 import { MembreteMarca } from "@/components/marca/Logo";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 import { nombreTitularRemision, personaRecibeRemision } from "@/lib/remision-titular";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -23,6 +24,11 @@ export default async function RemisionOrdenTrabajoPage({ params }: RemisionOTPag
 
   const { orden, remision } = res;
 
+  const marca = obtenerMarcaServicio({
+    tipoNegocio: orden.tipoNegocio,
+    texto: `${orden.titulo || ""} ${orden.descripcion || ""}`,
+  });
+
   const formatMoneda = (val: number) =>
     new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(val);
 
@@ -40,7 +46,7 @@ export default async function RemisionOrdenTrabajoPage({ params }: RemisionOTPag
 
       <div className="w-full max-w-3xl bg-white border border-carbon/10 p-12 sm:p-16 rounded-2xl shadow-lg print:shadow-none print:border-none print:p-0 print:max-w-none text-carbon font-cuerpo">
         <div className="border-b-2 border-sauce pb-6 mb-8 flex justify-between items-end">
-          <MembreteMarca />
+          <MembreteMarca linea={marca.descriptor} />
           <div className="text-right">
             <h2 className="font-titular text-lg font-bold text-carbon uppercase tracking-wide">
               {remision.tipo === "factura" ? "FACTURA DE VENTA" : "REMISIÓN DE ENTREGA"}
@@ -113,7 +119,7 @@ export default async function RemisionOrdenTrabajoPage({ params }: RemisionOTPag
         <div className="mt-16 pt-8 border-t border-carbon/10 grid grid-cols-2 gap-8 text-center text-xs print:mt-24">
           <div className="space-y-1">
             <div className="h-16 flex items-end justify-center" />
-            <div className="border-t border-carbon/20 pt-2 font-semibold text-carbon/80">Entregó: SAUCEDA Construye</div>
+            <div className="border-t border-carbon/20 pt-2 font-semibold text-carbon/80">Entregó: {marca.nombreMayus}</div>
             <div className="text-[10px] text-carbon/50 uppercase">Firma y Sello</div>
           </div>
           <div className="space-y-1">

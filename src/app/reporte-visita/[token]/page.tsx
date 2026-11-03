@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { BotonImprimir } from "@/components/BotonImprimir";
 
 import { MembreteMarca } from "@/components/marca/Logo";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -62,7 +63,7 @@ export default async function PaginaReporteVisita({ params }: PaginaReporteProps
             Aún no se han capturado los datos de la inspección técnica para esta solicitud.
           </p>
           <div className="pt-2">
-            <p className="text-xs text-carbon/40 font-cuerpo">León, Gto. SAUCEDA Construye.</p>
+            <p className="text-xs text-carbon/40 font-cuerpo">León, Gto. {marca.nombre}.</p>
           </div>
         </div>
       </main>
@@ -70,6 +71,12 @@ export default async function PaginaReporteVisita({ params }: PaginaReporteProps
   }
 
   const { cotizacion, reporteVisita } = datos;
+
+  const marca = obtenerMarcaServicio({
+    tipoServicio: cotizacion.servicioTipo,
+    datosModulares: cotizacion.datosModulares,
+    texto: `${cotizacion.descripcion || ""} ${reporteVisita.observacionesTecnicas || ""}`,
+  });
 
   const getServicioLabel = (tipo: string) => {
     switch (tipo) {
@@ -79,6 +86,7 @@ export default async function PaginaReporteVisita({ params }: PaginaReporteProps
       case "remodelacion": return "Remodelación";
       case "herreria": return "Herrería";
       case "piso_estampado": return "Piso Estampado";
+      case "seguridad": return "Equipos de Seguridad";
       default: return "Servicios de Construcción";
     }
   };
@@ -115,7 +123,7 @@ export default async function PaginaReporteVisita({ params }: PaginaReporteProps
         
         {/* Encabezado Logo */}
         <div className="text-center mb-6 print:hidden">
-          <MembreteMarca centrado alto="h-12" />
+          <MembreteMarca centrado alto="h-12" linea={marca.descriptor} />
         </div>
 
         {/* Ficha Principal */}
@@ -221,7 +229,7 @@ export default async function PaginaReporteVisita({ params }: PaginaReporteProps
 
         {/* Footer */}
         <div className="text-center text-[10px] text-carbon/40 mt-8 font-cuerpo print:hidden">
-          Este es un documento técnico digital emitido por SAUCEDA Construye · León, Gto.
+          Este es un documento técnico digital emitido por {marca.nombre} · León, Gto.
         </div>
 
         <style>{`

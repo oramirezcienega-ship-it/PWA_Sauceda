@@ -5,6 +5,7 @@ import { aceptarCotizacionCliente } from "@/app/actions/cotizaciones";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo } from "@/lib/types";
 
 import { Logo, MembreteMarca } from "@/components/marca/Logo";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 interface VisualizadorCotizacionClienteProps {
   cotizacion: Omit<Cotizacion, "notasInternas" | "costoEstimado">;
   conceptos: Omit<CotizacionConcepto, "costoUnitario">[];
@@ -26,6 +27,7 @@ export function VisualizadorCotizacionCliente({
   const [errorFirma, setErrorFirma] = useState("");
   const [exito, setExito] = useState(false);
   const [slideActivo, setSlideActivo] = useState(0);
+  const marca = obtenerMarcaServicio({ ...cotizacion, conceptos });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dibujando = useRef(false);
@@ -591,7 +593,7 @@ export function VisualizadorCotizacionCliente({
 
       {/* Pie de Página */}
       <div className="text-center text-xs text-carbon/40 mt-8 font-cuerpo print:hidden">
-        SAUCEDA · Este es un portal seguro para la aprobación técnica de servicios de construcción. León, Gto.
+        {marca.nombreMayus} · Este es un portal seguro para la aprobación técnica de {marca.portalAprobacionTexto}. León, Gto.
       </div>
 
       <style>{`

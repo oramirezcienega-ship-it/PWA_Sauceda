@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 
 import { dibujarLogoPdf } from "@/lib/marca-pdf";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 /**
  * PDFs de los documentos de una orden de trabajo (póliza de garantía y recibos de pago)
  * generados en servidor, para enviarlos por Telegram listos para imprimir.
@@ -140,8 +141,9 @@ export function generarPdfPolizaGarantia(d: {
   lineas.forEach((l, i) => doc.text(l, MARGEN, y + i * paso));
   const yFirmas = Math.min(maxY + 12, y + lineas.length * paso + 14);
 
-  firmas(doc, yFirmas, [d.responsable || "Sauceda Construye", "Asesor que entrega la instalación"], [d.clienteNombre, "Cliente titular · Recepción a entera satisfacción"]);
-  pie(doc, `${d.token ? `Token de verificación: ${d.token} · ` : ""}Póliza digital emitida por Sauceda Soluciones Inmobiliarias y Construcción.`);
+  const marcaGar = obtenerMarcaServicio({ titulo: d.titulo, descripcion: d.contenido });
+  firmas(doc, yFirmas, [d.responsable || marcaGar.nombre, "Asesor que entrega la instalación"], [d.clienteNombre, "Cliente titular · Recepción a entera satisfacción"]);
+  pie(doc, `${d.token ? `Token de verificación: ${d.token} · ` : ""}Póliza digital emitida por ${marcaGar.nombre} · León, Gto.`);
   return doc;
 }
 
@@ -215,8 +217,9 @@ export function generarPdfRecibo(r: {
     doc.text(doc.splitTextToSize(`Notas: ${r.notas}`, w - MARGEN * 2) as string[], MARGEN, y);
   }
 
-  firmas(doc, y + 50, [r.recibidoPorNombre || "Sauceda Construye", "Recibió el pago"], [r.clienteNombre, "Cliente"]);
-  pie(doc, "Recibo digital emitido por Sauceda Soluciones Inmobiliarias y Construcción.");
+  const marcaRec = obtenerMarcaServicio({ titulo: r.concepto, descripcion: r.concepto });
+  firmas(doc, y + 50, [r.recibidoPorNombre || marcaRec.nombre, "Recibió el pago"], [r.clienteNombre, "Cliente"]);
+  pie(doc, `Recibo digital emitido por ${marcaRec.nombre}.`);
   return doc;
 }
 
@@ -329,7 +332,8 @@ export function generarPdfRemision(r: {
     doc.addPage();
     yFirmas = 50;
   }
-  firmas(doc, yFirmas, ["Sauceda Construye", "Entregó"], [r.personaRecibe || r.clienteNombre, "Recibió de conformidad"]);
-  pie(doc, `${esFactura ? "Factura" : "Remisión"} emitida por Sauceda Soluciones Inmobiliarias y Construcción.`);
+  const marcaRem = obtenerMarcaServicio({ conceptos: r.conceptos });
+  firmas(doc, yFirmas, [marcaRem.nombre, "Entregó"], [r.personaRecibe || r.clienteNombre, "Recibió de conformidad"]);
+  pie(doc, `${esFactura ? "Factura" : "Remisión"} emitida por ${marcaRem.nombre}.`);
   return doc;
 }

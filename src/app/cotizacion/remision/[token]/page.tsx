@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { MembreteMarca } from "@/components/marca/Logo";
 import { nombreTitularRemision, personaRecibeRemision } from "@/lib/remision-titular";
+import { obtenerMarcaServicio } from "@/lib/marca-servicio";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -22,6 +23,12 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
   }
 
   const { cotizacion, remision, conceptos } = data;
+
+  const marca = obtenerMarcaServicio({
+    tipoServicio: cotizacion.servicioTipo,
+    datosModulares: cotizacion.datosModulares,
+    productos: conceptos.map((c) => ({ id: c.id, titulo: c.descripcion })),
+  });
 
   // Fechas "AAAA-MM-DD" a mediodía para que la zona horaria no las recorra un día
   const formatFecha = (f?: string | null) => {
@@ -53,7 +60,7 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
       <div className="w-full max-w-3xl bg-white border border-carbon/10 p-12 sm:p-16 rounded-2xl shadow-lg print:shadow-none print:border-none print:p-0 print:max-w-none print:rounded-none text-carbon font-cuerpo">
         {/* Encabezado Opcional/Identidad */}
         <div className="border-b-2 border-sauce pb-6 mb-8 print:pb-4 print:mb-5 flex justify-between items-end">
-          <MembreteMarca />
+          <MembreteMarca linea={marca.descriptor} />
           <div className="text-right">
             <h2 className="font-titular text-lg font-bold text-carbon uppercase tracking-wide">
               {remision.tipo === "factura" ? "FACTURA DE VENTA" : "REMISIÓN DE ENTREGA"}
@@ -144,7 +151,7 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
             <div className="h-16 flex items-end justify-center">
               {/* Espacio para firma */}
             </div>
-            <div className="border-t border-carbon/20 pt-2 font-semibold text-carbon/80">Entregó: SAUCEDA Construye</div>
+            <div className="border-t border-carbon/20 pt-2 font-semibold text-carbon/80">Entregó: {marca.nombreMayus}</div>
             <div className="text-[10px] text-carbon/50 uppercase">Firma y Sello</div>
           </div>
           <div className="space-y-1">

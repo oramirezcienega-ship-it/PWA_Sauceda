@@ -12,6 +12,7 @@ import { armarGarantiaDesdeCotizacion } from "@/lib/garantia-producto";
 import { numeroALetras } from "@/lib/numero-a-letras";
 import { enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import { normalizarTelefono } from "@/lib/telefono";
+import { esServicioSeguridad } from "@/lib/marca-servicio";
 import { enviarCorreo } from "@/lib/email";
 import { PLANTILLA_ENTREGA_SERVICIO } from "@/lib/meta-plantillas";
 import { MARCA } from "@/lib/marca";
@@ -2005,7 +2006,7 @@ export async function obtenerGarantiaOTPorToken(
         fotosEvidencia: Array.isArray(ot.fotos_evidencia) ? ot.fotos_evidencia : [],
         createdAt: ot.created_at,
         updatedAt: ot.updated_at,
-        asesorEjecutorNombre: ot.asesor_ejecutor?.nombre || "Sauceda Construye",
+        asesorEjecutorNombre: ot.asesor_ejecutor?.nombre || (esServicioSeguridad(ot.tipo_negocio) ? "Sauceda Protege" : "Sauceda Construye"),
         clienteNombre: nombreCompletoDe(ot.prospectos) || "Cliente Sauceda",
         clienteTelefono: ot.prospectos?.telefono || "",
         proveedorId: ot.proveedor_id ?? null,
@@ -2407,7 +2408,38 @@ export async function regenerarGarantiaDesdeProducto(
 }
 
 /** Texto por defecto de la póliza de garantía cuando se genera en automático al crear la OT. */
-function generarContenidoGarantiaPorDefecto(clienteNombre: string, direccion: string): string {
+function generarContenidoGarantiaPorDefecto(clienteNombre: string, direccion: string, tipoNegocio?: string | null): string {
+  if (esServicioSeguridad(tipoNegocio)) {
+    const ahora = new Date();
+    const meses = [
+      "enero", "febrero", "marzo", "abril", "mayo", "junio",
+      "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+    ];
+    const fechaTexto = `${ahora.getDate()} de ${meses[ahora.getMonth()]} de ${ahora.getFullYear()}`;
+    return `SAUCEDA PROTEGE
+PÓLIZA DE GARANTÍA · EQUIPOS DE SEGURIDAD
+
+Por la presente garantizamos los equipos de seguridad e instalación realizados en la siguiente propiedad:
+
+Cliente: ${clienteNombre}
+Ubicación: ${direccion}
+Fecha de inicio de garantía: ${fechaTexto}
+
+CONDICIONES DE GARANTÍA:
+
+Cobertura de defectos
+Si se detecta cualquier defecto de fábrica o falla en los componentes o instalación realizada, SAUCEDA Protege se compromete a rectificar, reparar o sustituir los componentes sin cargo extra durante el período establecido.
+
+Tramitación de reclamaciones
+SAUCEDA Protege se compromete a tramitar cualquier reclamación bajo garantía de forma rápida y justa. Para reportar un problema, contáctanos al +52 477 465 4700 o a través de WhatsApp.
+
+Limitaciones de la garantía
+SAUCEDA Protege no será responsable de daños ocasionados por manipulación de personas no autorizadas, descargas eléctricas, negligencia o fenómenos naturales fuera de nuestro control.
+
+Esta garantía es válida únicamente en la propiedad especificada y no es transferible.
+
+SAUCEDA Protege · Seguridad y Monitoreo · +52 477 465 4700 · saucedamx.com`;
+  }
   const ahora = new Date();
   const meses = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -2501,7 +2533,7 @@ async function generarDocumentosAutomaticosOT(
   try {
     const { data: otGar } = await sb
       .from("ordenes_trabajo")
-      .select("cotizacion_id")
+      .select("cotizacion_id, tipo_negocio")
       .eq("id", ordenTrabajoId)
       .maybeSingle();
 
@@ -2521,7 +2553,8 @@ async function generarDocumentosAutomaticosOT(
     } else {
       const contenido = generarContenidoGarantiaPorDefecto(
         clienteNombre,
-        direccionCliente || "Domicilio en Obra"
+        direccionCliente || "Domicilio en Obra",
+        otGar?.tipo_negocio
       );
       await guardarGarantiaOT({
         ordenTrabajoId,

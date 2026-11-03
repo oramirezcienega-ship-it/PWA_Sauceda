@@ -82,7 +82,7 @@ export function labelTipoNegocio(tipo: string): string {
     case "construccion-herreria":
       return "Sauceda Construye (Herrería)";
     case "seguridad":
-      return "Seguridad";
+      return "Sauceda Protege (Seguridad)";
     case "otro":
       return "Otro";
     default:
