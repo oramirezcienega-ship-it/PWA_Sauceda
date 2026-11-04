@@ -67,7 +67,7 @@ export function iaAgenteActivo(): boolean {
   if (process.env.IA_AGENTE === "off") return false;
   const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
   if (esStaging) return true;
-  return Boolean(process.env.ANTHROPIC_API_KEY) || Boolean(process.env.KIMI_API_KEY) || process.env.IA_PROVEEDOR === "ollama";
+  return Boolean(process.env.ANTHROPIC_API_KEY) || Boolean(process.env.OPENROUTER_API_KEY) || Boolean(process.env.KIMI_API_KEY) || process.env.IA_PROVEEDOR === "ollama" || process.env.IA_PROVEEDOR === "openrouter";
 }
 
 /**
@@ -95,7 +95,7 @@ export async function diagnosticoIA(): Promise<{ ok: boolean; mensaje: string }>
         .select("valor")
         .eq("clave", "ia_proveedor")
         .maybeSingle();
-      if (data?.valor && ["anthropic", "kimi", "ollama"].includes(data.valor.trim())) {
+      if (data?.valor && ["openrouter", "anthropic", "kimi", "ollama"].includes(data.valor.trim())) {
         proveedor = data.valor.trim();
       }
     } catch (err) {
@@ -103,12 +103,72 @@ export async function diagnosticoIA(): Promise<{ ok: boolean; mensaje: string }>
     }
   }
 
-  if (proveedor === "kimi") {
-    const apiKey = process.env.KIMI_API_KEY;
+  if (proveedor === "openrouter") {
+    let apiKey = process.env.OPENROUTER_API_KEY;
+    let model = process.env.OPENROUTER_MODEL || "anthropic/claude-sonnet-5.5";
+    try {
+      const sb = supabaseServidor();
+      if (!apiKey) {
+        const { data: dbKey } = await sb
+          .from("configuracion_agente")
+          .select("valor")
+          .eq("clave", "openrouter_api_key")
+          .maybeSingle();
+        apiKey = dbKey?.valor?.trim();
+      }
+      const { data: dbModel } = await sb
+        .from("configuracion_agente")
+        .select("valor")
+        .eq("clave", "openrouter_model")
+        .maybeSingle();
+      if (dbModel?.valor?.trim()) model = dbModel.valor.trim();
+    } catch {}
+
     if (!apiKey) {
       return {
         ok: false,
-        mensaje: "Falta KIMI_API_KEY en este deploy. Agrégala en Coolify y vuelve a desplegar.",
+        mensaje: "Falta OPENROUTER_API_KEY en Coolify o en configuracion_agente.",
+      };
+    }
+    const baseUrl = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
+    try {
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          "content-type": "application/json",
+          "HTTP-Referer": "https://crm.saucedamx.com",
+          "X-Title": "Sauceda CRM",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: "ping" }],
+          max_tokens: 5,
+        }),
+      });
+      if (res.ok) {
+        return { ok: true, mensaje: `OpenRouter (${model}) conectado y respondiendo correctamente.` };
+      }
+      const err = await res.text();
+      return { ok: false, mensaje: `OpenRouter (${model}) respondió status ${res.status}: ${err.slice(0, 200)}` };
+    } catch (err) {
+      return { ok: false, mensaje: `No se pudo conectar a OpenRouter: ${String(err)}` };
+    }
+  }
+
+  if (proveedor === "kimi") {
+    let apiKey = process.env.KIMI_API_KEY;
+    try {
+      const sb = supabaseServidor();
+      if (!apiKey) {
+        const { data: dbKey } = await sb.from("configuracion_agente").select("valor").eq("clave", "kimi_api_key").maybeSingle();
+        apiKey = dbKey?.valor?.trim();
+      }
+    } catch {}
+    if (!apiKey) {
+      return {
+        ok: false,
+        mensaje: "Falta KIMI_API_KEY en Coolify o en configuracion_agente.",
       };
     }
     const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1";
@@ -1518,7 +1578,7 @@ async function generarRespuesta(
         .select("valor")
         .eq("clave", "ia_proveedor")
         .maybeSingle();
-      if (data?.valor && ["anthropic", "kimi", "ollama"].includes(data.valor.trim())) {
+      if (data?.valor && ["openrouter", "anthropic", "kimi", "ollama"].includes(data.valor.trim())) {
         proveedorOriginal = data.valor.trim();
       }
     } catch (err) {
@@ -1581,8 +1641,66 @@ async function generarRespuesta(
         if (texto) return texto;
       }
 
+      if (proveedor === "openrouter") {
+        let apiKey = process.env.OPENROUTER_API_KEY;
+        let model = process.env.OPENROUTER_MODEL || "anthropic/claude-sonnet-5.5";
+        if (!apiKey && sb) {
+          const { data: dbKey } = await sb
+            .from("configuracion_agente")
+            .select("valor")
+            .eq("clave", "openrouter_api_key")
+            .maybeSingle();
+          apiKey = dbKey?.valor?.trim();
+        }
+        if (sb) {
+          const { data: dbModel } = await sb
+            .from("configuracion_agente")
+            .select("valor")
+            .eq("clave", "openrouter_model")
+            .maybeSingle();
+          if (dbModel?.valor?.trim()) {
+            model = dbModel.valor.trim();
+          }
+        }
+        if (!apiKey) throw new Error("Falta OPENROUTER_API_KEY");
+
+        const baseUrl = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
+        const messagesOpenAI = [
+          { role: "system", content: systemFinal },
+          ...mensajes.map((m) => ({ role: m.role, content: m.content })),
+        ];
+
+        const res = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${apiKey}`,
+            "content-type": "application/json",
+            "HTTP-Referer": "https://crm.saucedamx.com",
+            "X-Title": "Sauceda CRM",
+          },
+          body: JSON.stringify({
+            model,
+            messages: messagesOpenAI,
+            temperature: 0.2,
+          }),
+        });
+
+        if (!res.ok) {
+          const cuerpo = (await res.text().catch(() => "")).slice(0, 200);
+          throw new Error(`OpenRouter (${model}) respondió status ${res.status}. ${cuerpo}`);
+        }
+
+        const json = await res.json();
+        const texto = (json.choices?.[0]?.message?.content || "").trim();
+        if (texto) return texto;
+      }
+
       if (proveedor === "kimi") {
-        const apiKey = process.env.KIMI_API_KEY;
+        let apiKey = process.env.KIMI_API_KEY;
+        if (!apiKey && sb) {
+          const { data: dbKey } = await sb.from("configuracion_agente").select("valor").eq("clave", "kimi_api_key").maybeSingle();
+          apiKey = dbKey?.valor?.trim();
+        }
         if (!apiKey) throw new Error("Falta KIMI_API_KEY");
         const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.ai/v1";
         const model = process.env.KIMI_MODEL || "kimi-k3";
@@ -1616,7 +1734,11 @@ async function generarRespuesta(
       }
 
       if (proveedor === "anthropic") {
-        const apiKey = process.env.ANTHROPIC_API_KEY;
+        let apiKey = process.env.ANTHROPIC_API_KEY;
+        if (!apiKey && sb) {
+          const { data: dbKey } = await sb.from("configuracion_agente").select("valor").eq("clave", "anthropic_api_key").maybeSingle();
+          apiKey = dbKey?.valor?.trim();
+        }
         if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY");
 
         const res = await fetch("https://api.anthropic.com/v1/messages", {
