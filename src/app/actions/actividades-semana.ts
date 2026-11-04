@@ -71,6 +71,86 @@ function formatHora12(h?: string | null): string {
   return `${hrs}:${mins} ${ampm}`;
 }
 
+/**
+ * Extrae y normaliza horarios embebidos en el texto libre de la orden de trabajo
+ * (ej. "miércoles, 4 de noviembre · 17:30 a 19:30 h", "5:30 pm - 7:30 pm", "17:30").
+ */
+function extraerHorarioDeTexto(texto?: string | null): { horaInicio: string; horaFin: string; horaRaw: string } | null {
+  if (!texto) return null;
+
+  // 1. Rango 24h: ej. "17:30 a 19:30" o "17:30 - 19:30"
+  const mRango = texto.match(/(\d{1,2}):(\d{2})\s*(?:a|-)\s*(\d{1,2}):(\d{2})/i);
+  if (mRango) {
+    const h1 = parseInt(mRango[1], 10);
+    const m1 = mRango[2];
+    const h2 = parseInt(mRango[3], 10);
+    const m2 = mRango[4];
+    const raw1 = `${String(h1).padStart(2, "0")}:${m1}:00`;
+    const raw2 = `${String(h2).padStart(2, "0")}:${m2}:00`;
+    return {
+      horaInicio: formatHora12(raw1),
+      horaFin: formatHora12(raw2),
+      horaRaw: raw1,
+    };
+  }
+
+  // 2. Rango 12h: ej. "5:30 pm a 7:30 pm" o "5:30 p. m. - 7:30 p. m."
+  const mRango12 = texto.match(/(\d{1,2}):(\d{2})\s*(am|pm|a\.?\s*m\.?|p\.?\s*m\.?)\s*(?:a|-)\s*(\d{1,2}):(\d{2})\s*(am|pm|a\.?\s*m\.?|p\.?\s*m\.?)/i);
+  if (mRango12) {
+    const h1Raw = parseInt(mRango12[1], 10);
+    const m1 = mRango12[2];
+    const isPm1 = mRango12[3].toLowerCase().includes("p");
+    const h1 = isPm1 ? (h1Raw % 12) + 12 : (h1Raw % 12);
+
+    const h2Raw = parseInt(mRango12[4], 10);
+    const m2 = mRango12[5];
+    const isPm2 = mRango12[6].toLowerCase().includes("p");
+    const h2 = isPm2 ? (h2Raw % 12) + 12 : (h2Raw % 12);
+
+    const raw1 = `${String(h1).padStart(2, "0")}:${m1}:00`;
+    const raw2 = `${String(h2).padStart(2, "0")}:${m2}:00`;
+    return {
+      horaInicio: formatHora12(raw1),
+      horaFin: formatHora12(raw2),
+      horaRaw: raw1,
+    };
+  }
+
+  // 3. Hora 12h única: ej. "5:30 pm"
+  const mSola12 = texto.match(/(\d{1,2}):(\d{2})\s*(am|pm|a\.?\s*m\.?|p\.?\s*m\.?)/i);
+  if (mSola12) {
+    const hRaw = parseInt(mSola12[1], 10);
+    const m = mSola12[2];
+    const isPm = mSola12[3].toLowerCase().includes("p");
+    const h = isPm ? (hRaw % 12) + 12 : (hRaw % 12);
+    const hFin = Math.min(23, h + 2);
+    const raw1 = `${String(h).padStart(2, "0")}:${m}:00`;
+    const raw2 = `${String(hFin).padStart(2, "0")}:${m}:00`;
+    return {
+      horaInicio: formatHora12(raw1),
+      horaFin: formatHora12(raw2),
+      horaRaw: raw1,
+    };
+  }
+
+  // 4. Hora 24h con prefijo indicador
+  const mSola24 = texto.match(/(?:a las?|horario:?|hora:?)\s*(\d{1,2}):(\d{2})/i);
+  if (mSola24) {
+    const h = parseInt(mSola24[1], 10);
+    const m = mSola24[2];
+    const hFin = Math.min(23, h + 2);
+    const raw1 = `${String(h).padStart(2, "0")}:${m}:00`;
+    const raw2 = `${String(hFin).padStart(2, "0")}:${m}:00`;
+    return {
+      horaInicio: formatHora12(raw1),
+      horaFin: formatHora12(raw2),
+      horaRaw: raw1,
+    };
+  }
+
+  return null;
+}
+
 function mapearEstado(estado?: string | null): { estado: string; label: string } {
   const e = (estado || "pendiente").toLowerCase();
   switch (e) {
@@ -184,7 +264,8 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
         cotizacion_id,
         prospecto_id,
         asesor_ejecutor_id,
-        asesor_responsable_id
+        asesor_responsable_id,
+        proveedor_id
       `)
       .neq("estatus", "cancelada")
       .or(filtrosOT.join(","))
@@ -196,6 +277,7 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
 
     // 4. Recopilar IDs para enriquecer nombres y ubicaciones
     const setPerfilIds = new Set<string>();
+    const setProvIds = new Set<string>();
     const setExpIds = new Set<string>();
     const setProsIds = new Set<string>();
 
@@ -211,6 +293,7 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
     (otsRaw || []).forEach((ot: any) => {
       if (ot.asesor_ejecutor_id) setPerfilIds.add(ot.asesor_ejecutor_id);
       if (ot.asesor_responsable_id) setPerfilIds.add(ot.asesor_responsable_id);
+      if (ot.proveedor_id) setProvIds.add(ot.proveedor_id);
       if (ot.expediente_id) setExpIds.add(ot.expediente_id);
       if (ot.prospecto_id) setProsIds.add(ot.prospecto_id);
     });
@@ -223,6 +306,16 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
         .select("id, nombre")
         .in("id", Array.from(setPerfilIds));
       (perfilesData || []).forEach((p: any) => mapaPerfiles.set(p.id, p.nombre));
+    }
+
+    // Traer catálogo de proveedores para resolver asignaciones técnicas externas
+    const mapaProveedores = new Map<string, string>();
+    if (setProvIds.size > 0) {
+      const { data: provsData } = await sb
+        .from("proveedores")
+        .select("id, nombre, contacto_nombre")
+        .in("id", Array.from(setProvIds));
+      (provsData || []).forEach((p: any) => mapaProveedores.set(p.id, p.nombre || p.contacto_nombre || "Proveedor"));
     }
 
     // Traer expedientes para complementar direcciones y clientes
@@ -309,6 +402,18 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
       const responsables = idsResp
         .map((id) => mapaPerfiles.get(id))
         .filter(Boolean) as string[];
+
+      // Si tiene OT vinculada con proveedor o la cita menciona un proveedor, incluirlo al frente
+      if (otMatch?.proveedor_id && mapaProveedores.has(otMatch.proveedor_id)) {
+        const pName = mapaProveedores.get(otMatch.proveedor_id)!;
+        if (!responsables.includes(pName)) responsables.unshift(pName);
+      } else if (c.notas) {
+        const mProv = c.notas.match(/con\s+([A-Za-zÁÉÍÓÚáéíóúñÑ\s]+?)(?:·|$)/i);
+        if (mProv && mProv[1].trim() && !/proveedor/i.test(mProv[1])) {
+          const pName = mProv[1].trim();
+          if (!responsables.includes(pName)) responsables.unshift(pName);
+        }
+      }
 
       // Buscar si tiene OT vinculada
       const otMatch = (otsRaw || []).find((ot: any) =>
@@ -401,6 +506,24 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
         const rName = mapaPerfiles.get(ot.asesor_responsable_id)!;
         if (!resps.includes(rName)) resps.push(rName);
       }
+      if (ot.proveedor_id && mapaProveedores.has(ot.proveedor_id)) {
+        const pName = mapaProveedores.get(ot.proveedor_id)!;
+        if (!resps.includes(pName)) resps.push(pName);
+      }
+      if (resps.length === 0 && ot.descripcion) {
+        const mProv = ot.descripcion.match(/Proveedor:\s*([^\n·]+)/i);
+        if (mProv && mProv[1].trim() && mProv[1].trim() !== "—") {
+          resps.push(mProv[1].trim());
+        }
+      }
+
+      const horarioParsed =
+        extraerHorarioDeTexto(ot.descripcion) ||
+        extraerHorarioDeTexto(ot.proveedor_concepto);
+
+      const horaInicio = horarioParsed?.horaInicio || "09:00 AM";
+      const horaFin = horarioParsed?.horaFin || (horarioParsed ? "" : "01:00 PM");
+      const horaRaw = horarioParsed?.horaRaw || "09:00:00";
 
       const st = mapearEstado(ot.estatus);
       const diaObj = dias.find((d) => d.fecha === ot.fecha_programada);
@@ -412,9 +535,9 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
         origen: "orden_trabajo",
         fecha: ot.fecha_programada,
         diaSemanaNombre: diaObj?.diaNombreCompleto || "Día",
-        horaInicio: "09:00 AM",
-        horaFin: "01:00 PM",
-        horaRaw: "09:00:00",
+        horaInicio,
+        horaFin,
+        horaRaw,
         clienteNombre,
         clienteTelefono: telBruto,
         clienteTelefonoLink: telLink,

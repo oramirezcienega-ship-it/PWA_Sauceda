@@ -364,9 +364,10 @@ export async function programarServicioSolicitud(input: {
     if (citaPrevia) {
       await sb.from("agenda_citas").update({ ...cita, fraccionamiento: direccion || exp?.fraccionamiento || "" }).eq("id", citaPrevia.id);
     } else {
+      const perfilIdParaCita = usuario?.id || sol.creado_por || exp?.asesor_id || "e777d9d4-68da-4462-8072-a889983ba491";
       const { error: errCita } = await sb.from("agenda_citas").insert({
         ...cita,
-        perfil_id: usuario?.id,
+        perfil_id: perfilIdParaCita,
         prospecto_id: exp?.prospecto_id || null,
         expediente_id: sol.expediente_id || null,
         cotizacion_id: sol.cotizacion_id || null,
