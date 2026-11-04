@@ -42,7 +42,9 @@ function renglones(p: ProductoSeguridad): string[] {
 }
 
 function incluyeInstalacion(p: ProductoSeguridad): boolean {
-  return /incluye\s+(la\s+)?instalaci[oó]n/i.test(`${p.especificaciones}\n${p.descripcion}`);
+  return /(incluye\s+(la\s+)?instalaci[oó]n|instalaci[oó]n\s+profesional|instalados?\s+llave\s+en\s+mano)/i.test(
+    `${p.especificaciones}\n${p.descripcion}`
+  );
 }
 
 /** Primera foto del producto como data URI (JPEG con fondo blanco) para incrustarla en la imagen. */
@@ -68,16 +70,17 @@ async function fotoComoDataUri(p: ProductoSeguridad, ancho: number, alto: number
 function tarjeta(p: ProductoSeguridad, ancho: number, foto: string | null, destacado: boolean): Nodo {
   const acento = destacado ? DORADO_OSC : VERDE_CLARO;
   const etiqueta = ETIQUETA_GAMA[p.gama] || "";
-  const altoFoto = 210;
+  const altoFoto = 200;
   const items = renglones(p).slice(0, MAX_RENGLONES);
+  const tamanoTitulo = p.nombre.length > 55 ? 15.5 : 17;
 
   return h(
     "div",
     {
       flexDirection: "column",
       width: ancho,
-      height: 640,
-      padding: 20,
+      height: 650,
+      padding: "18px 18px",
       borderRadius: 20,
       backgroundColor: destacado ? "#FAF7EE" : "#FFFFFF",
       border: `${destacado ? 2 : 1.5}px solid ${destacado ? DORADO : "#E2E8F0"}`,
@@ -98,30 +101,34 @@ function tarjeta(p: ProductoSeguridad, ancho: number, foto: string | null, desta
           overflow: "hidden",
         },
         foto
-          ? { type: "img", props: { src: foto, width: ancho - 44, height: altoFoto - 4, style: { objectFit: "contain" } } }
+          ? { type: "img", props: { src: foto, width: ancho - 40, height: altoFoto - 4, style: { objectFit: "contain" } } }
           : h("div", { color: "#94A3B8", fontSize: 13 }, "Foto ilustrativa próximamente")
       ),
-      h("div", { color: "#0F172A", fontSize: 18, fontWeight: 800, marginTop: 12, lineHeight: 1.2, height: 44, overflow: "hidden" }, recortar(p.nombre, 70)),
+      h(
+        "div",
+        { color: "#0F172A", fontSize: tamanoTitulo, fontWeight: 800, marginTop: 10, lineHeight: 1.22, height: 48, overflow: "hidden" },
+        recortar(p.nombre, 85)
+      ),
       // Precio
-      h("div", { alignItems: "flex-end", marginTop: 8, color: destacado ? DORADO_OSC : VERDE }, [
+      h("div", { alignItems: "flex-end", marginTop: 6, color: destacado ? DORADO_OSC : VERDE }, [
         h("div", { fontSize: 18, fontWeight: 800, marginBottom: 5, marginRight: 4 }, "$"),
-        h("div", { fontSize: 38, fontWeight: 800, lineHeight: 1 }, dinero(p.precio)),
+        h("div", { fontSize: 36, fontWeight: 800, lineHeight: 1 }, dinero(p.precio)),
         h("div", { fontSize: 13, fontWeight: 800, color: "#64748B", marginLeft: 6, marginBottom: 4 }, "MXN"),
       ]),
       h(
         "div",
-        { color: incluyeInstalacion(p) ? VERDE : "#64748B", fontSize: 12, fontWeight: 800, marginTop: 6 },
+        { color: incluyeInstalacion(p) ? VERDE : "#64748B", fontSize: 12, fontWeight: 800, marginTop: 4 },
         incluyeInstalacion(p) ? "Incluye instalación" : "Precio del equipo"
       ),
-      h("div", { height: 1, backgroundColor: "#E2E8F0", marginTop: 12, marginBottom: 10 }),
+      h("div", { height: 1, backgroundColor: "#E2E8F0", marginTop: 10, marginBottom: 10 }),
       // Características
       h(
         "div",
         { flexDirection: "column", flexGrow: 1 },
         items.map((item) =>
-          h("div", { marginBottom: 5 }, [
+          h("div", { marginBottom: 4 }, [
             h("div", { width: 6, height: 6, borderRadius: 3, backgroundColor: VERDE_CLARO, marginTop: 5, marginRight: 8, flexShrink: 0 }),
-            h("div", { color: "#334155", fontSize: 12, flexGrow: 1, flexShrink: 1, lineHeight: 1.25 }, recortar(item, 70)),
+            h("div", { color: "#334155", fontSize: 11.5, flexGrow: 1, flexShrink: 1, lineHeight: 1.25 }, recortar(item, 85)),
           ])
         )
       ),
@@ -129,17 +136,17 @@ function tarjeta(p: ProductoSeguridad, ancho: number, foto: string | null, desta
         ? h(
             "div",
             {
-              padding: "8px 10px",
+              padding: "7px 9px",
               borderRadius: 8,
               backgroundColor: destacado ? "#FFFFFF" : "#F8FAFC",
               border: `1px solid ${destacado ? "#E2D7BE" : "#E2E8F0"}`,
               color: "#475569",
-              fontSize: 11.5,
-              lineHeight: 1.3,
-              height: 66,
+              fontSize: 11,
+              lineHeight: 1.25,
+              height: 64,
               overflow: "hidden",
             },
-            recortar(p.descripcionValor.trim(), 150)
+            recortar(p.descripcionValor.trim(), 160)
           )
         : null,
     ].filter(Boolean)
@@ -159,7 +166,7 @@ export async function generarImagenComparativaSeguridad(familia: FamiliaSegurida
   const fotos = await Promise.all(productos.map((p) => fotoComoDataUri(p, anchoTarjeta - 44, 206)));
   // Se destaca la opción de gama media ("Recomendado"), si la hay
   const destacado = productos.findIndex((p) => p.gama === "media");
-  const alto = 840;
+  const alto = 850;
 
   const arbol = h(
     "div",
