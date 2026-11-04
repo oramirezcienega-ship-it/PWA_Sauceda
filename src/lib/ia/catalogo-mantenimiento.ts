@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Productos de mantenimiento de tinacos y cisternas del catálogo (Productos y Servicios).
+ * Productos de mantenimiento e instalación de calentadores solares, tinacos y cisternas del catálogo (Productos y Servicios).
  * Sofía arma su script con lo que dice el producto (qué incluye, propuesta de valor,
  * ficha/facts, garantía, precio y fotos), así que basta editar el producto para cambiarlo.
  */
@@ -37,6 +37,10 @@ export interface ProductoMant {
   aptoParaIa: boolean;
 }
 
+export interface CatalogoServiciosMant extends Partial<Record<ServicioMant, ProductoMant>> {
+  instalacionCalentadores?: ProductoMant;
+}
+
 export function servicioDeTipoNegocio(tipo?: string | null): ServicioMant | null {
   if (tipo === "construccion-mantenimiento-tinacos") return "tinacos";
   if (tipo === "construccion-mantenimiento-cisternas") return "cisternas";
@@ -54,7 +58,7 @@ function servicioDeNombre(nombre: string): ServicioMant | null {
 
 export async function cargarServiciosMantenimiento(
   sb: SupabaseClient
-): Promise<Partial<Record<ServicioMant, ProductoMant>>> {
+): Promise<CatalogoServiciosMant> {
   const { data } = await sb
     .from("productos_servicios")
     .select("id, nombre, tipo_negocio, precio_unitario, descripcion, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo, tarifas_capacidad, estandar_proceso, estandar_incluye, estandar_garantia_anios, estandar_garantia, estandar_tiempo")
@@ -63,7 +67,7 @@ export async function cargarServiciosMantenimiento(
         "nombre.ilike.%tinaco%,nombre.ilike.%cisterna%,nombre.ilike.%aljibe%,nombre.ilike.%calentador%"
     );
 
-  const out: Partial<Record<ServicioMant, ProductoMant>> = {};
+  const out: CatalogoServiciosMant = {};
   // Priorizar productos específicos de mantenimiento que tengan tarifas_capacidad configuradas
   const filas = [...(data || [])].sort((x: any, y: any) => {
     const xTarifas = Array.isArray(x.tarifas_capacidad) ? x.tarifas_capacidad.length : 0;
@@ -74,8 +78,49 @@ export async function cargarServiciosMantenimiento(
     if (xMant !== yMant) return yMant - xMant;
     return Number(!x.tipo_negocio) - Number(!y.tipo_negocio);
   });
+
   for (const f of filas) {
     if (f.activo === false) continue;
+
+    // Detectar instalación de calentador solar (ej. SERV-022)
+    const esInstalacionCalentador =
+      f.id === "SERV-022" ||
+      ((f.nombre || "").toLowerCase().includes("instalaci") && (f.nombre || "").toLowerCase().includes("calentador"));
+
+    if (esInstalacionCalentador && !out.instalacionCalentadores) {
+      out.instalacionCalentadores = {
+        id: f.id,
+        servicio: "calentadores",
+        nombre: f.nombre,
+        precio: Number(f.precio_unitario || 4490),
+        descripcionValor: f.descripcion_valor || "",
+        descripcion: [f.estandar_incluye, f.descripcion].map((x: any) => (x || "").trim()).filter(Boolean).join("\n"),
+        especificaciones: [
+          f.especificaciones || "",
+          (f.estandar_proceso || "").trim() ? `Proceso: ${(f.estandar_proceso || "").trim()}` : "",
+          (f.estandar_tiempo || "").trim() ? `Tiempo de ejecución: ${(f.estandar_tiempo || "").trim()}` : "",
+        ]
+          .map((x: string) => x.trim())
+          .filter(Boolean)
+          .join("\n"),
+        garantia:
+          [
+            Number(f.estandar_garantia_anios) > 0
+              ? `${Number(f.estandar_garantia_anios)} ${Number(f.estandar_garantia_anios) === 1 ? "año" : "años"}`
+              : "",
+            (f.estandar_garantia || "").trim(),
+          ]
+            .filter(Boolean)
+            .join(" · ") || f.plantilla_garantia || "",
+        fotos: (Array.isArray(f.fotos) ? f.fotos : []).filter((x: any) => x && /^https?:\/\//i.test(x.url || "")),
+        tarifas: [],
+        aptoParaIa: f.apto_para_ia !== false,
+      };
+      if (esInstalacionCalentador && !f.nombre.toLowerCase().includes("mantenimiento")) {
+        continue;
+      }
+    }
+
     const servicio = f.tipo_negocio ? servicioDeTipoNegocio(f.tipo_negocio) : servicioDeNombre(f.nombre);
     if (!servicio || out[servicio]) continue;
     out[servicio] = {
@@ -119,15 +164,30 @@ export function fichaServicioParaPrompt(prod: ProductoMant | undefined): string 
   if (!prod || !prod.aptoParaIa) {
     return "  (No hay información oficial cargada de este servicio: NO des precio ni detalles técnicos; dile que un asesor se los confirma.)";
   }
-  // Los precios no se incluyen en el prompt: Sofía nunca da montos en texto (los confirma el asesor).
   return [
     `  Servicio: ${prod.nombre}`,
     prod.servicio === "calentadores"
-      ? "  Precio: Se rige por los escalones oficiales de tubos y la colonia del cliente (detallados en el flujo K)."
+      ? "  Precio: Se rige por los escalones oficiales de tubos, refacciones en sitio y la colonia del cliente (detallados en el flujo K)."
       : '  Precio: NO lo des en texto (ni montos, ni "desde", ni totales); un asesor lo confirma.',
     prod.descripcion.trim() ? `  Qué incluye y qué no incluye: ${prod.descripcion.trim()}` : "",
     prod.descripcionValor.trim() ? `  Propuesta de valor: ${prod.descripcionValor.trim()}` : "",
     prod.especificaciones.trim() ? `  Datos técnicos y facts:\n${prod.especificaciones.trim().split("\n").map((l) => `    ${l}`).join("\n")}` : "",
+    prod.garantia.trim() ? `  Garantía: ${prod.garantia.trim()}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Bloque de información oficial de instalación de calentadores solares para el prompt de Sofía. */
+export function fichaInstalacionCalentadorParaPrompt(prod: ProductoMant | undefined): string {
+  if (!prod || !prod.aptoParaIa) {
+    return "  Instalación Integral Completa de Calentador Solar: $4,490 MXN para sistemas por gravedad de 10 a 15 tubos (incluye armado en azotea, bajada hasta boiler, juego de bypass 3 válvulas, válvula check de bronce y jarro de aire).";
+  }
+  return [
+    `  Servicio de Instalación: ${prod.nombre}`,
+    `  Precio oficial de instalación estándar: $${prod.precio.toLocaleString("es-MX")} MXN todo incluido.`,
+    prod.descripcion.trim() ? `  Qué incluye: ${prod.descripcion.trim()}` : "",
+    prod.especificaciones.trim() ? `  Datos técnicos:\n${prod.especificaciones.trim().split("\n").map((l) => `    ${l}`).join("\n")}` : "",
     prod.garantia.trim() ? `  Garantía: ${prod.garantia.trim()}` : "",
   ]
     .filter(Boolean)
