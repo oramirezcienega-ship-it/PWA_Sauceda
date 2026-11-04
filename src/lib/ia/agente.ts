@@ -171,7 +171,7 @@ export async function diagnosticoIA(): Promise<{ ok: boolean; mensaje: string }>
         mensaje: "Falta KIMI_API_KEY en Coolify o en configuracion_agente.",
       };
     }
-    const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1";
+    const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.ai/v1";
     const model = process.env.KIMI_MODEL || "kimi-k3";
     try {
       const res = await fetch(`${baseUrl}/chat/completions`, {
