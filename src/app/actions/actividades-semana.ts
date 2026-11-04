@@ -403,6 +403,12 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
         .map((id) => mapaPerfiles.get(id))
         .filter(Boolean) as string[];
 
+      // Buscar si tiene OT vinculada
+      const otMatch = (otsRaw || []).find((ot: any) =>
+        (c.cotizacion_id && ot.cotizacion_id === c.cotizacion_id) ||
+        (c.expediente_id && ot.expediente_id === c.expediente_id && (ot.fecha_programada === c.fecha || !ot.fecha_programada))
+      );
+
       // Si tiene OT vinculada con proveedor o la cita menciona un proveedor, incluirlo al frente
       if (otMatch?.proveedor_id && mapaProveedores.has(otMatch.proveedor_id)) {
         const pName = mapaProveedores.get(otMatch.proveedor_id)!;
@@ -414,12 +420,6 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
           if (!responsables.includes(pName)) responsables.unshift(pName);
         }
       }
-
-      // Buscar si tiene OT vinculada
-      const otMatch = (otsRaw || []).find((ot: any) =>
-        (c.cotizacion_id && ot.cotizacion_id === c.cotizacion_id) ||
-        (c.expediente_id && ot.expediente_id === c.expediente_id && (ot.fecha_programada === c.fecha || !ot.fecha_programada))
-      );
 
       let st = mapearEstado(c.estado);
       if (otMatch?.estatus === "completada") {
