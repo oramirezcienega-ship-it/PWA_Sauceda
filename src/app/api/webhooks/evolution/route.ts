@@ -222,6 +222,19 @@ export async function POST(request: NextRequest) {
       estado: "recibido",
     });
 
+    // Pausar campañas automáticas de Mautic
+    try {
+      const { pausarMauticPorInteraccion } = await import("@/lib/conector-rudder-mautic");
+      void pausarMauticPorInteraccion({
+        telefono: telNormalizado,
+        prospectoId: exp?.prospecto_id || null,
+        expedienteId: exp?.id || null,
+        motivo: "Cliente respondió por WhatsApp (Evolution API)",
+      });
+    } catch (errPausa) {
+      console.warn("[Evolution Webhook] Advertencia al pausar Mautic:", errPausa);
+    }
+
     return NextResponse.json({
       ok: true,
       tipo: "cliente",

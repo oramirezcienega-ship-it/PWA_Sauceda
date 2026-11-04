@@ -146,3 +146,68 @@ export async function sincronizarConectorMautic(
     return false;
   }
 }
+
+
+/**
+ * Pausa / desenrola automáticamente a un contacto en Mautic cuando este
+ * responde o interactúa en WhatsApp / CRM, cancelando secuencias programadas
+ * para evitar mensajes cruzados mientras habla con un asesor o Sofía.
+ */
+export async function pausarMauticPorInteraccion(params: {
+  telefono: string;
+  prospectoId?: string | null;
+  expedienteId?: string | null;
+  motivo?: string;
+}): Promise<boolean> {
+  try {
+    const rawDigits = (params.telefono || "").replace(/\D/g, "");
+    const tel10 = rawDigits.length >= 10 ? rawDigits.slice(-10) : rawDigits;
+    if (!tel10 || tel10.length < 8) return false;
+
+    const motivo = params.motivo || "Respuesta / interacción de cliente en WhatsApp";
+
+    // 1. Notificar al dispatcher de campañas (webhook_receiver en Proxmox) para desenrolar en Mautic MySQL
+    const dispatcherUrl = (process.env.MAUTIC_DISPATCHER_URL || "http://192.168.100.253:52900").replace(/\/$/, "");
+    try {
+      fetch(`${dispatcherUrl}/api/pause-lead`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: tel10,
+          motivo,
+          prospecto_id: params.prospectoId || null,
+          expediente_id: params.expedienteId || null,
+        }),
+      }).catch((errFetch) => {
+        console.warn("[Pausa Mautic] Advertencia al contactar dispatcher:", errFetch?.message || errFetch);
+      });
+    } catch (errDis) {
+      console.warn("[Pausa Mautic] Error invocando dispatcher:", errDis);
+    }
+
+    // 2. Marcar como 'en_conversacion' en Supabase mautic_enrolamientos
+    try {
+      const { supabaseServidor } = await import("@/lib/supabase/server");
+      const sb = supabaseServidor();
+      const ahoraIso = new Date().toISOString();
+
+      await sb
+        .from("mautic_enrolamientos")
+        .update({
+          estado: "en_conversacion",
+          desuscrito_at: ahoraIso,
+          notas: `Pausado automáticamente: ${motivo.slice(0, 150)}`,
+          updated_at: ahoraIso,
+        })
+        .ilike("telefono", `%${tel10}%`)
+        .eq("estado", "activo");
+    } catch (errSup) {
+      console.warn("[Pausa Mautic] Error actualizando mautic_enrolamientos en Supabase:", errSup);
+    }
+
+    return true;
+  } catch (errGlobal) {
+    console.error("[Pausa Mautic] Error en pausarMauticPorInteraccion:", errGlobal);
+    return false;
+  }
+}

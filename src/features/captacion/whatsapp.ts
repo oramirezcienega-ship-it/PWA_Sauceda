@@ -1000,6 +1000,19 @@ export async function registrarLeadWhatsApp(
       waMessageId: lead.waMessageId,
     });
 
+    // Pausa y desenrolamiento automático de campañas de Mautic si el cliente interactúa
+    try {
+      const { pausarMauticPorInteraccion } = await import("@/lib/conector-rudder-mautic");
+      void pausarMauticPorInteraccion({
+        telefono,
+        prospectoId: efectivoProspectoId,
+        expedienteId: exp.id,
+        motivo: "Cliente respondió por WhatsApp (inbound)",
+      });
+    } catch (errPausaMautic) {
+      console.warn("[Captación WhatsApp] Error al pausar Mautic:", errPausaMautic);
+    }
+
     // Si la IA está apagada y es seguridad, pasar en automático a Gerardo (si la IA está activa, ella responde primero y luego pasa el lead)
     const tipoEfectivo = updateData.tipo_negocio || exp.tipo_negocio;
     if (!iaAgenteActivo() && (tipoEfectivo === "seguridad" || tipoNegocio === "seguridad")) {
