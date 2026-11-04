@@ -227,7 +227,7 @@ export async function resolverDatosProveedorCita(
     titulo?: string | null;
   } | null;
 }> {
-  let proveedorId: string | null = null;
+  let proveedorId: string | null = (cita as any).proveedor_id || cita.confirmaciones_equipo?.proveedor_id || null;
   let otData: any = null;
 
   if (cita.expediente_id) {

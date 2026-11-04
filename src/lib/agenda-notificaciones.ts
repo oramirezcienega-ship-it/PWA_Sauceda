@@ -1,5 +1,12 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { enviarWhatsAppPlantilla, enviarWhatsAppTexto } from "@/lib/whatsapp";
+import { normalizarTelefono } from "@/lib/telefono";
+import {
+  resolverDatosProveedorCita,
+  formatearHorarioLegible,
+  inferirServicioNombre,
+} from "./recordatorios-dia-servicio";
+import { enviarWhatsAppProveedor } from "./whatsapp-proveedores";
 
 export interface OpcionesCronAgenda {
   forzar?: "matutino" | "nocturno" | "alertas_previas" | "recordatorios_dia" | "todo";
@@ -28,6 +35,8 @@ export interface ResultadoCronAgenda {
   alertasPrevias?: {
     alertas2hEnviadas: number;
     alertas1hEnviadas: number;
+    alertas2hProveedoresEnviadas?: number;
+    alertas2hAdminEnviadas?: number;
     errores: number;
     citasEvaluadas: number;
   };
@@ -159,6 +168,61 @@ async function enviarNotificacionConRespaldo(
   await registrarBitacora(sb, telefono, textoLibreRespaldo, resTxt, citaId);
 
   return resTxt;
+}
+
+/**
+ * Envía la copia espejo a Oscar (4778110444) intentando primero por Meta y con
+ * fallback garantizado a Evolution API (sin restricción de ventana de 24h).
+ */
+async function enviarAlertaOscarConRespaldo(
+  sb: any,
+  textoAlerta: string,
+  servicioNombre: string,
+  clienteNombre: string,
+  clienteTelefono: string,
+  horaStr: string,
+  ubicacion: string,
+  notas: string,
+  citaId?: string
+): Promise<{ ok: boolean; via?: string; error?: string }> {
+  const telAdmin = "524778110444";
+
+  // 1. Intentar con Meta (plantilla de utilidad o texto directo)
+  const resMeta = await enviarNotificacionConRespaldo(
+    sb,
+    telAdmin,
+    PLANTILLA_ALERTA,
+    [
+      "Oscar",
+      "2 horas",
+      servicioNombre,
+      clienteNombre,
+      clienteTelefono,
+      horaStr,
+      ubicacion,
+      notas,
+    ],
+    textoAlerta,
+    citaId
+  );
+
+  if (resMeta.ok) {
+    return { ok: true, via: "meta" };
+  }
+
+  // 2. Fallback a Evolution API (línea móvil secundaria de rescate sin restricción de 24h)
+  try {
+    const { enviarMensajeTextoEvolution } = await import("@/lib/evolution-api");
+    const resEvo = await enviarMensajeTextoEvolution(telAdmin, textoAlerta);
+    if (resEvo.ok) {
+      await registrarBitacora(sb, telAdmin, textoAlerta, { ok: true, messageId: resEvo.messageId }, citaId);
+      return { ok: true, via: "evolution" };
+    }
+  } catch (errEvo) {
+    console.warn("[Notificaciones Agenda] Error en fallback Evolution para Oscar:", errEvo);
+  }
+
+  return { ok: false, error: resMeta.error || "error_envio_oscar" };
 }
 
 /**
@@ -467,6 +531,8 @@ export async function procesarAlertasYResumenesAgenda(
 
     let alertas2h = 0;
     let alertas1h = 0;
+    let alertas2hProveedores = 0;
+    let alertas2hAdmin = 0;
     let erroresAlertas = 0;
 
     for (const cita of citasHoyAlertas || []) {
@@ -481,69 +547,211 @@ export async function procesarAlertasYResumenesAgenda(
         .map((pId) => perfilesMap.get(pId) as any)
         .filter((a): a is NonNullable<typeof a> => Boolean(a && (a.telefono_whatsapp?.trim() || a.telefono?.trim()) && a.notificar_whatsapp_alertas_previas !== false));
 
-      if (asesoresAsignados.length === 0) continue;
-
       const tipoServicio = formatearTipoCita(cita.tipo_cita);
       const horaStr = cita.hora_inicio?.slice(0, 5) || "00:00";
       const ubicacion = [cita.fraccionamiento, cita.direccion].filter(Boolean).join(", ") || "Dirección en expediente";
       const notas = cita.notas?.trim() || "Sin notas adicionales";
+      const conf = (cita.confirmaciones_equipo && typeof cita.confirmaciones_equipo === "object")
+        ? cita.confirmaciones_equipo
+        : {};
 
-      // 1. Alerta de 2 Horas antes (ventana de 90 a 140 minutos)
-      const debeEnviar2h =
-        minutosFaltantes >= 90 &&
-        minutosFaltantes <= 140 &&
-        !cita.alerta_2h_enviada_at;
+      // -----------------------------------------------------------------------
+      // 1. ALERTA DE 2 HORAS ANTES (Ventana de 70 a 145 minutos)
+      // -----------------------------------------------------------------------
+      const enVentana2h = minutosFaltantes >= 70 && minutosFaltantes <= 145;
 
-      if (debeEnviar2h) {
-        let exitoAlguno = false;
-        for (const asesor of asesoresAsignados) {
-          const primerNombre = asesor.nombre?.split(" ")[0] || "Asesor";
-          const telAsesor = asesor.telefono_whatsapp?.trim() || asesor.telefono?.trim();
-          const textoAlerta = `⏰ *Alerta de Cita Próxima*\n\nHola ${primerNombre}, tienes un evento programado en *2 horas*:\n\n• Tipo: ${tipoServicio}\n• Cliente: ${cita.cliente_nombre} (${cita.cliente_telefono})\n• Hora: ${horaStr} hrs\n• Ubicación: ${ubicacion}\n• Notas: ${notas}\n\nRecuerda comunicarte con el cliente con anticipación para confirmar tu traslado.`;
+      if (enVentana2h) {
+        // A) Enviar alerta a asesores asignados (si los hay y no se ha enviado)
+        const debeEnviar2hAsesores = !cita.alerta_2h_enviada_at && asesoresAsignados.length > 0;
+        if (debeEnviar2hAsesores) {
+          let exitoAlguno = false;
+          for (const asesor of asesoresAsignados) {
+            const primerNombre = asesor.nombre?.split(" ")[0] || "Asesor";
+            const telAsesor = asesor.telefono_whatsapp?.trim() || asesor.telefono?.trim();
+            const textoAlerta = `⏰ *Alerta de Cita Próxima*\n\nHola ${primerNombre}, tienes un evento programado en *2 horas*:\n\n• Tipo: ${tipoServicio}\n• Cliente: ${cita.cliente_nombre} (${cita.cliente_telefono})\n• Hora: ${horaStr} hrs\n• Ubicación: ${ubicacion}\n• Notas: ${notas}\n\nRecuerda comunicarte con el cliente con anticipación para confirmar tu traslado.`;
 
-          const res = await enviarNotificacionConRespaldo(
-            sb,
-            telAsesor,
-            PLANTILLA_ALERTA,
-            [
-              primerNombre,
-              "2 horas",
-              tipoServicio,
-              cita.cliente_nombre,
-              cita.cliente_telefono,
-              horaStr,
-              ubicacion,
-              notas,
-            ],
-            textoAlerta,
-            cita.id
-          );
+            const res = await enviarNotificacionConRespaldo(
+              sb,
+              telAsesor,
+              PLANTILLA_ALERTA,
+              [
+                primerNombre,
+                "2 horas",
+                tipoServicio,
+                cita.cliente_nombre,
+                cita.cliente_telefono,
+                horaStr,
+                ubicacion,
+                notas,
+              ],
+              textoAlerta,
+              cita.id
+            );
 
-          if (res.ok) {
-            alertas2h++;
-            exitoAlguno = true;
-          } else {
-            erroresAlertas++;
+            if (res.ok) {
+              alertas2h++;
+              exitoAlguno = true;
+            } else {
+              erroresAlertas++;
+            }
+          }
+
+          if (exitoAlguno) {
+            try {
+              await sb
+                .from("agenda_citas")
+                .update({ alerta_2h_enviada_at: new Date().toISOString() })
+                .eq("id", cita.id);
+            } catch (e) {
+              console.warn("[Notificaciones Agenda] Error al actualizar alerta_2h_enviada_at:", e);
+            }
           }
         }
 
-        if (exitoAlguno) {
-          try {
-            await sb
-              .from("agenda_citas")
-              .update({ alerta_2h_enviada_at: new Date().toISOString() })
-              .eq("id", cita.id);
-          } catch (e) {
-            console.warn("[Notificaciones Agenda] Error al actualizar alerta_2h_enviada_at:", e);
+        // B) Enviar alerta al Proveedor asignado (ej. Clemente, etc.) y espejo a Oscar (4778110444)
+        const yaEnviadoProv2h = Boolean(
+          (cita as any).alerta_2h_proveedor_enviada_at || conf.alerta_2h_proveedor_enviada_at
+        );
+        const yaEnviadoAdmin2h = Boolean(conf.alerta_2h_admin_enviada_at);
+
+        if (!yaEnviadoProv2h || !yaEnviadoAdmin2h) {
+          const { proveedor, ordenTrabajo } = await resolverDatosProveedorCita(sb, cita);
+
+          if (proveedor && proveedor.telefono) {
+            const provNombre = proveedor.contactoNombre?.split(/\s+/)[0] || proveedor.contactoNombre || "Proveedor";
+            const provNombreCompleto = proveedor.contactoNombre || proveedor.nombre;
+            const clienteNombre = cita.cliente_nombre || "Cliente";
+            const horarioStr = formatearHorarioLegible(cita.hora_inicio, cita.hora_fin) || `${horaStr} hrs`;
+            const folioOT = ordenTrabajo?.folio || cita.expediente_id || "Servicio Programado";
+            const servicioNombre = inferirServicioNombre(cita);
+            const telClienteLimpio = normalizarTelefono(cita.cliente_telefono || "");
+            const queryMaps = encodeURIComponent(ubicacion);
+            const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${queryMaps}`;
+
+            // B.1 Mensaje para el proveedor
+            const textoAlertaProveedor = [
+              `⏰ *RECORDATORIO: SERVICIO EN 2 HORAS · SAUCEDA*`,
+              ``,
+              `Hola ${provNombre}, te recordamos que tienes un servicio programado en *2 horas*:`,
+              `📄 Folio: *${folioOT}*`,
+              `🛠️ Servicio: ${servicioNombre}`,
+              `⏰ Horario: *${horarioStr}*`,
+              `👤 Cliente: *${clienteNombre}*`,
+              telClienteLimpio ? `📱 WhatsApp Cliente: https://wa.me/52${telClienteLimpio.slice(-10)}` : null,
+              `📍 Ubicación: ${ubicacion}`,
+              `🗺️ Ver en Google Maps: ${mapsUrl}`,
+              ordenTrabajo?.costoProveedor ? `💵 Pago acordado mano de obra: $${Number(ordenTrabajo.costoProveedor).toLocaleString("es-MX")}` : null,
+              cita.notas ? `📝 Notas: ${cita.notas}` : null,
+              ``,
+              `Por favor confirma de recibido respondiendo a este mensaje cuando salgas en camino. ¡Éxito en el servicio! 🤝`,
+            ].filter(Boolean).join("\n");
+
+            const resumenMetaProv = `recordatorio: tienes servicio en 2 horas (${horarioStr}) con ${clienteNombre} en ${ubicacion} [${folioOT}].`;
+
+            let provEnviadoOk = false;
+            if (!yaEnviadoProv2h) {
+              try {
+                const resProv = await enviarWhatsAppProveedor(sb, {
+                  proveedorId: proveedor.id,
+                  texto: textoAlertaProveedor,
+                  resumen: resumenMetaProv,
+                  agente: "alerta_2h_proveedor",
+                });
+                if (resProv.ok) {
+                  provEnviadoOk = true;
+                  alertas2hProveedores++;
+                } else {
+                  erroresAlertas++;
+                  console.warn("[Notificaciones Agenda] Falla alerta 2h proveedor:", resProv.error);
+                }
+              } catch (errProv) {
+                console.error("[Notificaciones Agenda] Error enviando alerta 2h a proveedor:", errProv);
+                erroresAlertas++;
+              }
+            }
+
+            // B.2 Mensaje espejo a Oscar (4778110444)
+            let adminEnviadoOk = false;
+            if (!yaEnviadoAdmin2h) {
+              const textoAlertaAdmin = [
+                `⏰ *RECORDATORIO DE SERVICIO EN 2 HORAS (COPIA DIRECCIÓN)*`,
+                ``,
+                `👷‍♂️ Proveedor Asignado: *${provNombreCompleto}* (${proveedor.telefono})`,
+                `📄 Folio: *${folioOT}*`,
+                `🛠️ Servicio: ${servicioNombre}`,
+                `⏰ Horario: *${horarioStr}*`,
+                `👤 Cliente: *${clienteNombre}* (${cita.cliente_telefono || "Sin tel"})`,
+                telClienteLimpio ? `📱 WhatsApp Cliente: https://wa.me/52${telClienteLimpio.slice(-10)}` : null,
+                `📍 Ubicación: ${ubicacion}`,
+                `🗺️ Ver en Google Maps: ${mapsUrl}`,
+                ordenTrabajo?.costoProveedor ? `💵 Pago acordado mano de obra: $${Number(ordenTrabajo.costoProveedor).toLocaleString("es-MX")}` : null,
+                cita.notas ? `📝 Notas: ${cita.notas}` : null,
+              ].filter(Boolean).join("\n");
+
+              try {
+                const resAdmin = await enviarAlertaOscarConRespaldo(
+                  sb,
+                  textoAlertaAdmin,
+                  servicioNombre,
+                  clienteNombre,
+                  cita.cliente_telefono || "",
+                  horaStr,
+                  ubicacion,
+                  notas,
+                  cita.id
+                );
+
+                if (resAdmin.ok) {
+                  adminEnviadoOk = true;
+                  alertas2hAdmin++;
+                } else {
+                  erroresAlertas++;
+                  console.warn("[Notificaciones Agenda] Falla alerta 2h a Oscar:", resAdmin.error);
+                }
+              } catch (errAdm) {
+                console.error("[Notificaciones Agenda] Error enviando alerta 2h a Oscar:", errAdm);
+                erroresAlertas++;
+              }
+            }
+
+            // Actualizar banderas en confirmaciones_equipo y agenda_citas
+            if (provEnviadoOk || adminEnviadoOk) {
+              const ahoraIso = new Date().toISOString();
+              const nuevoConf = {
+                ...conf,
+                alerta_2h_proveedor_enviada_at: provEnviadoOk ? ahoraIso : conf.alerta_2h_proveedor_enviada_at,
+                alerta_2h_proveedor_id: provEnviadoOk ? proveedor.id : conf.alerta_2h_proveedor_id,
+                alerta_2h_admin_enviada_at: adminEnviadoOk ? ahoraIso : conf.alerta_2h_admin_enviada_at,
+              };
+
+              const updatePayload: Record<string, any> = {
+                confirmaciones_equipo: nuevoConf,
+              };
+
+              try {
+                await sb
+                  .from("agenda_citas")
+                  .update({
+                    ...updatePayload,
+                    alerta_2h_enviada_at: cita.alerta_2h_enviada_at || ahoraIso,
+                  })
+                  .eq("id", cita.id);
+              } catch (eUpd) {
+                console.warn("[Notificaciones Agenda] Error actualizando confirmaciones_equipo 2h:", eUpd);
+              }
+            }
           }
         }
       }
 
-      // 2. Alerta de 1 Hora antes (ventana de 35 a 80 minutos)
+      // -----------------------------------------------------------------------
+      // 2. ALERTA DE 1 HORA ANTES (Ventana de 35 a 80 minutos) - Para asesores
+      // -----------------------------------------------------------------------
       const debeEnviar1h =
         minutosFaltantes >= 35 &&
         minutosFaltantes <= 80 &&
-        !cita.alerta_1h_enviada_at;
+        !cita.alerta_1h_enviada_at &&
+        asesoresAsignados.length > 0;
 
       if (debeEnviar1h) {
         let exitoAlguno = false;
@@ -594,6 +802,8 @@ export async function procesarAlertasYResumenesAgenda(
     resultado.alertasPrevias = {
       alertas2hEnviadas: alertas2h,
       alertas1hEnviadas: alertas1h,
+      alertas2hProveedoresEnviadas: alertas2hProveedores,
+      alertas2hAdminEnviadas: alertas2hAdmin,
       errores: erroresAlertas,
       citasEvaluadas: citasHoyAlertas?.length || 0,
     };
