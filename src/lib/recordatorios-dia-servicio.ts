@@ -305,6 +305,23 @@ export async function enviarRecordatorioDiaCliente(
     return { ok: true, omitido: true, motivo: "ya_enviado_previamente" };
   }
 
+  // Protección estricta de descanso: NUNCA enviar de madrugada ni fuera de horario comercial (08:00 AM a 08:00 PM México)
+  if (!options.forzar) {
+    const ahoraMx = new Intl.DateTimeFormat("es-MX", {
+      timeZone: "America/Mexico_City",
+      hour: "numeric",
+      hour12: false,
+    }).format(new Date());
+    const horaActual = parseInt(ahoraMx, 10);
+    if (horaActual < 8 || horaActual >= 20) {
+      return {
+        ok: false,
+        omitido: true,
+        motivo: `fuera_horario_comercial_${horaActual}h`,
+      };
+    }
+  }
+
   // Solo aplica para citas de tipo instalación o inspección técnica
   if (cita.tipo_cita !== "instalacion" && cita.tipo_cita !== "inspeccion") {
     return { ok: false, omitido: true, motivo: `tipo_cita_no_aplica_${cita.tipo_cita}` };
@@ -426,6 +443,23 @@ export async function enviarRecordatorioDiaProveedor(
   const yaEnviado = cita.recordatorio_proveedor_enviado_at || conf.recordatorio_proveedor_enviado_at;
   if (yaEnviado && !options.forzar) {
     return { ok: true, omitido: true, motivo: "ya_enviado_previamente" };
+  }
+
+  // Protección estricta de descanso al proveedor: no enviar de madrugada (solo 08:00 AM a 08:00 PM México)
+  if (!options.forzar) {
+    const ahoraMx = new Intl.DateTimeFormat("es-MX", {
+      timeZone: "America/Mexico_City",
+      hour: "numeric",
+      hour12: false,
+    }).format(new Date());
+    const horaActual = parseInt(ahoraMx, 10);
+    if (horaActual < 8 || horaActual >= 20) {
+      return {
+        ok: false,
+        omitido: true,
+        motivo: `fuera_horario_comercial_${horaActual}h`,
+      };
+    }
   }
 
   const { proveedor, ordenTrabajo } = await resolverDatosProveedorCita(sb, cita);

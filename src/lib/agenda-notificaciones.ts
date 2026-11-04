@@ -602,11 +602,14 @@ export async function procesarAlertasYResumenesAgenda(
   // =========================================================================
   // D. RECORDATORIOS DEL DÍA A CLIENTES Y PROVEEDORES (PLANTILLAS META UTILITY)
   // =========================================================================
+  // Solo se ejecutan a partir de las 8:00 AM y hasta las 8:00 PM (hora de México)
+  const esHorarioComercialRecordatorios = tiempo.horaActual >= 8 && tiempo.horaActual < 20;
+
   const ejecutarRecordatorios =
     opciones.forzar === "recordatorios_dia" ||
     opciones.forzar === "matutino" ||
     opciones.forzar === "todo" ||
-    !opciones.forzar; // En cada corrida periódica evalúa si hay citas de hoy pendientes de recordatorio
+    (!opciones.forzar && esHorarioComercialRecordatorios); // En cada corrida diurna evalúa si hay citas de hoy pendientes de recordatorio
 
   if (ejecutarRecordatorios) {
     try {
