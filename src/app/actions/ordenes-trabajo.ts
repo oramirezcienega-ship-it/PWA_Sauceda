@@ -892,11 +892,12 @@ export async function actualizarEstatusOrdenTrabajo(
     if (error) return { ok: false, error: error.message };
 
     // Al concluir la orden, sincronizar citas vinculadas en agenda_citas a 'completada'
+    // y blindar al cliente en Mautic / CRM marcando su expediente como 'cerrado'
     if (nuevoEstatus === "completada") {
       try {
         const { data: otData } = await sb
           .from("ordenes_trabajo")
-          .select("cotizacion_id, expediente_id")
+          .select("cotizacion_id, expediente_id, prospecto_id")
           .eq("id", ordenId)
           .maybeSingle();
         if (otData) {
@@ -910,9 +911,44 @@ export async function actualizarEstatusOrdenTrabajo(
               .or(filtros.join(","))
               .neq("estado", "cancelada");
           }
+
+          // Blindaje Mautic y CRM: Si la orden se completó, el expediente pasa a 'cerrado'
+          // y se sincroniza a Mautic para desenrolarlo de campañas de prospección.
+          if (otData.expediente_id) {
+            await sb
+              .from("expedientes")
+              .update({ etapa: "cerrado", situacion: "obra_concluida" })
+              .eq("id", otData.expediente_id);
+
+            const { data: expRow } = await sb
+              .from("expedientes")
+              .select("id, cliente, primer_apellido, segundo_apellido, telefono, tipo_negocio")
+              .eq("id", otData.expediente_id)
+              .maybeSingle();
+
+            if (expRow) {
+              try {
+                const { sincronizarConectorMautic } = await import("@/lib/conector-rudder-mautic");
+                await sincronizarConectorMautic({
+                  userId: otData.prospecto_id || `exp-${expRow.id}`,
+                  firstname: expRow.cliente,
+                  lastname: [expRow.primer_apellido, expRow.segundo_apellido].filter(Boolean).join(" "),
+                  phone: expRow.telefono,
+                  tipo_negocio: expRow.tipo_negocio,
+                  etapa: "cerrado",
+                  estatus: "cliente_activo",
+                  calificacion: "caliente",
+                  descalificado: false,
+                  tags: ["cliente", "obra_concluida", expRow.tipo_negocio].filter(Boolean) as string[],
+                });
+              } catch (eMautic) {
+                console.warn("Aviso al sincronizar cliente cerrado hacia Mautic:", eMautic);
+              }
+            }
+          }
         }
       } catch (errSyncCitas) {
-        console.warn("Aviso al sincronizar cita completada en agenda_citas:", errSyncCitas);
+        console.warn("Aviso al sincronizar cita completada en agenda_citas y Mautic:", errSyncCitas);
       }
 
       const resDoc = await generarDocumentoProveedorAutomatico(ordenId);
