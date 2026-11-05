@@ -159,8 +159,7 @@ export async function resolverResponsableCita(
         .maybeSingle();
 
       if (prov) {
-        const formal = prov.contacto_nombre?.trim() || prov.razon_social?.trim() || prov.nombre;
-        return { nombre: formal, proveedorId: prov.id, asesorId: null };
+        return { nombre: "Técnico especialista SAUCEDA", proveedorId: prov.id, asesorId: null };
       }
     }
   }
@@ -176,8 +175,7 @@ export async function resolverResponsableCita(
       .maybeSingle();
 
     if (prov) {
-      const formal = prov.contacto_nombre?.trim() || prov.razon_social?.trim() || prov.nombre;
-      return { nombre: formal, proveedorId: prov.id, asesorId: null };
+      return { nombre: "Técnico especialista SAUCEDA", proveedorId: prov.id, asesorId: null };
     }
   }
 
