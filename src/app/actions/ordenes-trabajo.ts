@@ -2187,13 +2187,13 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
         comision_bancaria_pct,
         precio_cliente,
         prospectos(nombre, primer_apellido, segundo_apellido, telefono, direccion),
-        expedientes(cliente, primer_apellido, segundo_apellido, telefono, direccion),
+        expedientes(cliente, primer_apellido, segundo_apellido, telefono, direccion_propiedad),
         cotizaciones(id, precio_final, token, expediente_id, cliente_nombre_personalizado)
       `)
       .eq("id", datos.ordenTrabajoId)
       .single();
 
-    if (otErr || !ot) return { ok: false, error: "Orden de trabajo no encontrada." };
+    if (otErr || !ot) return { ok: false, error: otErr ? `Error al consultar orden de trabajo: ${otErr.message}` : "Orden de trabajo no encontrada." };
 
     // Verificar si ya existe una remisión/factura vinculada
     let queryEx = sb.from("remisiones_facturas").select("id, folio, tipo");
@@ -2261,7 +2261,7 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
           }
         : {
             direccionEntrega:
-              datos.direccionEntrega?.trim() || ot.prospectos?.direccion || (expObj as any)?.direccion || "León, Guanajuato",
+              datos.direccionEntrega?.trim() || ot.prospectos?.direccion || (expObj as any)?.direccion_propiedad || (expObj as any)?.direccion || "León, Guanajuato",
             nombreCliente: resolverNombreRemision(datos.nombreCliente),
             personaRecibe: resolverNombreRemision(datos.personaRecibe),
             fechaInstalacion:
