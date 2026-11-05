@@ -1593,12 +1593,13 @@ async function generarRespuesta(
   const proveedoresAProbar = [proveedorOriginal];
   if (esStaging) {
     // En Staging solo usamos Ollama local, sin fallback a Claude
-  } else if (proveedorOriginal === "kimi") {
-    proveedoresAProbar.push("anthropic"); // Fallback a Claude
-  } else if (proveedorOriginal === "ollama") {
-    proveedoresAProbar.push("anthropic"); // Fallback a Claude
   } else {
-    proveedoresAProbar.push("kimi"); // Fallback a Kimi
+    // Si falla el proveedor configurado, intentar automáticamente los demás disponibles
+    for (const p of ["anthropic", "kimi", "openrouter"]) {
+      if (!proveedoresAProbar.includes(p)) {
+        proveedoresAProbar.push(p);
+      }
+    }
   }
 
   for (const proveedor of proveedoresAProbar) {
@@ -1756,7 +1757,13 @@ async function generarRespuesta(
           body: JSON.stringify({
             model: MODELO,
             ...opcionesClaude(MODELO, { maxTokens: 1500 }),
-            system: systemFinal,
+            system: [
+              {
+                type: "text",
+                text: systemFinal,
+                cache_control: { type: "ephemeral" },
+              },
+            ],
             messages: mensajes,
           }),
         });
