@@ -373,11 +373,12 @@ export function WidgetAgendaCitas({
   };
 
   const handleCancelar = async (citaId: string) => {
-    if (!confirm("¿Estás seguro de que deseas cancelar esta cita?")) return;
+    if (!confirm("¿Estás seguro de que deseas cancelar esta cita o servicio programado?")) return;
+    const notificarWa = confirm("¿Deseas enviar automáticamente la confirmación de cancelación por WhatsApp al cliente?");
 
     try {
       setCargando(true);
-      await cancelarCita(citaId);
+      await cancelarCita(citaId, undefined, notificarWa);
       await cargarDatos();
       if (onRefresh) await onRefresh();
     } catch (err: any) {

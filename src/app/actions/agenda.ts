@@ -290,11 +290,67 @@ export async function crearCita(datos: {
 
 /**
  * Cambia el estado de una cita a 'cancelada' (o la elimina).
+ * Soporta tanto citas de agenda (agenda_citas) como órdenes de trabajo de proveedores (ordenes_trabajo).
+ * Si notificarCliente es true, envía mensaje de confirmación de cancelación por WhatsApp.
  * Requiere rol de administrador.
  */
-export async function cancelarCita(citaId: string) {
+export async function cancelarCita(
+  citaId: string,
+  motivo?: string,
+  notificarCliente?: boolean
+) {
   await requireAdmin();
   const sb = supabaseServidor();
+
+  if (citaId.startsWith("ot_")) {
+    const realOtId = citaId.replace("ot_", "");
+
+    const { data: ot } = await sb
+      .from("ordenes_trabajo")
+      .select("*, proveedores:proveedor_id(nombre, telefono), expedientes:expediente_id(cliente, telefono)")
+      .eq("id", realOtId)
+      .maybeSingle();
+
+    const { error } = await sb
+      .from("ordenes_trabajo")
+      .update({
+        estatus: "cancelada",
+        notas_conclusion: motivo ? `Cancelada desde agenda: ${motivo}` : "Cancelada desde agenda y programaciones.",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", realOtId);
+
+    if (error) throw new Error(error.message);
+
+    if (ot?.expediente_id) {
+      await sb
+        .from("expedientes")
+        .update({
+          fecha_instalacion: null,
+          situacion: `Servicio ${ot.folio || ""} cancelado desde agenda.`,
+        })
+        .eq("id", ot.expediente_id);
+    }
+
+    const tel = (ot as any)?.expedientes?.telefono;
+    if (notificarCliente && tel) {
+      try {
+        const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+        const nombreCliente = (ot as any)?.expedientes?.cliente?.split(" ")[0] || "cliente";
+        const mensajeWa = `Hola ${nombreCliente}, te confirmamos que tu servicio programado (${ot.titulo || "servicio"}) ha sido cancelado. Si deseas reagendar o requieres apoyo, con gusto te atendemos por este medio.`;
+        await enviarWhatsAppTexto(tel, mensajeWa);
+      } catch (errWa) {
+        console.warn("No se pudo enviar WhatsApp de cancelación:", errWa);
+      }
+    }
+    return;
+  }
+
+  const { data: cita } = await sb
+    .from("agenda_citas")
+    .select("*, expedientes:expediente_id(cliente, telefono)")
+    .eq("id", citaId)
+    .maybeSingle();
 
   const { error } = await sb
     .from("agenda_citas")
@@ -302,6 +358,20 @@ export async function cancelarCita(citaId: string) {
     .eq("id", citaId);
 
   if (error) throw new Error(error.message);
+
+  if (notificarCliente && cita) {
+    const tel = cita.cliente_telefono || (cita as any).expedientes?.telefono;
+    if (tel) {
+      try {
+        const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+        const nombreCliente = cita.cliente_nombre?.split(" ")[0] || "cliente";
+        const mensajeWa = `Hola ${nombreCliente}, te informamos que tu cita programada para el ${cita.fecha} ha sido cancelada. Si necesitas reprogramar, con gusto te atendemos por aquí.`;
+        await enviarWhatsAppTexto(tel, mensajeWa);
+      } catch (errWa) {
+        console.warn("No se pudo enviar WhatsApp de cancelación:", errWa);
+      }
+    }
+  }
 }
 
 /**
@@ -901,7 +971,7 @@ export async function obtenerCitasDeEntidad(
     (perfilesData || []).forEach((p: any) => mapaNombres.set(p.id, p.nombre));
   }
 
-  return (data || []).map((row: any) => {
+  const citasAgenda = (data || []).map((row: any) => {
     const ids: string[] = (row.asignados_ids && row.asignados_ids.length > 0)
       ? row.asignados_ids
       : (row.perfil_id ? [row.perfil_id] : []);
@@ -914,6 +984,68 @@ export async function obtenerCitasDeEntidad(
       asignados_nombres: nombres.length > 0 ? nombres : (row.perfiles?.nombre ? [row.perfiles.nombre] : []),
     };
   }) as Cita[];
+
+  // Traer también Órdenes de Trabajo programadas (Servicios e Instalaciones con Proveedores externos)
+  try {
+    let qOT = sb
+      .from("ordenes_trabajo")
+      .select("*, proveedores:proveedor_id ( id, nombre, contacto_nombre, telefono )")
+      .not("fecha_programada", "is", null);
+
+    if (prospectoId && expedienteId) {
+      qOT = qOT.or(`prospecto_id.eq.${prospectoId},expediente_id.eq.${expedienteId}`);
+    } else if (prospectoId) {
+      qOT = qOT.eq("prospecto_id", prospectoId);
+    } else if (expedienteId) {
+      qOT = qOT.eq("expediente_id", expedienteId);
+    }
+
+    const { data: otsData, error: errOT } = await qOT;
+    if (!errOT && otsData && otsData.length > 0) {
+      const citasOT: Cita[] = otsData.map((ot: any) => {
+        const matchHoras = ot.descripcion?.match(/(\d{1,2}:\d{2})\s*(?:a|-)\s*(\d{1,2}:\d{2})/);
+        const horaInicio = matchHoras ? `${matchHoras[1]}:00` : "09:00:00";
+        const horaFin = matchHoras ? `${matchHoras[2]}:00` : "11:00:00";
+
+        const provNombre = ot.proveedores?.nombre || ot.proveedores?.contacto_nombre;
+        const asignadoLabel = provNombre ? `🛠️ ${provNombre} (Proveedor)` : "🛠️ Proveedor Asignado";
+
+        let estadoCita: Cita["estado"] = "pendiente";
+        if (ot.estatus === "cancelada") estadoCita = "cancelada";
+        else if (ot.estatus === "completada") estadoCita = "completada";
+        else if (ot.estatus === "en_proceso") estadoCita = "confirmada";
+
+        return {
+          id: `ot_${ot.id}`,
+          perfil_id: ot.proveedor_id || "proveedor_externo",
+          perfil_nombre: asignadoLabel,
+          prospecto_id: ot.prospecto_id,
+          expediente_id: ot.expediente_id,
+          cliente_nombre: ot.titulo?.split("—")[1]?.trim() || "Cliente",
+          cliente_telefono: "",
+          tipo_cita: "instalacion" as const,
+          fecha: ot.fecha_programada,
+          hora_inicio: horaInicio,
+          hora_fin: horaFin,
+          notas: `[${ot.folio}] ${ot.titulo}`,
+          estado: estadoCita,
+          created_at: ot.created_at,
+          asignados_ids: ot.proveedor_id ? [ot.proveedor_id] : [],
+          asignados_nombres: [asignadoLabel],
+        };
+      });
+
+      return [...citasAgenda, ...citasOT].sort((a, b) => {
+        const cmpFecha = a.fecha.localeCompare(b.fecha);
+        if (cmpFecha !== 0) return cmpFecha;
+        return a.hora_inicio.localeCompare(b.hora_inicio);
+      });
+    }
+  } catch (errOTQuery) {
+    console.warn("Advertencia consultando órdenes de trabajo para agenda:", errOTQuery);
+  }
+
+  return citasAgenda;
 }
 
 /**
@@ -1349,6 +1481,55 @@ export async function editarCita(data: {
   const sb = supabaseServidor();
 
   try {
+    // Soporte para reprogramar Ordenes de Trabajo desde la agenda
+    if (idCita.startsWith("ot_")) {
+      const realOtId = idCita.replace("ot_", "");
+      const { data: ot, error: errOt } = await sb
+        .from("ordenes_trabajo")
+        .select("*, expedientes:expediente_id(cliente, telefono)")
+        .eq("id", realOtId)
+        .maybeSingle();
+
+      if (errOt || !ot) {
+        return { ok: false, error: "La orden de trabajo a editar no fue encontrada." };
+      }
+
+      const descActualizada = ot.descripcion
+        ? ot.descripcion.replace(/\d{4}-\d{2}-\d{2}/, data.fecha)
+        : `SERVICIO PROGRAMADO: ${data.fecha} · ${data.horaInicio} a ${data.horaFin} h`;
+
+      await sb
+        .from("ordenes_trabajo")
+        .update({
+          fecha_programada: data.fecha,
+          descripcion: descActualizada,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", realOtId);
+
+      if (ot.expediente_id) {
+        await sb
+          .from("expedientes")
+          .update({
+            fecha_instalacion: `${data.fecha}T${data.horaInicio}:00-06:00`,
+          })
+          .eq("id", ot.expediente_id);
+      }
+
+      if (data.notificarCliente && (ot as any)?.expedientes?.telefono) {
+        try {
+          const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+          const nombreCliente = (ot as any)?.expedientes?.cliente?.split(" ")[0] || "cliente";
+          const mensajeWa = `Hola ${nombreCliente}, te confirmamos que tu servicio (${ot.titulo || "servicio"}) ha sido reprogramado para el ${data.fecha} a las ${data.horaInicio.slice(0, 5)} hrs.`;
+          await enviarWhatsAppTexto((ot as any).expedientes.telefono, mensajeWa);
+        } catch (errWa) {
+          console.warn("No se pudo enviar WhatsApp de reprogramación:", errWa);
+        }
+      }
+
+      return { ok: true };
+    }
+
     // 1. Obtener la cita actual
     const { data: citaActual, error: errCita } = await sb
       .from("agenda_citas")
