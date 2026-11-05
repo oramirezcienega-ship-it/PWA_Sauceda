@@ -1,5 +1,6 @@
 "use client";
 
+import { ModalEditarInfoVisita } from "./ModalEditarInfoVisita";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
@@ -60,6 +61,7 @@ export function HeaderActividadesSemana() {
   // Filtro de estado: por defecto SIEMPRE solo pendientes (las completadas ocultas salvo clic explícito)
   const [filtroEstado, setFiltroEstado] = useState<"pendientes" | "completadas" | "todas">("pendientes");
   const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null);
+  const [actividadParaEditar, setActividadParaEditar] = useState<ActividadSemanaItem | null>(null);
 
   const toggleColapso = () => {
     setColapsada((prev) => !prev);
@@ -869,20 +871,36 @@ export function HeaderActividadesSemana() {
                           <span>{act.tipoLabel}</span>
                         </span>
 
-                        {/* Estatus */}
-                        <span
-                          className={`rounded-full px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider ${
-                            act.estado === "confirmada"
-                              ? "bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold"
-                              : act.estado === "en_proceso"
-                              ? "bg-blue-50 text-blue-800 border border-blue-200 font-semibold"
-                              : act.estado === "completada"
-                              ? "bg-slate-200 text-slate-800 border border-slate-300 font-bold"
-                              : "bg-amber-50 text-amber-800 border border-amber-200"
-                          }`}
-                        >
-                          {act.estadoLabel}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          {/* Estatus */}
+                          <span
+                            className={`rounded-full px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider ${
+                              act.estado === "confirmada"
+                                ? "bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold"
+                                : act.estado === "en_proceso"
+                                ? "bg-blue-50 text-blue-800 border border-blue-200 font-semibold"
+                                : act.estado === "completada"
+                                ? "bg-slate-200 text-slate-800 border border-slate-300 font-bold"
+                                : "bg-amber-50 text-amber-800 border border-amber-200"
+                            }`}
+                          >
+                            {act.estadoLabel}
+                          </span>
+
+                          {/* Botón Editar Info Visita */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActividadParaEditar(act);
+                            }}
+                            className="inline-flex items-center gap-0.5 rounded-md bg-slate-100 hover:bg-amber-100 text-carbon/70 hover:text-amber-900 border border-carbon/15 hover:border-amber-300 px-1.5 py-0.5 text-[9px] font-bold transition shadow-2xs"
+                            title="Editar información complementaria y notas de la visita"
+                          >
+                            <span>✏️</span>
+                            <span>Editar</span>
+                          </button>
+                        </div>
                       </div>
 
                       {/* Horario y Día */}
@@ -1012,6 +1030,16 @@ export function HeaderActividadesSemana() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Modal para Editar Información Complementaria de Visita */}
+      {actividadParaEditar && (
+        <ModalEditarInfoVisita
+          abierto={!!actividadParaEditar}
+          alCerrar={() => setActividadParaEditar(null)}
+          alGuardar={() => cargar(semanaOffset)}
+          actividad={actividadParaEditar}
+        />
       )}
     </aside>
   );

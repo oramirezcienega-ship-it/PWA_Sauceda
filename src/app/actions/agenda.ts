@@ -2188,3 +2188,318 @@ export async function reagendarCitaCompleta(datos: {
   }
 }
 
+
+export interface ActualizarInformacionComplementariaParams {
+  actividadId: string;
+  origen: "agenda" | "orden_trabajo";
+  notasComplementarias: string;
+  direccion?: string;
+  fraccionamiento?: string;
+  fecha?: string;
+  horaInicio?: string;
+  horaFin?: string;
+  notificarProveedor: boolean;
+  mensajeProveedorPersonalizado?: string;
+  notificarCliente: boolean;
+  mensajeClientePersonalizado?: string;
+}
+
+/**
+ * Actualiza la informaciÃ³n complementaria y notas de una visita tÃ©cnica (inspecciÃ³n o instalaciÃ³n),
+ * sincroniza con el expediente y opcionalmente notifica al tÃ©cnico/proveedor asignado y al cliente por WhatsApp.
+ */
+export async function actualizarInformacionComplementariaVisita(
+  params: ActualizarInformacionComplementariaParams
+): Promise<{
+  ok: boolean;
+  error?: string;
+  proveedorNotificado?: boolean;
+  clienteNotificado?: boolean;
+  waClienteMessageId?: string | null;
+}> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const notasLimpias = (params.notasComplementarias || "").trim();
+    if (!params.actividadId) {
+      return { ok: false, error: "Falta el identificador de la actividad." };
+    }
+
+    let clienteNombre = "Cliente";
+    let clienteTelefono = "";
+    let expedienteId: string | null = null;
+    let prospectoId: string | null = null;
+    let fechaFinal = params.fecha || "";
+    let horaInicioFinal = params.horaInicio || "";
+    let horaFinFinal = params.horaFin || "";
+    let tipoVisitaLabel = "Visita TÃ©cnica";
+    let ubicacionFinal = params.fraccionamiento || params.direccion || "LeÃ³n, Gto.";
+    const tecnicosANotificar: Array<{ nombre: string; telefono?: string; telegramChatId?: string }> = [];
+
+    // 1. ORIGEN: AGENDA (Inspecciones y citas tÃ©cnicas)
+    if (params.origen === "agenda") {
+      const { data: cita, error: errCita } = await sb
+        .from("agenda_citas")
+        .select("*")
+        .eq("id", params.actividadId)
+        .maybeSingle();
+
+      if (errCita || !cita) {
+        return { ok: false, error: "No se encontrÃ³ la cita en la agenda." };
+      }
+
+      clienteNombre = cita.cliente_nombre || "Cliente";
+      clienteTelefono = cita.cliente_telefono || "";
+      expedienteId = cita.expediente_id || null;
+      prospectoId = cita.prospecto_id || null;
+      fechaFinal = params.fecha || cita.fecha;
+      horaInicioFinal = params.horaInicio || cita.hora_inicio || "";
+      horaFinFinal = params.horaFin || cita.hora_fin || "";
+      tipoVisitaLabel = cita.tipo_cita === "inspeccion" ? "InspecciÃ³n TÃ©cnica" : "InstalaciÃ³n";
+      ubicacionFinal = params.fraccionamiento || cita.fraccionamiento || params.direccion || "LeÃ³n, Gto.";
+
+      // Actualizar agenda_citas
+      const updateCitaPayload: Record<string, any> = {
+        notas: notasLimpias,
+      };
+      if (params.fraccionamiento) updateCitaPayload.fraccionamiento = params.fraccionamiento.trim();
+      if (params.fecha) updateCitaPayload.fecha = params.fecha;
+      if (params.horaInicio) updateCitaPayload.hora_inicio = params.horaInicio;
+      if (params.horaFin) updateCitaPayload.hora_fin = params.horaFin;
+
+      await sb.from("agenda_citas").update(updateCitaPayload).eq("id", params.actividadId);
+
+      // Resolver tÃ©cnicos asignados
+      const asignadosIds = Array.from(
+        new Set([cita.perfil_id, ...(cita.asignados_ids || [])].filter(Boolean))
+      );
+      if (asignadosIds.length > 0) {
+        const { data: perfiles } = await sb
+          .from("perfiles")
+          .select("nombre, telefono, telefono_whatsapp, telegram_chat_id")
+          .in("id", asignadosIds);
+
+        for (const p of perfiles || []) {
+          tecnicosANotificar.push({
+            nombre: p.nombre,
+            telefono: (p as any).telefono_whatsapp?.trim() || p.telefono?.trim(),
+            telegramChatId: (p as any).telegram_chat_id || undefined,
+          });
+        }
+      }
+
+      // Si tiene expediente, actualizar direccion y notas
+      if (expedienteId) {
+        const updateExp: Record<string, any> = {
+          ultimo_movimiento: new Date().toISOString().slice(0, 10),
+        };
+        if (params.direccion) updateExp.direccion_propiedad = params.direccion.trim();
+        if (params.fraccionamiento) updateExp.fraccionamiento = params.fraccionamiento.trim();
+
+        const { data: expActual } = await sb
+          .from("expedientes")
+          .select("notas")
+          .eq("id", expedienteId)
+          .maybeSingle();
+
+        const notaBitacora = `\n[Info Complementaria Visita ${new Date().toISOString().slice(0, 10)}] ${notasLimpias}`;
+        updateExp.notas = ((expActual as any)?.notas || "") + notaBitacora;
+
+        await sb.from("expedientes").update(updateExp).eq("id", expedienteId);
+
+        const { registrarActividad } = await import("@/lib/actividades");
+        await registrarActividad(sb, {
+          expedienteId,
+          tipo: "visita",
+          titulo: `ðŸ“  InformaciÃ³n Complementaria de Visita Registrada`,
+          detalle: `${tipoVisitaLabel}: ${notasLimpias}${params.direccion ? ` | DirecciÃ³n: ${params.direccion}` : ""}`,
+        });
+      } else if (prospectoId) {
+        await sb.from("actividades").insert({
+          prospecto_id: prospectoId,
+          tipo: "cita",
+          descripcion: `ðŸ“  InformaciÃ³n complementaria registrada para ${tipoVisitaLabel}: ${notasLimpias}`,
+        });
+      }
+
+    // 2. ORIGEN: ORDEN DE TRABAJO (Instalaciones y ejecuciÃ³n)
+    } else {
+      const { data: ot, error: errOt } = await sb
+        .from("ordenes_trabajo")
+        .select("*")
+        .eq("id", params.actividadId)
+        .maybeSingle();
+
+      if (errOt || !ot) {
+        return { ok: false, error: "No se encontrÃ³ la orden de trabajo." };
+      }
+
+      expedienteId = ot.expediente_id || null;
+      prospectoId = ot.prospecto_id || null;
+      fechaFinal = params.fecha || ot.fecha_programada || "";
+      tipoVisitaLabel = "InstalaciÃ³n y Servicio";
+
+      // Obtener datos del cliente si estÃ¡ ligado
+      if (expedienteId) {
+        const { data: exp } = await sb
+          .from("expedientes")
+          .select("cliente, primer_apellido, telefono, direccion_propiedad, fraccionamiento")
+          .eq("id", expedienteId)
+          .maybeSingle();
+        if (exp) {
+          clienteNombre = `${exp.cliente || ""} ${exp.primer_apellido || ""}`.trim() || "Cliente";
+          clienteTelefono = exp.telefono || "";
+          ubicacionFinal = params.direccion || exp.direccion_propiedad || exp.fraccionamiento || "LeÃ³n, Gto.";
+        }
+      }
+
+      // Actualizar descripciÃ³n y fecha en ordenes_trabajo
+      const anexoOT = `\n[Info Complementaria ${new Date().toISOString().slice(0, 10)}]: ${notasLimpias}`;
+      const updateOTPayload: Record<string, any> = {
+        descripcion: ((ot.descripcion || "") + anexoOT).trim(),
+      };
+      if (params.fecha) updateOTPayload.fecha_programada = params.fecha;
+      await sb.from("ordenes_trabajo").update(updateOTPayload).eq("id", params.actividadId);
+
+      // Resolver proveedor o tÃ©cnico ejecutor
+      if (ot.proveedor_id) {
+        const { data: prov } = await sb
+          .from("proveedores")
+          .select("nombre, whatsapp, telefono, telegram_chat_id")
+          .eq("id", ot.proveedor_id)
+          .maybeSingle();
+        if (prov) {
+          tecnicosANotificar.push({
+            nombre: prov.nombre,
+            telefono: (prov as any).whatsapp?.trim() || prov.telefono?.trim(),
+            telegramChatId: (prov as any).telegram_chat_id || undefined,
+          });
+        }
+      }
+      if (ot.asesor_ejecutor_id) {
+        const { data: pEjec } = await sb
+          .from("perfiles")
+          .select("nombre, telefono, telefono_whatsapp, telegram_chat_id")
+          .eq("id", ot.asesor_ejecutor_id)
+          .maybeSingle();
+        if (pEjec) {
+          tecnicosANotificar.push({
+            nombre: pEjec.nombre,
+            telefono: (pEjec as any).telefono_whatsapp?.trim() || pEjec.telefono?.trim(),
+            telegramChatId: (pEjec as any).telegram_chat_id || undefined,
+          });
+        }
+      }
+
+      if (expedienteId) {
+        const { registrarActividad } = await import("@/lib/actividades");
+        await registrarActividad(sb, {
+          expedienteId,
+          tipo: "construccion",
+          titulo: `ðŸ“  InformaciÃ³n Complementaria de Obra Registrada (${ot.folio})`,
+          detalle: notasLimpias,
+        });
+      }
+    }
+
+    // 3. Formatear horario y fecha para mensajes
+    const horarioFormateado = horaInicioFinal ? `${horaInicioFinal.slice(0, 5)} hrs` : "Horario programado";
+    const fechaLegible = fechaFinal
+      ? new Date(`${fechaFinal}T00:00:00`).toLocaleDateString("es-MX", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : "Fecha programada";
+
+    let proveedorNotificado = false;
+    let clienteNotificado = false;
+    let waClienteMessageId: string | null = null;
+
+    // 4. NOTIFICAR AL TÃ‰CNICO / PROVEEDOR ASIGNADO
+    if (params.notificarProveedor && tecnicosANotificar.length > 0) {
+      const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+      const { obtenerConfiguracionTelegram, enviarMensajeTelegram } = await import("@/lib/telegram");
+      const { botToken } = await obtenerConfiguracionTelegram(sb).catch(() => ({ botToken: null }));
+
+      for (const tec of tecnicosANotificar) {
+        const primerNom = tec.nombre.split(" ")[0] || tec.nombre;
+        const msgProveedor =
+          params.mensajeProveedorPersonalizado?.trim() ||
+          `ðŸ”” *ACTUALIZACIÃ“N DE VISITA TÃ‰CNICA*\n\nHola ${primerNom}, el cliente ha proporcionado informaciÃ³n complementaria para tu servicio:\n\nðŸ‘¤ *Cliente:* ${clienteNombre} (${clienteTelefono || "Sin telÃ©fono"})\nðŸ—“ï¸  *Fecha:* ${fechaLegible}\nâ° *Horario:* ${horarioFormateado}\nðŸ“ location *UbicaciÃ³n:* ${ubicacionFinal}\n\nðŸ“  *InformaciÃ³n complementaria / Indicaciones:*\n"${notasLimpias}"\n\nFavor de tomarlo en cuenta para tu llegada al domicilio.\nðŸ”— CRM: https://crm.saucedamx.com/agenda`;
+
+        // Enviar por WhatsApp si tiene telÃ©fono
+        if (tec.telefono) {
+          try {
+            await enviarWhatsAppTexto(tec.telefono, msgProveedor);
+            proveedorNotificado = true;
+          } catch (errWaTec) {
+            console.warn(`Error al enviar WhatsApp a tÃ©cnico ${tec.nombre}:`, errWaTec);
+          }
+        }
+
+        // Enviar por Telegram si tiene chat ID
+        if (botToken && tec.telegramChatId) {
+          try {
+            await enviarMensajeTelegram({
+              botToken,
+              chatId: tec.telegramChatId,
+              texto: msgProveedor,
+            });
+            proveedorNotificado = true;
+          } catch (errTgTec) {
+            console.warn(`Error al enviar Telegram a tÃ©cnico ${tec.nombre}:`, errTgTec);
+          }
+        }
+      }
+    }
+
+    // 5. NOTIFICAR AL CLIENTE POR WHATSAPP
+    if (params.notificarCliente && clienteTelefono) {
+      const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+      const primerNomCliente = clienteNombre.split(" ")[0] || clienteNombre;
+      const msgCliente =
+        params.mensajeClientePersonalizado?.trim() ||
+        `Â¡Hola ${primerNomCliente}! ðŸ‘‹ Te confirmamos que hemos registrado la informaciÃ³n complementaria para tu visita tÃ©cnica con SAUCEDA:\n\nðŸ—“ï¸  *Fecha:* ${fechaLegible}\nâ° *Horario:* ${horarioFormateado}\nðŸ“ location *UbicaciÃ³n:* ${ubicacionFinal}\n\nðŸ“  *Detalles registrados para la visita:*\n"${notasLimpias}"\n\nNuestro especialista asignado ya cuenta con estas indicaciones para su llegada. Â¡Quedamos a tus Ã³rdenes! ðŸ’š`;
+
+      try {
+        const resWaCli = await enviarWhatsAppTexto(clienteTelefono, msgCliente);
+        if (resWaCli.ok && resWaCli.messageId) {
+          clienteNotificado = true;
+          waClienteMessageId = resWaCli.messageId;
+
+          // Registrar en mensajes_whatsapp
+          await sb.from("mensajes_whatsapp").insert({
+            telefono: clienteTelefono.replace(/\D/g, ""),
+            texto: msgCliente,
+            direccion: "out",
+            expediente_id: expedienteId,
+            prospecto_id: prospectoId,
+            estado: "enviado",
+            agente: "Sistema / Agenda",
+            wa_message_id: waClienteMessageId,
+          });
+        }
+      } catch (errWaCli) {
+        console.warn("Error al enviar WhatsApp de confirmaciÃ³n al cliente:", errWaCli);
+      }
+    }
+
+    revalidatePath("/agenda");
+    revalidatePath("/ordenes-trabajo");
+    revalidatePath("/conversaciones");
+    if (expedienteId) revalidatePath(`/expediente/${expedienteId}`);
+
+    return {
+      ok: true,
+      proveedorNotificado,
+      clienteNotificado,
+      waClienteMessageId,
+    };
+  } catch (err: any) {
+    console.error("Error en actualizarInformacionComplementariaVisita:", err);
+    return { ok: false, error: err?.message || "Error al actualizar la informaciÃ³n de la visita." };
+  }
+}
