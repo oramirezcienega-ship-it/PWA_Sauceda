@@ -1,6 +1,7 @@
 "use server";
 
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { supabaseServidor } from "@/lib/supabase/server";
 import {
   listarPlantillasAprobadas,
   type PlantillaWhatsApp,
@@ -88,3 +89,62 @@ export async function consultarEstadoPlantillasEntrega(): Promise<{
   }
 }
 
+
+/**
+ * Consulta en tiempo real si la ventana de 24 horas de Meta estÃ¡ activa
+ * para un telÃ©fono especÃ­fico (basado en el Ãºltimo mensaje entrante del cliente).
+ */
+export async function consultarVentanaWhatsApp(telefono: string): Promise<{
+  ok: boolean;
+  ventanaAbierta: boolean;
+  horasRestantes?: number;
+  minutosRestantes?: number;
+  ultimoMensajeCliente?: string;
+  fechaUltimoMensaje?: string;
+  error?: string;
+}> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const cleanPhone = (telefono || "").replace(/\D/g, "");
+    if (!cleanPhone || cleanPhone.length < 10) {
+      return { ok: true, ventanaAbierta: false };
+    }
+    const digits10 = cleanPhone.slice(-10);
+
+    const { data, error } = await sb
+      .from("mensajes_whatsapp")
+      .select("texto, created_at")
+      .eq("direccion", "in")
+      .like("telefono", `%${digits10}%`)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      return { ok: false, ventanaAbierta: false, error: error.message };
+    }
+
+    if (!data || !data.created_at) {
+      return { ok: true, ventanaAbierta: false };
+    }
+
+    const lastTime = new Date(data.created_at).getTime();
+    const diffMs = Date.now() - lastTime;
+    const ventanaAbierta = diffMs < 24 * 60 * 60 * 1000;
+    const msRemaining = Math.max(0, 24 * 60 * 60 * 1000 - diffMs);
+    const horasRestantes = Math.floor(msRemaining / (1000 * 60 * 60));
+    const minutosRestantes = Math.floor((msRemaining % (1000 * 60 * 60)) / (1000 * 60));
+
+    return {
+      ok: true,
+      ventanaAbierta,
+      horasRestantes,
+      minutosRestantes,
+      ultimoMensajeCliente: data.texto,
+      fechaUltimoMensaje: data.created_at,
+    };
+  } catch (err: any) {
+    return { ok: false, ventanaAbierta: false, error: err?.message || "Error al verificar ventana de 24h" };
+  }
+}

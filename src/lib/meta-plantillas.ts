@@ -75,28 +75,31 @@ export function generarMensajeEntregaDirecto(params: {
   urlBase?: string;
   tokenCotizacion?: string;
   tokenGarantia?: string;
+  incluirRemisionOT?: boolean;
 }): string {
   const base = params.urlBase || "https://crm.saucedamx.com";
   const urlEntrega = `${base}/orden-trabajo/entrega/${params.tokenOT}`;
 
   let texto = `¡Hola *${params.clienteNombre}*! 🛠️\n\n`;
-  texto += `Le informamos que los trabajos de su orden *${params.folioOT}* (*${params.tituloOT}*) han sido *concluidos exitosamente* a entera satisfacción.\n\n`;
+  texto += `Te confirmamos que los trabajos de tu orden *${params.folioOT}* (*${params.tituloOT}*) han concluido exitosamente a entera satisfacción.\n\n`;
 
   if (params.notasConclusion && params.notasConclusion.trim()) {
-    texto += `📝 *Comentarios de entrega técnica:*\n"${params.notasConclusion.trim()}"\n\n`;
+    texto += `📋 *Observaciones técnicas y recomendaciones:*\n"${params.notasConclusion.trim()}"\n\n`;
   }
 
-  texto += `📂 *Reporte digital con fotos de evidencia, remisión y garantía:*\n👉 ${urlEntrega}\n\n`;
+  texto += `📑 *Reporte digital con fotos de evidencia y entrega:*\n👉 ${urlEntrega}\n\n`;
 
   if (params.tokenCotizacion) {
     texto += `🧾 *Remisión de Entrega / Factura:*\n${base}/cotizacion/remision/${params.tokenCotizacion}\n\n`;
+  } else if (params.incluirRemisionOT) {
+    texto += `🧾 *Remisión Oficial de Entrega:*\n${base}/orden-trabajo/remision/${params.tokenOT}\n\n`;
   }
 
   if (params.tokenGarantia) {
     texto += `🛡️ *Póliza de Garantía Oficial:*\n${base}/garantia/${params.tokenGarantia}\n\n`;
   }
 
-  texto += `Quedamos a sus órdenes para cualquier duda o servicio adicional.\n\n_SAUCEDA · Tradición con Tecnología_`;
+  texto += `Agradecemos mucho tu confianza y quedamos a tus órdenes para cualquier duda o servicio adicional.\n\n_SAUCEDA · Tradición con Tecnología_`;
 
   return texto;
 }

@@ -10,7 +10,7 @@ import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesio
 import { estadoContratoDeOrden } from "@/app/actions/contratos";
 import { armarGarantiaDesdeCotizacion } from "@/lib/garantia-producto";
 import { numeroALetras } from "@/lib/numero-a-letras";
-import { enviarWhatsAppPlantilla } from "@/lib/whatsapp";
+import { enviarWhatsAppPlantilla, enviarWhatsAppTexto, enviarWhatsAppDocumento } from "@/lib/whatsapp";
 import { normalizarTelefono } from "@/lib/telefono";
 import { esServicioSeguridad } from "@/lib/marca-servicio";
 import { enviarCorreo } from "@/lib/email";
@@ -3076,12 +3076,21 @@ export async function obtenerRemisionOrdenTrabajoPorToken(token: string): Promis
  */
 export async function enviarNotificacionEntregaCliente(params: {
   ordenTrabajoId: string;
-  canal: "whatsapp_plantilla" | "whatsapp_directo" | "email";
+  canal: "whatsapp_plantilla" | "whatsapp_libre" | "whatsapp_directo" | "email";
   correoDestino?: string;
   telefonoDestino?: string;
   mensajePersonalizado?: string;
   plantillaNombre?: string;
-}): Promise<{ ok: boolean; error?: string; messageId?: string }> {
+  mensajeLibre?: string;
+  fotosUrls?: string[];
+  notasConclusion?: string;
+  tareaCotizacion?: {
+    crear: boolean;
+    titulo?: string;
+    descripcion?: string;
+    diasVencimiento?: number;
+  };
+}): Promise<{ ok: boolean; error?: string; messageId?: string; tareaId?: string }> {
   try {
     await requireAdmin();
     const sb = supabaseServidor();
@@ -3099,20 +3108,128 @@ export async function enviarNotificacionEntregaCliente(params: {
       ? new Date(orden.fechaConclusion).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
       : new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
 
+    // Guardar / actualizar notas u observaciones técnicas de la conclusión en la OT si se proveyeron
+    if (params.notasConclusion !== undefined) {
+      await sb
+        .from("ordenes_trabajo")
+        .update({
+          notas_conclusion: params.notasConclusion.trim() || null,
+        })
+        .eq("id", params.ordenTrabajoId);
+      orden.notasConclusion = params.notasConclusion.trim() || null;
+    }
+
+    // Resolver usuario/agente para bitácoras y mensajes
+    const usuario = await usuarioActual();
+    let agente = usuario?.email || "";
+    if (usuario) {
+      const { data: perfil } = await sb
+        .from("perfiles")
+        .select("nombre")
+        .eq("id", usuario.id)
+        .maybeSingle();
+      agente = (perfil as { nombre?: string } | null)?.nombre?.trim() || agente;
+    }
+
     let messageId: string | undefined;
 
-    if (params.canal === "whatsapp_plantilla") {
+    // CANAL 1: WHATSAPP LIBRE (Ventana de 24h activa) CON FOTOS DIRECTAS
+    if (params.canal === "whatsapp_libre") {
       if (!telefono) {
         return { ok: false, error: "El cliente no cuenta con teléfono registrado para WhatsApp." };
+      }
+
+      const telNormalizado = normalizarTelefono(telefono);
+
+      // Si seleccionó fotos del expediente/OT, enviarlas directo al chat
+      if (params.fotosUrls && params.fotosUrls.length > 0) {
+        for (let i = 0; i < params.fotosUrls.length; i++) {
+          const fUrl = params.fotosUrls[i];
+          const caption = `📸 Evidencia técnica (${i + 1}/${params.fotosUrls.length}) · ${orden.folio}`;
+          try {
+            const resFoto = await enviarWhatsAppDocumento(
+              telNormalizado,
+              fUrl,
+              `Evidencia_${i + 1}.jpg`,
+              caption
+            );
+            if (resFoto.ok && resFoto.messageId) {
+              await sb.from("mensajes_whatsapp").insert({
+                telefono: telNormalizado,
+                texto: `[Foto de Evidencia ${i + 1}/${params.fotosUrls.length}: ${fUrl}]`,
+                direccion: "out",
+                expediente_id: orden.expedienteId,
+                prospecto_id: orden.prospectoId,
+                estado: "enviado",
+                agente,
+                wa_message_id: resFoto.messageId,
+              });
+            }
+          } catch (errFoto) {
+            console.error("Error al enviar foto de evidencia por WhatsApp:", errFoto);
+          }
+        }
+      }
+
+      // Enviar el mensaje libre enriquecido
+      const textoLibre = (params.mensajeLibre || params.mensajePersonalizado || "").trim();
+      if (!textoLibre) {
+        return { ok: false, error: "El texto del mensaje no puede estar vacío." };
+      }
+
+      const resWhatsApp = await enviarWhatsAppTexto(telNormalizado, textoLibre);
+      if (!resWhatsApp.ok) {
+        return {
+          ok: false,
+          error: resWhatsApp.error || "No se pudo entregar el mensaje libre por WhatsApp Cloud API.",
+        };
+      }
+      messageId = resWhatsApp.messageId;
+
+      await sb.from("mensajes_whatsapp").insert({
+        telefono: telNormalizado,
+        texto: textoLibre,
+        direccion: "out",
+        expediente_id: orden.expedienteId,
+        prospecto_id: orden.prospectoId,
+        estado: "enviado",
+        agente,
+        wa_message_id: messageId || null,
+      });
+
+    // CANAL 2: WHATSAPP PLANTILLA OFICIAL DE META
+    } else if (params.canal === "whatsapp_plantilla") {
+      if (!telefono) {
+        return { ok: false, error: "El cliente no cuenta con teléfono registrado para WhatsApp." };
+      }
+
+      // Si seleccionó fotos, también enviarlas si la conexión lo permite
+      if (params.fotosUrls && params.fotosUrls.length > 0) {
+        for (let i = 0; i < params.fotosUrls.length; i++) {
+          const fUrl = params.fotosUrls[i];
+          try {
+            await enviarWhatsAppDocumento(
+              telefono,
+              fUrl,
+              `Evidencia_${i + 1}.jpg`,
+              `📸 Evidencia de entrega · ${orden.folio}`
+            );
+          } catch (e) {
+            console.warn("No se pudo enviar foto previa a plantilla:", e);
+          }
+        }
       }
 
       const plantillaElegida = params.plantillaNombre || "sauceda_entrega_servicio";
       let resWhatsApp: { ok: boolean; error?: string; messageId?: string };
 
       if (plantillaElegida === "entrega_documentos_remision_garantia") {
-        // Plantilla oficial ya APROBADA en Meta (2 variables de texto)
         const urlEntrega = `${SITE_URL}/orden-trabajo/entrega/${orden.token}`;
-        const urlRemision = orden.cotizacionToken ? `${SITE_URL}/cotizacion/remision/${orden.cotizacionToken}` : "";
+        const urlRemision = orden.cotizacionToken
+          ? `${SITE_URL}/cotizacion/remision/${orden.cotizacionToken}`
+          : remisionFactura
+          ? `${SITE_URL}/orden-trabajo/remision/${orden.token}`
+          : "";
         const urlGarantia = garantia?.token ? `${SITE_URL}/garantia/${garantia.token}` : "";
 
         let docsTexto = `📄 Reporte de Obra: ${urlEntrega}`;
@@ -3126,7 +3243,6 @@ export async function enviarNotificacionEntregaCliente(params: {
           [clienteNombre, docsTexto]
         );
       } else {
-        // Plantilla UTILITY sauceda_entrega_servicio (enviada a aprobación con botón dinámico)
         resWhatsApp = await enviarWhatsAppPlantilla(
           telefono,
           PLANTILLA_ENTREGA_SERVICIO.nombre,
@@ -3143,13 +3259,30 @@ export async function enviarNotificacionEntregaCliente(params: {
         };
       }
       messageId = resWhatsApp.messageId;
+
+      await sb.from("mensajes_whatsapp").insert({
+        telefono: normalizarTelefono(telefono),
+        texto: `[plantilla: ${plantillaElegida}] Aviso de entrega de la orden ${orden.folio}`,
+        direccion: "out",
+        expediente_id: orden.expedienteId,
+        prospecto_id: orden.prospectoId,
+        estado: "enviado",
+        agente,
+        wa_message_id: messageId || null,
+      });
+
+    // CANAL 3: CORREO ELECTRÓNICO
     } else if (params.canal === "email") {
       if (!correo) {
         return { ok: false, error: "El cliente no tiene correo electrónico registrado." };
       }
 
       const urlEntrega = `${SITE_URL}/orden-trabajo/entrega/${orden.token}`;
-      const urlRemision = orden.cotizacionToken ? `${SITE_URL}/cotizacion/remision/${orden.cotizacionToken}` : null;
+      const urlRemision = orden.cotizacionToken
+        ? `${SITE_URL}/cotizacion/remision/${orden.cotizacionToken}`
+        : remisionFactura
+        ? `${SITE_URL}/orden-trabajo/remision/${orden.token}`
+        : null;
       const urlGarantia = garantia?.token ? `${SITE_URL}/garantia/${garantia.token}` : null;
 
       const fotosEntrega = (orden.fotosEvidencia || [])
@@ -3195,7 +3328,8 @@ export async function enviarNotificacionEntregaCliente(params: {
             ${
               orden.notasConclusion
                 ? `
-              <div style="background:#F5F1E8;border-left:4px solid #C9A961;padding:14px;border-radius:6px;margin-bottom:20px;font-size:13px;color:#333;font-style:italic;">
+              <div style="background:#F5F1E8;border-left:4px solid #C9A961;padding:14px;border-radius:6px;margin-bottom:20px;font-size:13px;color:#333;">
+                <strong>Observaciones técnicas del especialista:</strong><br/>
                 "${orden.notasConclusion}"
               </div>
             `
@@ -3219,14 +3353,14 @@ export async function enviarNotificacionEntregaCliente(params: {
                   urlRemision
                     ? `
                   <tr>
-                    <td style="padding:8px 0;font-size:13px;color:#2D4A2B;font-weight:bold;">🧾 Remisión de Entrega / Factura Fiscal</td>
-                    <td style="text-align:right;padding:8px 0;"><a href="${urlRemision}" style="color:#C9A961;font-weight:bold;font-size:12px;text-decoration:none;">Consultar →</a></td>
+                    <td style="padding:8px 0;font-size:13px;color:#2D4A2B;font-weight:bold;">🧾 Remisión de Entrega / Factura</td>
+                    <td style="text-align:right;padding:8px 0;"><a href="${urlRemision}" style="color:#C9A961;font-weight:bold;font-size:12px;text-decoration:none;">Descargar →</a></td>
                   </tr>
                 `
                     : ""
                 }
                 ${
-                  urlGarantia && garantia
+                  garantia && urlGarantia
                     ? `
                   <tr>
                     <td style="padding:8px 0;font-size:13px;color:#2D4A2B;font-weight:bold;">🛡️ Póliza de Garantía Oficial (${garantia.anosGarantia} Años)</td>
@@ -3284,42 +3418,68 @@ export async function enviarNotificacionEntregaCliente(params: {
       });
     }
 
-    // Integrar el envío al historial de conversaciones de WhatsApp, para que
-    // aparezca en la bandeja y el webhook de Meta pueda actualizar su estado
-    // de entregado/leído emparejando por wa_message_id.
-    if (params.canal === "whatsapp_plantilla" && telefono) {
-      const usuario = await usuarioActual();
-      let agente = usuario?.email || "";
-      if (usuario) {
-        const { data: perfil } = await sb
-          .from("perfiles")
-          .select("nombre")
-          .eq("id", usuario.id)
+    // DETONAR TAREA DE COTIZACIÓN EN EL EXPEDIENTE SI SE SOLICITÓ
+    let tareaIdCreada: string | undefined;
+    if (params.tareaCotizacion?.crear && (orden.expedienteId || orden.prospectoId)) {
+      const dias = params.tareaCotizacion.diasVencimiento || 1;
+      const fechaCompromiso = new Date();
+      fechaCompromiso.setDate(fechaCompromiso.getDate() + dias);
+      const agendadaPara = `${fechaCompromiso.toISOString().slice(0, 10)}T10:00:00`;
+      const tituloTarea = (params.tareaCotizacion.titulo || "").trim() || `Cotizar reemplazo según observaciones de ${orden.folio}`;
+      const detalleTarea = (params.tareaCotizacion.descripcion || "").trim() || `Elaborar propuesta económica derivada de las observaciones técnicas realizadas por el técnico en la entrega de ${orden.folio}.`;
+
+      if (orden.expedienteId) {
+        const { data: nuevaTarea } = await sb
+          .from("bpm_expediente_tareas")
+          .insert({
+            expediente_id: orden.expedienteId,
+            orden_trabajo_id: orden.id,
+            titulo: tituloTarea,
+            descripcion: detalleTarea,
+            estado: "pendiente",
+            responsable_id: orden.asesorResponsableId || usuario?.id || null,
+            agendada_para: agendadaPara,
+            dias_vencimiento: dias,
+          })
+          .select("id")
           .maybeSingle();
-        agente = (perfil as { nombre?: string } | null)?.nombre?.trim() || agente;
+
+        if (nuevaTarea?.id) {
+          tareaIdCreada = nuevaTarea.id;
+        }
+
+        // Agregar nota fechada en el expediente
+        const { data: expActual } = await sb
+          .from("expedientes")
+          .select("notas")
+          .eq("id", orden.expedienteId)
+          .maybeSingle();
+
+        const notaPendiente = `\n[Tarea Pendiente ${new Date().toISOString().slice(0, 10)}] ${tituloTarea}: ${detalleTarea}`;
+        await sb
+          .from("expedientes")
+          .update({
+            notas: ((expActual as any)?.notas || "") + notaPendiente,
+            ultimo_movimiento: new Date().toISOString().slice(0, 10),
+          })
+          .eq("id", orden.expedienteId);
       }
 
-      const { error: insertErr } = await sb.from("mensajes_whatsapp").insert({
-        telefono: normalizarTelefono(telefono),
-        texto: `[plantilla: ${params.plantillaNombre || "sauceda_entrega_servicio"}] Aviso de entrega de la orden ${orden.folio}`,
-        direccion: "out",
-        expediente_id: orden.expedienteId,
-        prospecto_id: orden.prospectoId,
-        estado: "enviado",
-        agente,
-        wa_message_id: messageId || null,
+      // Bitácora de actividades
+      await sb.from("actividades").insert({
+        prospecto_id: orden.prospectoId || null,
+        expediente_id: orden.expedienteId || null,
+        tipo: "tarea",
+        titulo: `📋 Tarea Creada: ${tituloTarea}`,
+        detalle: `${detalleTarea} (Compromiso: ${fechaCompromiso.toLocaleDateString("es-MX")})`,
       });
-
-      if (insertErr) {
-        console.error("Error al insertar notificación de entrega en historial de WhatsApp:", insertErr);
-      }
     }
 
     revalidatePath("/ordenes-trabajo");
     revalidatePath("/conversaciones");
     if (orden.expedienteId) revalidatePath(`/expediente/${orden.expedienteId}`);
 
-    return { ok: true, messageId };
+    return { ok: true, messageId, tareaId: tareaIdCreada };
   } catch (err: any) {
     console.error("Error en enviarNotificacionEntregaCliente:", err);
     return { ok: false, error: err?.message || "Error al enviar la notificación de entrega." };
