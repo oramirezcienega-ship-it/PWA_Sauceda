@@ -1685,6 +1685,7 @@ async function generarRespuesta(
             model,
             messages: messagesOpenAI,
             temperature: 0.2,
+            max_tokens: 1500,
           }),
         });
 
@@ -1723,6 +1724,7 @@ async function generarRespuesta(
             model,
             messages: messagesOpenAI,
             temperature: 1,
+            max_tokens: 1500,
           }),
         });
 
