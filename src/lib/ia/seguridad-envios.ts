@@ -18,8 +18,17 @@ export async function enviarComparativaSeguridad(
     const marca = `Opciones de ${familia.nombre.toLowerCase()}`;
     if (await yaEnviado(sb, ctx.expedienteId, marca)) return false;
 
+    let captionPregunta = `Opciones de ${familia.nombre.toLowerCase()} instalados llave en mano.`;
+    if (familia.clave === "videoporteros-e-interfones") {
+      captionPregunta = "Opciones oficiales llave en mano 👇 ¿Tu entrada tiene puerta peatonal, cancel o portón?";
+    } else if (familia.clave === "camaras-de-seguridad-y-cctv") {
+      captionPregunta = "Paquetes oficiales de videovigilancia llave en mano 👇 ¿Sería para tu casa o para un negocio?";
+    } else if (familia.clave === "cerraduras-electricas") {
+      captionPregunta = "Opciones oficiales de cerraduras llave en mano 👇 ¿Tu puerta es de herrería, aluminio o madera?";
+    }
+
     const png = await generarImagenComparativaSeguridad(familia);
-    const ok = await enviarYRegistrar(sb, ctx, png, "image/png", `Opciones-${familia.clave}.png`, `${marca} instalados llave en mano. Precios sin factura (con factura se agrega IVA).`);
+    const ok = await enviarYRegistrar(sb, ctx, png, "image/png", `Opciones-${familia.clave}.png`, captionPregunta);
     if (ok && ctx.expedienteId) {
       await registrarActividad(sb, {
         expedienteId: ctx.expedienteId,

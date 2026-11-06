@@ -3176,13 +3176,40 @@ export async function responderConIA(
       if (r.ok && !clientePospone && !esMessenger && !esInstagram && esSeguridad && familiaSeg && familiaSeg.toLowerCase() !== "null" && /(comparativa|opciones|👇)/i.test(textoRespuesta)) {
         // Pausa de 2.0 segundos antes de enviar la imagen para que el cliente lea el texto primero
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        await enviarComparativaSeguridad(sb, {
+        const imgOk = await enviarComparativaSeguridad(sb, {
           canal,
           telefono: ctx.telefono,
           expedienteId: ctx.expedienteId ?? null,
           agente: NOMBRE_AGENTE,
           familia: familiaSeg,
         });
+
+        // CIERRE ACTIVO (CRÍTICO): Para que la conversación NUNCA termine con una imagen suelta,
+        // enviamos inmediatamente después (con pausa de 2.5s) una burbuja corta de texto con la pregunta física de cierre.
+        if (imgOk) {
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+          let preguntaCierre = "";
+          if (familiaSeg === "videoporteros-e-interfones") {
+            preguntaCierre = "Para orientarte exactamente en cómo se conectaría: ¿tu entrada tiene puerta peatonal, cancel o portón de herrería?";
+          } else if (familiaSeg === "camaras-de-seguridad-y-cctv") {
+            preguntaCierre = "Para orientarte en el paquete ideal: ¿sería para proteger tu casa o para un negocio?";
+          } else if (familiaSeg === "cerraduras-electricas") {
+            preguntaCierre = "Para orientarte en el modelo adecuado: ¿tu puerta es de herrería, aluminio o madera?";
+          }
+
+          if (preguntaCierre) {
+            const resPreg = await enviarWhatsAppTexto(canal, preguntaCierre);
+            await sb.from("mensajes_whatsapp").insert({
+              telefono: ctx.telefono,
+              texto: preguntaCierre,
+              direccion: "out",
+              expediente_id: ctx.expedienteId ?? null,
+              estado: resPreg.ok ? "enviado" : "error",
+              wa_message_id: (resPreg as any).messageId || null,
+              agente: NOMBRE_AGENTE,
+            });
+          }
+        }
       }
       const elegidoSeg = typeof (datosExtraidos as any).producto_seguridad_elegido === "string" ? (datosExtraidos as any).producto_seguridad_elegido.trim() : "";
       if (r.ok && !clientePospone && !esMessenger && !esInstagram && esSeguridad && /^CAT-\d+$/i.test(elegidoSeg) && /(fotos?|👇)/i.test(textoRespuesta)) {
