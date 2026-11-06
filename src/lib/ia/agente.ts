@@ -3089,9 +3089,7 @@ export async function responderConIA(
         agente: NOMBRE_AGENTE,
       });
     } else {
-      // Soporte para respuestas divididas en burbujas conversacionales con pausas humanas (separadas por 
----
- o |||)
+      // Soporte para respuestas divididas en burbujas conversacionales con pausas humanas (separadas por --- o |||)
       const separadorRegex = /(?:\r?\n\s*---\s*\r?\n|\|\|\|)/;
       const partes = textoRespuesta
         .split(separadorRegex)
