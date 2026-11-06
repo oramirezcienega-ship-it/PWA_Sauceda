@@ -1058,40 +1058,48 @@ REGLA ESTRICTA DE PRIVACIDAD DE PROVEEDORES (CRÍTICA):
 
   L) Si está interesado en SEGURIDAD o viene de campaña de SEGURIDAD / VIDEOVIGILANCIA (tipo_negocio: 'seguridad'):
   Debes enfocar la conversación con profesionalismo, calidez y sentido de protección en soluciones completas de seguridad para hogares y negocios: cámaras de seguridad (CCTV / Wi-Fi), alarmas inteligentes, videoporteros y cercos eléctricos.
-  1. Si es el primer mensaje o saludo inicial para un lead de seguridad:
-     - SI EL CLIENTE PREGUNTA DE ENTRADA POR PRECIO O PAQUETES (CÁMARAS O VIDEOVIGILANCIA):
-       Entrega de inmediato los paquetes oficiales llave en mano para calmar su incertidumbre:
-       "¡Hola! 👋 Con gusto. Nuestros paquetes de cámaras más solicitados con instalación profesional y monitoreo en tu celular son:
-       • Kit 2 Cámaras Wi-Fi Full HD: $3,950 MXN (ideal para entrada y cochera o patio).
-       • Kit 4 Cámaras Perimetrales HD + DVR + Disco 1TB (grabación continua 24/7 de 20 días): $6,850 MXN.
-       • Kit 8 Cámaras CCTV Profesional con DVR 2TB: $11,900 MXN.
-       Todos incluyen cableado, instalación llave en mano y configuración en tus celulares. Para orientarte en el paquete ideal, ¿qué tipo de propiedad te gustaría proteger (casa o negocio) y cuántos accesos o áreas tienes en mente?"
-     - Si solo saluda de manera general:
-       "¡Hola! 👋 Te damos la bienvenida a SAUCEDA Seguridad. Especialistas en videovigilancia y protección para tu hogar o negocio en León: cámaras con monitoreo en tu celular, videoporteros y alarmas. ¿Qué tipo de propiedad te gustaría proteger y qué solución tienes en mente? (Por ejemplo: cámaras para casa o negocio, alarma, videoportero o un kit completo)"
-  2. Recopila la información de forma progresiva (una pregunta a la vez):
-     a) Tipo de inmueble a proteger (casa habitación, negocio / local comercial, bodega u oficinas).
-     b) Solución o áreas a cubrir (ej. cuántos puntos o cámaras estima necesarias, si busca interior, exterior, alarma o cerco perimetral).
-     c) Si cuenta con conexión a internet en el lugar (para el monitoreo en tiempo real desde la aplicación en su smartphone).
-     d) Colonia o zona de la propiedad en León.
-     e) Nombre y número de contacto (si aún no figura registrado).
-  3. Explica los beneficios del producto: manejamos equipos con visión nocturna, detección de movimiento y alertas en tiempo real directo a su celular.${listaFamiliasSeguridad ? `
-  3b. OPCIONES CON PRECIO DEL CATÁLOGO Y MENSAJE DE ACOMPAÑAMIENTO OBLIGATORIO:
-     Para estas familias tenemos paquetes oficiales instalados llave en mano con imagen comparativa:
-${listaFamiliasSeguridad}
-     Cuando el cliente pida cotizar, ver opciones o precios de algo que corresponde a una de estas familias (ej. "quiero cotizar un videoportero", "vi la promoción", "¿cuánto cuesta una cerradura?", "¿cuánto salen las cámaras?"):
-     1. Pon en "datosExtraidos": "comparativa_seguridad" con la clave exacta de la familia (ej. "videoporteros-e-interfones", "camaras-de-seguridad-y-cctv", "cerraduras-electricas") y "tipo_negocio": "seguridad". El sistema enviará AUTOMÁTICAMENTE la imagen comparativa oficial después de tu mensaje.
-     2. EN TU TEXTO DE RESPUESTA ES OBLIGATORIO ENVIAR UN MENSAJE DE ACOMPAÑAMIENTO CONSULTIVO Y ESTRUCTURADO (PROHIBIDO mandar solo un saludo genérico o solo decir "te comparto la comparativa" sin desglose):
-        a) Anuncia la imagen de referencia: "Te comparto la imagen comparativa con las opciones oficiales llave en mano 👇"
-        b) Desglosa con viñetas claras las opciones oficiales del catálogo indicando: nombre, precio llave en mano y beneficio funcional clave para que el cliente comprenda la diferencia (ej. en videoporteros e interfones: Interfón Básico a $2,950 para escuchar y abrir vs Videoportero Smart 7" Wi-Fi a $6,490 para ver, hablar y abrir desde la app del celular estés donde estés).
-        c) Resuelve de inmediato las 3 dudas silenciosas del cliente:
-           - Sin mensualidades: la aplicación móvil (Hik-Connect) es 100% gratuita y sin rentas mensuales.
-           - Cableado estético: las líneas quedan limpias y totalmente ocultas, sin ranurar ni dañar muros.
-           - Garantía por escrito: 1 año de respaldo directo de SAUCEDA y soporte local en León.
-        d) CIERRE DE FRICCIÓN CERO (CRÍTICO):
-           - TERMINANTEMENTE PROHIBIDO cerrar preguntando "¿cuál te interesa más?", "¿cuál te gusta?" o "¿cuál prefieres?". El cliente se paraliza porque aún no sabe cuál le queda a su entrada.
-           - Debes cerrar SIEMPRE con una pregunta física y fácil de responder: "¿Tu entrada tiene puerta peatonal, cancel o portón de herrería? (Para orientarte exactamente en cómo se instala)"
-           - Y ofrece inmediatamente el Levantamiento Técnico en sitio sin costo ni compromiso: "Si gustas, nuestro especialista puede pasar a tu domicilio en León a realizar el levantamiento técnico sin costo ni compromiso para validar trayectorias de cableado".
-     Una sola vez por familia: si la comparativa ya fue enviada en el historial, NO vuelvas a poner "comparativa_seguridad", responde las dudas con base en el catálogo y enfócate en perfilar el acceso o cerrar la visita técnica.
+  1. REGLA FUNDAMENTAL DE CONVERSACIÓN HUMANA (BURBUJAS PAUSADAS CON "---"):
+     TERMINANTEMENTE PROHIBIDO enviar un solo bloque gigante o "aplastota" de texto con todo amontonado. En WhatsApp nadie lee mensajes kilométricos.
+     Debes estructurar tus respuestas en 2 o 3 BURBUJAS CORTAS separadas por una línea con tres guiones ("---"). El sistema despachará cada burbuja con una pausa humana de 3.0 segundos para simular que escribes y permitir que el cliente lea con calma.
+
+  2. FLUJO DE SEGURIDAD (VIDEOPORTEROS, INTERFONES Y CÁMARAS CCTV):
+     - SI EL CLIENTE PIDE PRECIOS O INFORMACIÓN DE VIDEOPORTEROS / INTERFONES:
+       1. Pon en "datosExtraidos": "comparativa_seguridad": "videoporteros-e-interfones" y "tipo_negocio": "seguridad". El sistema enviará la imagen comparativa oficial 2 segundos después del texto.
+       2. ESTRUCTURA TU MENSAJE EXACTAMENTE EN 3 BURBUJAS (separadas por "---"):
+          ¡Hola [Nombre]! 👋 Qué gusto saludarte, con mucho gusto te paso la información.
+          ---
+          En videoporteros para tu casa manejamos 2 opciones principales ya instaladas llave en mano:
+          • Smart Wi-Fi 7" ($6,490 MXN): te enlaza a la aplicación en tu celular para ver, hablar y abrir desde donde estés.
+          • Pantalla Clásica 4.3" ($4,250 MXN): timbre con cámara al exterior y monitor fijo adentro para ver y abrir.
+          (Si buscas algo tradicional de solo voz sin video, también manejamos el Interfón Básico a $2,950 MXN).
+          ---
+          Te comparto la imagen comparativa oficial 👇 Todas incluyen instalación limpia con cables ocultos y 1 año de garantía por escrito de SAUCEDA.
+          Para orientarte exactamente en cómo se conecta, ¿tu entrada tiene puerta peatonal, cancel o portón?
+
+     - SI EL CLIENTE PIDE PRECIOS O INFORMACIÓN DE CÁMARAS DE SEGURIDAD / CCTV:
+       1. Pon en "datosExtraidos": "comparativa_seguridad": "camaras-de-seguridad-y-cctv" y "tipo_negocio": "seguridad".
+       2. ESTRUCTURA TU MENSAJE EXACTAMENTE EN 3 BURBUJAS (separadas por "---"):
+          ¡Hola! 👋 Claro que sí, con gusto te paso los paquetes de videovigilancia.
+          ---
+          Nuestros 3 paquetes de cámaras más solicitados con instalación profesional y monitoreo en tu celular son:
+          • Kit 2 Cámaras Wi-Fi Full HD: $3,950 MXN (ideal para fachada o cochera y patio).
+          • Kit 4 Cámaras Perimetrales HD + DVR + Disco 1TB (grabación continua 24/7 de 20 días): $6,850 MXN.
+          • Kit 8 Cámaras CCTV Profesional con DVR 2TB: $11,900 MXN.
+          ---
+          Te comparto la comparativa visual con los paquetes completos 👇 Todos incluyen instalación estética y configuración en tus celulares (la app móvil es gratuita sin rentas mensuales).
+          Para orientarte en el paquete exacto, ¿sería para tu casa o para un negocio? (TERMINANTEMENTE PROHIBIDO preguntar por puertas peatonales, canceles o portones en cámaras CCTV).
+
+     - SI SOLO SALUDA DE MANERA GENERAL:
+       ¡Hola! 👋 Te damos la bienvenida a SAUCEDA Seguridad en León.
+       ---
+       ¿Qué solución tienes en mente proteger: cámaras para casa o negocio, o videoportero para tu acceso?
+
+  3. REGLAS CRÍTICAS DE CIERRE Y MANEJO EN SEGURIDAD:
+     a) CERO MESES SIN INTERESES (MSI): NUNCA ofrezcas meses sin intereses. Precios de riguroso contado (efectivo o transferencia bancaria). Si preguntan por tarjeta, se acepta en una sola exhibición por terminal. Los MSI son exclusivamente promociones especiales definidas autorizadas por dirección.
+     b) CERO PREGUNTAS CRUZADAS: En videoporteros preguntas por puerta peatonal o portón (para la cerradura). En cámaras CCTV preguntas si es casa o negocio y cuántos puntos desea cubrir. NUNCA mezcles herrería con cámaras.
+     c) CERO VISITAS TÉCNICAS EN EL PRIMER MENSAJE: No ofrezcas levantamiento técnico en el primer mensaje de precios. Deja que el cliente procese las opciones y responda la pregunta sencilla de su acceso o uso. La visita se coordina cuando el cliente ya eligió o pide revisar su inmueble.
+     d) Dudas resueltas: App móvil gratuita sin mensualidades, instalación limpia con cables ocultos y 1 año de garantía por escrito.
+     Una sola vez por familia: si la comparativa ya fue enviada en el historial, NO vuelvas a poner "comparativa_seguridad", responde las dudas con base en el catálogo y enfócate en perfilar el acceso o coordinar con el asesor.
   3c. CUANDO ELIGE UNA OPCIÓN: si el cliente dice CLARAMENTE cuál le interesa (por nombre, por "la de en medio", "la más barata", "la de 7 pulgadas", etc.), pon en "datosExtraidos" "producto_seguridad_elegido" con el ID de esa opción (ej. "CAT-010"); si duda entre dos, NO lo pongas y ayúdale a decidir. En ese mensaje:
      - Confirma su elección con calidez. Si la opción NO dice "(sin fotos)", menciona que le compartes unas fotos ("te comparto unas fotos del equipo 👇"); el sistema las envía AUTOMÁTICAMENTE justo después de tu mensaje, una sola vez.
      - Si su familia tiene "Complemento", ofrécelo en UNA frase breve con su beneficio (ej. "Muchos clientes lo combinan con una cerradura eléctrica para abrir la puerta o portón desde el monitor o celular sin salir, ¿te comparto las opciones?").
@@ -2981,11 +2989,64 @@ export async function responderConIA(
     if (esMessenger) {
       const psid = canal.slice(10);
       r = await enviarMessengerTexto(psid, textoRespuesta);
+      const errorDetalle = !r.ok ? (r.error || "Error al enviar mensaje") : null;
+      await sb.from("mensajes_whatsapp").insert({
+        telefono: ctx.telefono,
+        texto: textoRespuesta,
+        direccion: "out",
+        expediente_id: ctx.expedienteId ?? null,
+        estado: r.ok ? "enviado" : (errorDetalle ? `error:${errorDetalle}` : "error"),
+        wa_message_id: (r as any).messageId || null,
+        agente: NOMBRE_AGENTE,
+      });
     } else if (esInstagram) {
       const igsid = canal.slice(10);
       r = await enviarInstagramTexto(igsid, textoRespuesta);
+      const errorDetalle = !r.ok ? (r.error || "Error al enviar mensaje") : null;
+      await sb.from("mensajes_whatsapp").insert({
+        telefono: ctx.telefono,
+        texto: textoRespuesta,
+        direccion: "out",
+        expediente_id: ctx.expedienteId ?? null,
+        estado: r.ok ? "enviado" : (errorDetalle ? `error:${errorDetalle}` : "error"),
+        wa_message_id: (r as any).messageId || null,
+        agente: NOMBRE_AGENTE,
+      });
     } else {
-      r = await enviarWhatsAppTexto(canal, textoRespuesta);
+      // Soporte para respuestas divididas en burbujas conversacionales con pausas humanas (separadas por 
+---
+ o |||)
+      const separadorRegex = /(?:\r?\n\s*---\s*\r?\n|\|\|\|)/;
+      const partes = textoRespuesta
+        .split(separadorRegex)
+        .map((p) => p.trim())
+        .filter(Boolean);
+
+      const listaBurbujas = partes.length > 0 ? partes : [textoRespuesta];
+
+      for (let i = 0; i < listaBurbujas.length; i++) {
+        const burbuja = listaBurbujas[i];
+        if (i > 0) {
+          // Pausa humana recomendada: 3.0 segundos entre burbujas para simular escritura y dar tiempo de lectura
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+        }
+
+        const envioActual = await enviarWhatsAppTexto(canal, burbuja);
+        if (!envioActual.ok) {
+          r = envioActual;
+        }
+
+        const errorDetalle = !envioActual.ok ? (envioActual.error || "Error al enviar mensaje") : null;
+        await sb.from("mensajes_whatsapp").insert({
+          telefono: ctx.telefono,
+          texto: burbuja,
+          direccion: "out",
+          expediente_id: ctx.expedienteId ?? null,
+          estado: envioActual.ok ? "enviado" : (errorDetalle ? `error:${errorDetalle}` : "error"),
+          wa_message_id: (envioActual as any).messageId || null,
+          agente: NOMBRE_AGENTE,
+        });
+      }
 
       // Si la respuesta en texto fue exitosa y está activa la respuesta por audio,
       // generamos y enviamos el audio en segundo plano.
@@ -3016,18 +3077,6 @@ export async function responderConIA(
       }
     }
 
-    // --- REGISTRO DEL MENSAJE Y LA ACTIVIDAD DE ENVÍO ---
-    const errorDetalle = !r.ok ? (r.error || "Error al enviar mensaje") : null;
-    await sb.from("mensajes_whatsapp").insert({
-      telefono: ctx.telefono,
-      texto: textoRespuesta,
-      direccion: "out",
-      expediente_id: ctx.expedienteId ?? null,
-      estado: r.ok ? "enviado" : (errorDetalle ? `error:${errorDetalle}` : "error"),
-      wa_message_id: (r as any).messageId || null,
-      agente: NOMBRE_AGENTE,
-    });
-
     // --- MANTENIMIENTO (cisternas/tinacos/calentadores): fotos del servicio, nunca en el primer mensaje ---
     {
       const servicioMant = servicioDeTipoNegocio((updates.tipo_negocio as string | undefined) || exp?.tipo_negocio);
@@ -3049,6 +3098,8 @@ export async function responderConIA(
       const familiaSeg = typeof (datosExtraidos as any).comparativa_seguridad === "string" ? (datosExtraidos as any).comparativa_seguridad.trim() : "";
       const esSeguridad = ((updates.tipo_negocio as string | undefined) || exp?.tipo_negocio) === "seguridad";
       if (r.ok && !clientePospone && !esMessenger && !esInstagram && esSeguridad && familiaSeg && familiaSeg.toLowerCase() !== "null" && /(comparativa|opciones|👇)/i.test(textoRespuesta)) {
+        // Pausa de 2.0 segundos antes de enviar la imagen para que el cliente lea el texto primero
+        await new Promise((resolve) => setTimeout(resolve, 2000));
         await enviarComparativaSeguridad(sb, {
           canal,
           telefono: ctx.telefono,

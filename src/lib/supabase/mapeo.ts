@@ -17,16 +17,49 @@ import type {
   TipoDocumentoProveedor,
 } from "@/lib/types";
 
-/** Arma el nombre completo a partir de nombre + apellidos. */
+function normalizarTextoNombre(txt: string): string {
+  return txt
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+/** Arma el nombre completo a partir de nombre + apellidos evitando duplicaciones si el nombre ya los incluye. */
 export function nombreCompleto(
   nombre: string,
   primerApellido: string,
   segundoApellido: string,
 ): string {
-  return [nombre, primerApellido, segundoApellido]
-    .map((p) => (p ?? "").trim())
-    .filter(Boolean)
-    .join(" ");
+  const n = (nombre ?? "").trim();
+  const p1 = (primerApellido ?? "").trim();
+  const p2 = (segundoApellido ?? "").trim();
+
+  if (!p1 && !p2) return n;
+
+  const nNorm = normalizarTextoNombre(n);
+  const p1Norm = normalizarTextoNombre(p1);
+  const p2Norm = normalizarTextoNombre(p2);
+  const apellidosNorm = [p1Norm, p2Norm].filter(Boolean).join(" ");
+
+  // Si nombre ya termina exactamente con los dos apellidos
+  if (apellidosNorm && nNorm.endsWith(apellidosNorm)) {
+    return n;
+  }
+  // Si ya contiene ambos apellidos en el nombre
+  if (p1Norm && p2Norm && nNorm.includes(p1Norm) && nNorm.includes(p2Norm)) {
+    return n;
+  }
+  // Si solo tiene primer apellido y ya termina con él
+  if (p1Norm && !p2Norm && nNorm.endsWith(p1Norm)) {
+    return n;
+  }
+  // Si nombre ya termina con primerApellido pero falta el segundo
+  if (p1Norm && p2 && nNorm.endsWith(p1Norm) && !nNorm.includes(p2Norm)) {
+    return `${n} ${p2}`.trim();
+  }
+
+  return [n, p1, p2].filter(Boolean).join(" ");
 }
 
 /** Nombre completo de una fila de prospecto (nombre + apellidos); "" si no hay. */
