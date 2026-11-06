@@ -50,6 +50,22 @@ export async function pasarLeadSeguridadAGerardoAutomatico(
       return { ok: false, error: "Teléfono de cliente inválido." };
     }
 
+    // 0. Control de activación: verificar si el pase automático a Gerardo está desactivado
+    if (!params.forzar) {
+      const { data: cfgEnvio } = await sb
+        .from("configuracion_agente")
+        .select("valor")
+        .eq("clave", "envio_seguridad_gerardo_activo")
+        .maybeSingle();
+
+      if (cfgEnvio?.valor === "false") {
+        console.log(
+          `[Asignación Seguridad Automática] Envío automático de leads a Gerardo DESACTIVADO por configuración. Omitiendo ${telCliente}.`
+        );
+        return { ok: true, omitidoPorDuplicado: false };
+      }
+    }
+
     // 1. Obtener perfil de Gerardo
     const { data: perfilGerardo } = await sb
       .from("perfiles")
