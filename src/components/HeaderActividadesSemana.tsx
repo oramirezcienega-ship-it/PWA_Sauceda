@@ -961,10 +961,23 @@ export function HeaderActividadesSemana() {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-1.5 py-0.5 text-[10px] font-semibold border border-emerald-200 transition"
-                            title="Enviar mensaje por WhatsApp"
+                            title={`WhatsApp al Cliente (${act.clienteNombre})`}
                           >
                             <span>💬</span>
-                            <span>WhatsApp</span>
+                            <span>Cliente</span>
+                          </a>
+                        ) : null}
+
+                        {act.proveedorWhatsAppLink ? (
+                          <a
+                            href={act.proveedorWhatsAppLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 px-1.5 py-0.5 text-[10px] font-bold border border-amber-300 transition"
+                            title={`Reenviar detalles del servicio por WhatsApp al Técnico (${act.proveedorNombre || "Técnico"})`}
+                          >
+                            <span>👷</span>
+                            <span>Técnico</span>
                           </a>
                         ) : null}
 

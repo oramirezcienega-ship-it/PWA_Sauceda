@@ -29,6 +29,10 @@ export interface ActividadSemanaItem {
   prospectoId?: string | null;
   ordenTrabajoId?: string | null;
   ordenTrabajoFolio?: string | null;
+  proveedorId?: string | null;
+  proveedorNombre?: string | null;
+  proveedorTelefono?: string | null;
+  proveedorWhatsAppLink?: string | null;
   esHoy: boolean;
 }
 
@@ -265,7 +269,9 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
         prospecto_id,
         asesor_ejecutor_id,
         asesor_responsable_id,
-        proveedor_id
+        proveedor_id,
+        costo_proveedor,
+        precio_cliente
       `)
       .neq("estatus", "cancelada")
       .or(filtrosOT.join(","))
@@ -309,13 +315,20 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
     }
 
     // Traer catálogo de proveedores para resolver asignaciones técnicas externas
-    const mapaProveedores = new Map<string, string>();
+    const mapaProveedores = new Map<string, { id: string; nombre: string; whatsapp: string; telefono: string }>();
     if (setProvIds.size > 0) {
       const { data: provsData } = await sb
         .from("proveedores")
-        .select("id, nombre, contacto_nombre")
+        .select("id, nombre, contacto_nombre, whatsapp, telefono")
         .in("id", Array.from(setProvIds));
-      (provsData || []).forEach((p: any) => mapaProveedores.set(p.id, p.nombre || p.contacto_nombre || "Proveedor"));
+      (provsData || []).forEach((p: any) =>
+        mapaProveedores.set(p.id, {
+          id: p.id,
+          nombre: p.nombre || p.contacto_nombre || "Proveedor",
+          whatsapp: p.whatsapp || "",
+          telefono: p.telefono || "",
+        })
+      );
     }
 
     // Traer expedientes para complementar direcciones y clientes
@@ -410,9 +423,41 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
       );
 
       // Si tiene OT vinculada con proveedor o la cita menciona un proveedor, incluirlo al frente
+      let proveedorId: string | null = null;
+      let proveedorNombre: string | null = null;
+      let proveedorTelefono: string | null = null;
+      let proveedorWhatsAppLink: string | null = null;
+
       if (otMatch?.proveedor_id && mapaProveedores.has(otMatch.proveedor_id)) {
-        const pName = mapaProveedores.get(otMatch.proveedor_id)!;
+        const pInfo = mapaProveedores.get(otMatch.proveedor_id)!;
+        const pName = pInfo.nombre;
         if (!responsables.includes(pName)) responsables.unshift(pName);
+        proveedorId = pInfo.id;
+        proveedorNombre = pInfo.nombre;
+        proveedorTelefono = pInfo.telefono || pInfo.whatsapp || null;
+        const numTel = pInfo.whatsapp || pInfo.telefono;
+        if (numTel) {
+          const numNorm = normalizarTelefono(numTel);
+          const telWa = numNorm.startsWith("52") && numNorm.length === 12 ? numNorm : `52${numNorm.slice(-10)}`;
+          const mapsLink = direccion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion + ", León, Gto.")}` : "";
+          const lineasMsg = [
+            `✅ *Servicio confirmado · SAUCEDA*`,
+            ``,
+            `🧾 Folio *${otMatch.folio || "OT"}*`,
+            `🔍 ${otMatch.titulo || c.titulo || "Visita programada"}`,
+            `📅 *${diaObj?.diaNombreCompleto || "Día"} ${c.fecha}*`,
+            `⏰ *${formatHora12(c.hora_inicio) || "Horario pendiente"}${c.hora_fin ? ` a ${formatHora12(c.hora_fin)}` : ""}*`,
+            `👤 Cliente: ${clienteNombre}`,
+            telBruto ? `📱 WhatsApp del cliente: https://wa.me/52${normalizarTelefono(telBruto).slice(-10)}` : "",
+            direccion ? `📍 ${direccion}` : "",
+            mapsLink ? `🗺 ${mapsLink}` : "",
+            otMatch.costo_proveedor ? `💲 *Costo acordado (tu pago):* $${Number(otMatch.costo_proveedor).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : "",
+            otMatch.precio_cliente ? `💵 *Cobro al cliente en sitio:* $${Number(otMatch.precio_cliente).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : "",
+            ``,
+            `Por favor confírmanos de recibido. ¡Gracias!`,
+          ].filter(Boolean);
+          proveedorWhatsAppLink = `https://wa.me/${telWa}?text=${encodeURIComponent(lineasMsg.join("\n"))}`;
+        }
       } else if (c.notas) {
         const mProv = c.notas.match(/con\s+([A-Za-zÁÉÍÓÚáéíóúñÑ\s]+?)(?:·|$)/i);
         if (mProv && mProv[1].trim() && !/proveedor/i.test(mProv[1])) {
@@ -464,6 +509,10 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
         prospectoId: c.prospecto_id || null,
         ordenTrabajoId: otMatch?.id || null,
         ordenTrabajoFolio: otMatch?.folio || null,
+        proveedorId,
+        proveedorNombre,
+        proveedorTelefono,
+        proveedorWhatsAppLink,
         esHoy: c.fecha === fechaLocalStr,
       });
 
@@ -506,9 +555,41 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
         const rName = mapaPerfiles.get(ot.asesor_responsable_id)!;
         if (!resps.includes(rName)) resps.push(rName);
       }
+      let proveedorId: string | null = null;
+      let proveedorNombre: string | null = null;
+      let proveedorTelefono: string | null = null;
+      let proveedorWhatsAppLink: string | null = null;
+
       if (ot.proveedor_id && mapaProveedores.has(ot.proveedor_id)) {
-        const pName = mapaProveedores.get(ot.proveedor_id)!;
+        const pInfo = mapaProveedores.get(ot.proveedor_id)!;
+        const pName = pInfo.nombre;
         if (!resps.includes(pName)) resps.push(pName);
+        proveedorId = pInfo.id;
+        proveedorNombre = pInfo.nombre;
+        proveedorTelefono = pInfo.telefono || pInfo.whatsapp || null;
+        const numTel = pInfo.whatsapp || pInfo.telefono;
+        if (numTel) {
+          const numNorm = normalizarTelefono(numTel);
+          const telWa = numNorm.startsWith("52") && numNorm.length === 12 ? numNorm : `52${numNorm.slice(-10)}`;
+          const mapsLink = direccion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion + ", León, Gto.")}` : "";
+          const lineasMsg = [
+            `✅ *Servicio confirmado · SAUCEDA*`,
+            ``,
+            `🧾 Folio *${ot.folio || "OT"}*`,
+            `🔍 ${ot.titulo || "Servicio programado"}`,
+            `📅 *${diaObj?.diaNombreCompleto || "Día"} ${ot.fecha_programada}*`,
+            `⏰ *${horaInicio}${horaFin ? ` a ${horaFin}` : ""}*`,
+            `👤 Cliente: ${clienteNombre}`,
+            telBruto ? `📱 WhatsApp del cliente: https://wa.me/52${normalizarTelefono(telBruto).slice(-10)}` : "",
+            direccion ? `📍 ${direccion}` : "",
+            mapsLink ? `🗺 ${mapsLink}` : "",
+            ot.costo_proveedor ? `💲 *Costo acordado (tu pago):* $${Number(ot.costo_proveedor).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : "",
+            ot.precio_cliente ? `💵 *Cobro al cliente en sitio:* $${Number(ot.precio_cliente).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : "",
+            ``,
+            `Por favor confírmanos de recibido. ¡Gracias!`,
+          ].filter(Boolean);
+          proveedorWhatsAppLink = `https://wa.me/${telWa}?text=${encodeURIComponent(lineasMsg.join("\n"))}`;
+        }
       }
       if (resps.length === 0 && ot.descripcion) {
         const mProv = ot.descripcion.match(/Proveedor:\s*([^\n·]+)/i);
@@ -553,6 +634,10 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
         prospectoId: ot.prospecto_id || null,
         ordenTrabajoId: ot.id,
         ordenTrabajoFolio: ot.folio,
+        proveedorId,
+        proveedorNombre,
+        proveedorTelefono,
+        proveedorWhatsAppLink,
         esHoy: ot.fecha_programada === fechaLocalStr,
       });
     }
