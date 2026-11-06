@@ -1048,6 +1048,12 @@ ${fichaInstalacionCalentadores}
    - Tranquiliza al cliente destacando: *"Nuestro técnico especialista acude en una unidad móvil equipada con stock de refacciones originales (empaques de silicón grado alimenticio, barras de magnesio, tubos de reposición y conexiones), de modo que cualquier ajuste o refacción extra queda colocado y probado en la misma visita, dejando tu calentador al 100% y sin fugas."*
 
 ---
+REGLA INVIOLABLE DE BLINDAJE DE NEGOCIACIONES Y ACUERDOS PACTADOS (CERO CONTRAPROPUESTAS):
+   - Si el expediente ya cuenta con un precio pactado, cotización aceptada, facilidad de pago especial o está en etapas de cierre/ejecución (por ejemplo, clientes como Silvia EXP-1089 con $10,390 contra entrega tras su cirugía):
+   - Queda TERMINANTEMENTE PROHIBIDO enviar cotizaciones genéricas, paquetes con precios menores o de promoción, catálogos nuevos o hacer cualquier tipo de contrapropuesta económica.
+   - Si el cliente escribe para consultar avances, agendar fecha o por cuestiones personales/médicas, responde ÚNICAMENTE con empatía, calidez y logística, confirmando que respetamos al 100% el acuerdo previo con su asesor y avisando al asesor humano.
+
+---
 REGLA ESTRICTA DE PRIVACIDAD DE PROVEEDORES (CRÍTICA):
    - Queda ESTRICTAMENTE PROHIBIDO mencionar nombres propios de contratistas, plomeros o técnicos externos (como "Clemente" o "Clemente López") a los clientes. Refiérete a ellos SIEMPRE de forma profesional e institucional como "nuestro técnico especialista" o "el especialista de nuestro equipo".
 
@@ -1943,10 +1949,39 @@ export async function responderConIA(
         .maybeSingle();
       exp = (e as FilaExp) ?? null;
 
-      // Si el expediente ya está cerrado o perdido, la IA no debe intervenir
-      if (!forzar && exp && (exp.etapa === "perdido" || exp.etapa === "cerrado")) {
-        console.log(`IA: Ignorando respuesta para ${ctx.telefono} porque el expediente está en etapa '${exp.etapa}'.`);
+      // REGLA DE BLINDAJE TOTAL: si el expediente ya está cerrado, ganado, en ejecución
+      // o con acuerdo previo, la IA NO DEBE INTERVENIR para evitar contrapropuestas o alterar precios pactados.
+      const etapasExcluidasDeIA = [
+        "cerrado",
+        "perdido",
+        "venta",
+        "propuesta-aceptada",
+        "documentos",
+        "notaria",
+      ];
+      if (!forzar && exp && etapasExcluidasDeIA.includes(exp.etapa)) {
+        console.log(`IA: Ignorando respuesta automática para ${ctx.telefono} porque el expediente está en etapa '${exp.etapa}'.`);
         return;
+      }
+
+      // Si el expediente ya tiene una Orden de Trabajo activa, la atención es 100% humana
+      if (!forzar && ctx.expedienteId) {
+        try {
+          const { data: otActiva } = await sb
+            .from("ordenes_trabajo")
+            .select("id, estatus")
+            .eq("expediente_id", ctx.expedienteId)
+            .neq("estatus", "cancelada")
+            .limit(1)
+            .maybeSingle();
+
+          if (otActiva) {
+            console.log(`IA: Ignorando respuesta automática para ${ctx.telefono} porque tiene una Orden de Trabajo activa (${otActiva.id}).`);
+            return;
+          }
+        } catch (errOt) {
+          console.warn("[IA Guard] Error al verificar ordenes_trabajo:", errOt);
+        }
       }
 
       // Si el prospecto tiene estatus 'nuevo', lo movemos a 'en_conversacion' y complementamos datos de campaña
