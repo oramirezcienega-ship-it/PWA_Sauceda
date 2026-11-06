@@ -168,6 +168,8 @@ export function fichaServicioParaPrompt(prod: ProductoMant | undefined): string 
     `  Servicio: ${prod.nombre}`,
     prod.servicio === "calentadores"
       ? "  Precio: Se rige por los escalones oficiales de tubos, refacciones en sitio y la colonia del cliente (detallados en el flujo K)."
+      : prod.servicio === "cisternas"
+      ? "  Precio: Requiere forzosamente inspección técnica en sitio sin costo en León para diagnosticar el depósito y emitir presupuesto exacto sin cobrar de más. TERMINANTEMENTE PROHIBIDO dar precios, montos o rangos en texto por WhatsApp; el objetivo exclusivo es agendar la visita de inspección técnica gratuita con lámpara."
       : '  Precio: NO lo des en texto (ni montos, ni "desde", ni totales); un asesor lo confirma.',
     prod.descripcion.trim() ? `  Qué incluye y qué no incluye: ${prod.descripcion.trim()}` : "",
     prod.descripcionValor.trim() ? `  Propuesta de valor: ${prod.descripcionValor.trim()}` : "",

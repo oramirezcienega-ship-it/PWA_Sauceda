@@ -376,8 +376,9 @@ export function obtenerRolEspecialistaPorVertical(tipoNegocio?: string): {
     case "construccion-piso-estampado":
       return { rol: "operaciones", tituloEspecialista: "Técnico de Pavimentos" };
     case "construccion-mantenimiento-cisternas":
+      return { rol: "operaciones", tituloEspecialista: "Técnico Especialista en Aljibes y Cisternas" };
     case "construccion-mantenimiento-tinacos":
-      return { rol: "operaciones", tituloEspecialista: "Técnico de Fontanería / Lavado" };
+      return { rol: "operaciones", tituloEspecialista: "Técnico en Mantenimiento de Tinacos" };
     case "construccion-mantenimiento-calentadores":
       return { rol: "operaciones", tituloEspecialista: "Técnico en Calentadores Solares" };
     case "seguridad":
